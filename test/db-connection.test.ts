@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import { getDatabaseConnectionString } from "../src/db/connection";
 
 const variableNames = [
+  "NODE_ENV",
   "DATABASE_URL",
   "DIRECT_URL",
   "SUPABASE_DB_HOST",
@@ -70,4 +71,26 @@ test("builds a session-pooler URL for migrations", () => {
   expect(url.searchParams.get("sslmode")).toBe("verify-full");
   expect(url.searchParams.get("sslrootcert")).toBe(certPath);
   rmSync(certDir, { recursive: true, force: true });
+});
+
+test("allows migrations on the isolated local PostgreSQL test database without a Supabase CA", () => {
+  process.env.NODE_ENV = "test";
+  process.env.DIRECT_URL = "postgresql://postgres:postgres@localhost:5432/transora_test";
+  delete process.env.SUPABASE_DB_CA_CERT_PATH;
+
+  const url = new URL(getDatabaseConnectionString("migration"));
+
+  expect(url.hostname).toBe("localhost");
+  expect(url.searchParams.get("sslmode")).toBe("disable");
+  expect(url.searchParams.get("sslrootcert")).toBe(null);
+});
+
+test("still requires the Supabase CA certificate for remote migration databases in tests", () => {
+  process.env.NODE_ENV = "test";
+  process.env.DIRECT_URL = "postgresql://postgres:postgres@db.example.test:5432/transora_test";
+  delete process.env.SUPABASE_DB_CA_CERT_PATH;
+
+  expect(() => getDatabaseConnectionString("migration")).toThrow(
+    /certificat racine/
+  );
 });
