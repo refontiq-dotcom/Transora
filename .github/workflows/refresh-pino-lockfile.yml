@@ -1,43 +1,40 @@
-name: Refresh dependency lockfile
+name: Validate Pino logging changes
 
 on:
-  push:
-    branches: [fix/pino-logging]
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "src/lib/logger.ts"
+      - "src/app.ts"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  lockfile-and-build:
+  validate-pino:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: fix/pino-logging
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Regenerate package lock
+      - name: Regenerate dependency lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
-      - name: Commit updated lockfile
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          if git diff --cached --quiet; then
-            echo "Lockfile is already up to date."
-          else
-            git commit -m "chore(deps): update lockfile for Pino"
-            git push origin fix/pino-logging
-          fi
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: pino-package-lock
+          path: package-lock.json
+          if-no-files-found: error
 
-      - name: Install locked dependencies
+      - name: Install dependencies
         run: npm ci
 
       - name: Verify TypeScript build
