@@ -21,7 +21,9 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
