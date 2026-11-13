@@ -3,6 +3,8 @@ name: Prepare migration lockfile
 on:
   push:
     branches: [feat/migrate-tests-to-vitest]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
