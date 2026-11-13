@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import jwt from "jsonwebtoken";
 import app from "../src/app";
 import { AddressInfo } from "node:net";
@@ -7,7 +6,7 @@ import { AddressInfo } from "node:net";
 let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
 
-before(async () => {
+beforeAll(async () => {
   server = app.listen(0);
   await new Promise<void>((resolve, reject) => {
     server.once("listening", resolve);
@@ -17,7 +16,7 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 });
 
-after(async () => {
+afterAll(async () => {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
@@ -25,16 +24,16 @@ after(async () => {
 
 test("health endpoint returns the API status", async () => {
   const response = await fetch(`${baseUrl}/health`);
-  assert.equal(response.status, 200);
+  expect(response.status).toBe(200);
   const body = await response.json() as { status?: string };
-  assert.equal(body.status, "ok");
+  expect(body.status).toBe("ok");
 });
 
 test("dashboard is protected when no bearer token is supplied", async () => {
   const response = await fetch(`${baseUrl}/api/v1/dashboard?date=2026-11-12&period=30`);
-  assert.equal(response.status, 401);
+  expect(response.status).toBe(401);
   const body = await response.json() as { success?: boolean };
-  assert.equal(body.success, false);
+  expect(body.success).toBe(false);
 });
 
 test("tenant, trip, fleet, payment, search, and finance APIs are protected when no bearer token is supplied", async () => {
@@ -48,14 +47,14 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
     fetch(`${baseUrl}/api/v1/recherche/billet/550e8400-e29b-41d4-a716-446655440000`),
     fetch(`${baseUrl}/api/v1/finance/`)
   ]);
-  assert.equal(tenantResponse.status, 401);
-  assert.equal(tripResponse.status, 401);
-  assert.equal(departureListResponse.status, 401);
-  assert.equal(fleetResponse.status, 401);
-  assert.equal(paymentResponse.status, 401);
-  assert.equal(searchResponse.status, 401);
-  assert.equal(ticketResponse.status, 401);
-  assert.equal(financeResponse.status, 401);
+  expect(tenantResponse.status).toBe(401);
+  expect(tripResponse.status).toBe(401);
+  expect(departureListResponse.status).toBe(401);
+  expect(fleetResponse.status).toBe(401);
+  expect(paymentResponse.status).toBe(401);
+  expect(searchResponse.status).toBe(401);
+  expect(ticketResponse.status).toBe(401);
+  expect(financeResponse.status).toBe(401);
 });
 
 test("global search rejects terms that are too short", async () => {
@@ -71,9 +70,9 @@ test("global search rejects terms that are too short", async () => {
     const response = await fetch(`${baseUrl}/api/v1/recherche?q=a`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    assert.equal(response.status, 400);
+    expect(response.status).toBe(400);
     const body = await response.json() as { success?: boolean };
-    assert.equal(body.success, false);
+    expect(body.success).toBe(false);
   } finally {
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
@@ -82,19 +81,19 @@ test("global search rejects terms that are too short", async () => {
 
 test("dashboard assets are served from the web root", async () => {
   const response = await fetch(`${baseUrl}/`);
-  assert.equal(response.status, 200);
+  expect(response.status).toBe(200);
   const html = await response.text();
-  assert.match(html, /Transora — Tableau de bord/);
-  assert.match(html, /id="dashboard-date"/);
-  assert.match(html, /value="90">90 derniers jours/);
-  assert.match(html, /id="voyages-page"/);
-  assert.match(html, /id="fleet-page"/);
-  assert.match(html, /id="payments-page"/);
-  assert.match(html, /id="payment-rows"/);
-  assert.match(html, /id="reports-page"/);
-  assert.match(html, /id="report-start-date"/);
-  assert.match(html, /id="report-rows"/);
-  assert.match(html, /id="global-search"/);
-  assert.match(html, /id="scanner-dialog"/);
-  assert.match(html, /id="ticket-dialog"/);
+  expect(html).toMatch(/Transora — Tableau de bord/);
+  expect(html).toMatch(/id="dashboard-date"/);
+  expect(html).toMatch(/value="90">90 derniers jours/);
+  expect(html).toMatch(/id="voyages-page"/);
+  expect(html).toMatch(/id="fleet-page"/);
+  expect(html).toMatch(/id="payments-page"/);
+  expect(html).toMatch(/id="payment-rows"/);
+  expect(html).toMatch(/id="reports-page"/);
+  expect(html).toMatch(/id="report-start-date"/);
+  expect(html).toMatch(/id="report-rows"/);
+  expect(html).toMatch(/id="global-search"/);
+  expect(html).toMatch(/id="scanner-dialog"/);
+  expect(html).toMatch(/id="ticket-dialog"/);
 });
