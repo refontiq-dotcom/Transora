@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
 import jwt from "jsonwebtoken";
 import app from "../src/app";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 
 let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
