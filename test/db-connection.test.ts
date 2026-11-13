@@ -39,6 +39,7 @@ test("builds an encoded transaction-pooler URL for the application", () => {
   process.env.SUPABASE_DB_HOST = "aws-0-eu-west-3.pooler.supabase.com";
   process.env.SUPABASE_DB_USER = "postgres.project";
   process.env.SUPABASE_DB_PASSWORD = "pa:ss@word";
+  process.env.SUPABASE_POOLER_TRANSACTION_PORT = "6543";
   process.env.SUPABASE_DB_CA_CERT_PATH = certPath;
 
   const url = new URL(getDatabaseConnectionString("application"));
