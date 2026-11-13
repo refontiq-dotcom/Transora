@@ -2,6 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import { resolve } from "path";
+import { pinoHttpMiddleware } from "./lib/logger";
 import { authenticate } from "./middleware/auth";
 import { errorHandler } from "./middleware/error";
 import authRoutes from "./modules/auth/auth.routes";
@@ -21,6 +22,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
+app.use(pinoHttpMiddleware);
 app.use(express.json({ limit: "10kb" }));
 app.use(express.static(resolve(process.cwd(), "public")));
 
