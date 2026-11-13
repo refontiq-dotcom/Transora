@@ -1,8 +1,7 @@
-import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, test } from "node:test";
+import { afterEach, expect, test } from "vitest";
 import { getDatabaseConnectionString } from "../src/db/connection";
 
 const variableNames = [
@@ -43,13 +42,13 @@ test("builds an encoded transaction-pooler URL for the application", () => {
 
   const url = new URL(getDatabaseConnectionString("application"));
 
-  assert.equal(url.hostname, "aws-0-eu-west-3.pooler.supabase.com");
-  assert.equal(url.username, "postgres.project");
-  assert.equal(decodeURIComponent(url.password), "pa:ss@word");
-  assert.equal(url.port, "6543");
-  assert.equal(url.searchParams.get("pgbouncer"), "true");
-  assert.equal(url.searchParams.get("sslmode"), "verify-full");
-  assert.equal(url.searchParams.get("sslrootcert"), certPath);
+  expect(url.hostname).toBe( "aws-0-eu-west-3.pooler.supabase.com");
+  expect(url.username).toBe( "postgres.project");
+  expect(decodeURIComponent(url.password)).toBe( "pa:ss@word");
+  expect(url.port).toBe( "6543");
+  expect(url.searchParams.get("pgbouncer")).toBe( "true");
+  expect(url.searchParams.get("sslmode")).toBe( "verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe( certPath);
   rmSync(certDir, { recursive: true, force: true });
 });
 
@@ -66,9 +65,9 @@ test("builds a session-pooler URL for migrations", () => {
 
   const url = new URL(getDatabaseConnectionString("migration"));
 
-  assert.equal(url.port, "5432");
-  assert.equal(url.searchParams.get("pgbouncer"), null);
-  assert.equal(url.searchParams.get("sslmode"), "verify-full");
-  assert.equal(url.searchParams.get("sslrootcert"), certPath);
+  expect(url.port).toBe( "5432");
+  expect(url.searchParams.get("pgbouncer")).toBe( null);
+  expect(url.searchParams.get("sslmode")).toBe( "verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe( certPath);
   rmSync(certDir, { recursive: true, force: true });
 });
