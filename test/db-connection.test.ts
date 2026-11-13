@@ -42,13 +42,13 @@ test("builds an encoded transaction-pooler URL for the application", () => {
 
   const url = new URL(getDatabaseConnectionString("application"));
 
-  expect(url.hostname).toBe( "aws-0-eu-west-3.pooler.supabase.com");
-  expect(url.username).toBe( "postgres.project");
-  expect(decodeURIComponent(url.password)).toBe( "pa:ss@word");
-  expect(url.port).toBe( "6543");
-  expect(url.searchParams.get("pgbouncer")).toBe( "true");
-  expect(url.searchParams.get("sslmode")).toBe( "verify-full");
-  expect(url.searchParams.get("sslrootcert")).toBe( certPath);
+  expect(url.hostname).toBe("aws-0-eu-west-3.pooler.supabase.com");
+  expect(url.username).toBe("postgres.project");
+  expect(decodeURIComponent(url.password)).toBe("pa:ss@word");
+  expect(url.port).toBe("6543");
+  expect(url.searchParams.get("pgbouncer")).toBe("true");
+  expect(url.searchParams.get("sslmode")).toBe("verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe(certPath);
   rmSync(certDir, { recursive: true, force: true });
 });
 
@@ -65,9 +65,9 @@ test("builds a session-pooler URL for migrations", () => {
 
   const url = new URL(getDatabaseConnectionString("migration"));
 
-  expect(url.port).toBe( "5432");
-  expect(url.searchParams.get("pgbouncer")).toBe( null);
-  expect(url.searchParams.get("sslmode")).toBe( "verify-full");
-  expect(url.searchParams.get("sslrootcert")).toBe( certPath);
+  expect(url.port).toBe("5432");
+  expect(url.searchParams.get("pgbouncer")).toBe(null);
+  expect(url.searchParams.get("sslmode")).toBe("verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe(certPath);
   rmSync(certDir, { recursive: true, force: true });
 });
