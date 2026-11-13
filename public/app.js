@@ -1,6 +1,6 @@
 let rows = Array.from(document.querySelectorAll("#departure-rows tr"));
 const globalSearch = document.querySelector("#global-search");
-const emptyState = document.querySelector("#empty-state");
+const globalSearchResults = document.querySelector("#global-search-results");
 const toast = document.querySelector("#toast");
 const loginButton = document.querySelector("#login-button");
 const authDialog = document.querySelector("#auth-dialog");
@@ -19,28 +19,20 @@ let paymentLoadError = false;
 let selectedPayment;
 let reportOperations = [];
 let reportLoadError = false;
+let globalSearchController;
+let globalSearchSequence = 0;
+let globalSearchTimer;
+let scannerStream;
+let scannerAnimationFrame;
+let scannerDetector;
+let scannerLastFrameAt = 0;
+let scannerDetecting = false;
 
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3200);
-}
-
-function filterDepartures(value) {
-  const search = value.trim().toLocaleLowerCase("fr");
-  let visibleRows = 0;
-  rows.forEach((row) => {
-    const matches = row.textContent.toLocaleLowerCase("fr").includes(search);
-    row.hidden = !matches;
-    if (matches) visibleRows += 1;
-  });
-  const authenticated = Boolean(localStorage.getItem("transora_token"));
-  const table = document.querySelector("#overview-departures-table");
-  const message = document.querySelector("#overview-departures-message");
-  table.hidden = !authenticated;
-  emptyState.hidden = !authenticated || visibleRows !== 0;
-  message.hidden = authenticated;
 }
 
 function updateActivity(activity) {
@@ -182,7 +174,6 @@ function renderDepartures(departures) {
   });
 
   rows = Array.from(body.querySelectorAll("tr"));
-  filterDepartures(globalSearch.value);
 }
 
 function setAuthenticatedState(authenticated) {
@@ -313,7 +304,7 @@ function renderVoyages() {
   });
   const matches = voyageDepartures.filter((departure) => {
     const departureDate = new Date(departure.departureAt);
-    const route = `${departure.origin} ${departure.destination} ${departure.vehicleCode}`.toLocaleLowerCase("fr");
+    const route = `${departure.origin} → ${departure.destination} ${departure.vehicleCode} ${departure.id}`.toLocaleLowerCase("fr");
     return route.includes(search)
       && (!selectedDate || departureDate.toLocaleDateString("en-CA") === selectedDate)
       && (!selectedStatus || departure.status === selectedStatus);
@@ -460,7 +451,7 @@ function renderFleet() {
     hors_service: ["Hors service", "out-of-service"]
   };
   const matches = fleetVehicles.filter((vehicle) => {
-    const searchable = `${vehicle.immatriculation} ${vehicle.modele} ${vehicle.annee || ""}`.toLocaleLowerCase("fr");
+    const searchable = `${vehicle.id} ${vehicle.immatriculation} ${vehicle.modele} ${vehicle.annee || ""}`.toLocaleLowerCase("fr");
     return searchable.includes(search)
       && (!selectedStatus || vehicle.statut === selectedStatus);
   });
@@ -613,7 +604,7 @@ function renderPayments() {
     const normalizedStatus = payment.statut === "NOT_INITIATED"
       ? "UNPAID"
       : payment.statut;
-    const searchable = `${payment.passager} ${payment.origine} ${payment.destination} ${payment.moyenPaiement || ""}`
+    const searchable = `${payment.billetId} ${payment.transactionId || ""} ${payment.passager} ${payment.origine} ${payment.destination} ${payment.moyenPaiement || ""} ${payment.statut}`
       .toLocaleLowerCase("fr");
     return searchable.includes(search)
       && (!selectedStatus || selectedStatus === normalizedStatus);
@@ -667,9 +658,13 @@ function renderPayments() {
     } else if (payment.statut === "PENDING") {
       actionCell.textContent = "Validation admin";
     } else if (payment.statut === "CONFIRMED") {
-      actionCell.textContent = payment.confirméLe
-        ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short" }).format(new Date(payment.confirméLe))
-        : "Terminé";
+      const ticketButton = document.createElement("button");
+      ticketButton.className = "payment-action";
+      ticketButton.type = "button";
+      ticketButton.dataset.action = "ticket";
+      ticketButton.dataset.bookingId = payment.billetId;
+      ticketButton.textContent = "Billet QR";
+      actionCell.append(ticketButton);
     }
 
     row.append(passengerCell, departureCell, transportCell, feesCell, totalCell, methodCell, statusCell, actionCell);
@@ -980,9 +975,374 @@ function setAuthMode(register) {
   authForm.elements.password.autocomplete = register ? "new-password" : "current-password";
 }
 
-globalSearch.addEventListener("input", (event) => {
-  filterDepartures(event.currentTarget.value);
+function positionGlobalSearchResults() {
+  const bounds = globalSearch.getBoundingClientRect();
+  const width = Math.min(Math.max(bounds.width, 290), window.innerWidth - 24);
+  globalSearchResults.style.left = `${Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12))}px`;
+  globalSearchResults.style.top = `${bounds.bottom + 6}px`;
+  globalSearchResults.style.width = `${width}px`;
+}
+
+function closeGlobalSearch() {
+  globalSearchSequence += 1;
+  globalSearchController?.abort();
+  globalSearchResults.hidden = true;
+  globalSearch.setAttribute("aria-expanded", "false");
+}
+
+function showGlobalSearchMessage(message) {
+  const paragraph = document.createElement("p");
+  paragraph.className = "search-result-empty";
+  paragraph.textContent = message;
+  globalSearchResults.replaceChildren(paragraph);
+  positionGlobalSearchResults();
+  globalSearchResults.hidden = false;
+  globalSearch.setAttribute("aria-expanded", "true");
+}
+
+function renderGlobalSearchResults(results) {
+  if (!results.length) {
+    showGlobalSearchMessage("Aucun résultat. Essayez un nom, une référence de paiement ou un trajet.");
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  results.forEach((result) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.setAttribute("role", "option");
+    option.dataset.searchType = result.type;
+    option.dataset.searchHref = result.href;
+    option.dataset.searchTitle = result.title;
+    const heading = document.createElement("span");
+    heading.className = "search-result-heading";
+    const title = document.createElement("strong");
+    title.textContent = result.title;
+    const type = document.createElement("span");
+    type.className = "search-result-type";
+    type.textContent = result.type;
+    heading.append(title, type);
+    const subtitle = document.createElement("small");
+    subtitle.textContent = result.subtitle || "";
+    const detail = document.createElement("small");
+    detail.textContent = result.detail || result.status || "";
+    option.append(heading, subtitle, detail);
+    fragment.append(option);
+  });
+  globalSearchResults.replaceChildren(fragment);
+  positionGlobalSearchResults();
+  globalSearchResults.hidden = false;
+  globalSearch.setAttribute("aria-expanded", "true");
+}
+
+async function searchDashboard(value) {
+  const term = value.trim();
+  if (term.length < 2) {
+    closeGlobalSearch();
+    globalSearchResults.replaceChildren();
+    return;
+  }
+
+  const token = localStorage.getItem("transora_token");
+  if (!token) {
+    showGlobalSearchMessage("Connectez-vous pour rechercher dans les billets, clients, paiements et opérations.");
+    return;
+  }
+
+  globalSearchController?.abort();
+  globalSearchController = new AbortController();
+  const sequence = ++globalSearchSequence;
+  showGlobalSearchMessage("Recherche en cours…");
+  try {
+    const response = await fetch(`/api/v1/recherche?q=${encodeURIComponent(term)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: globalSearchController.signal
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("transora_token");
+        setAuthenticatedState(false);
+      }
+      throw new Error(result.message || "Recherche impossible.");
+    }
+    if (sequence === globalSearchSequence) renderGlobalSearchResults(result.data.résultats);
+  } catch (error) {
+    if (error.name === "AbortError" || sequence !== globalSearchSequence) return;
+    showGlobalSearchMessage(error.message || "La recherche a échoué. Réessayez.");
+  }
+}
+
+function extractTicketId(value) {
+  const text = value.trim();
+  try {
+    const url = new URL(text, window.location.origin);
+    for (const key of ["ticket", "billet", "bookingId", "id"]) {
+      const candidate = url.searchParams.get(key);
+      if (candidate) return extractTicketId(candidate);
+    }
+    const pathMatch = url.pathname.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+    if (pathMatch) return pathMatch[0];
+  } catch {
+    // The scan may contain a plain UUID rather than a URL.
+  }
+  const match = text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  return match?.[0] || "";
+}
+
+function setScannerFeedback(message, state = "") {
+  const feedback = document.querySelector("#scanner-feedback");
+  feedback.textContent = message;
+  feedback.dataset.state = state;
+}
+
+function renderTicketCheck(ticket) {
+  const result = document.querySelector("#scanner-result");
+  result.dataset.valid = String(ticket.valide);
+  result.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = ticket.valide ? "Paiement confirmé · billet valide" : "Billet non valide";
+  const details = [
+    `Passager : ${ticket.passager}`,
+    `Trajet : ${ticket.origine} → ${ticket.destination}`,
+    `Départ : ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ticket.départLe))}`,
+    `Véhicule : ${ticket.véhicule}`,
+    `Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "non confirmé"}`
+  ];
+  if (ticket.motif) details.push(ticket.motif);
+  const paragraphs = details.map((detail) => {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = detail;
+    return paragraph;
+  });
+  result.append(heading, ...paragraphs);
+  result.hidden = false;
+}
+
+async function lookupScannedTicket(rawValue) {
+  const ticketId = extractTicketId(rawValue);
+  const token = localStorage.getItem("transora_token");
+  const submit = document.querySelector("#scanner-submit");
+  document.querySelector("#scanner-result").hidden = true;
+  if (!token) {
+    setScannerFeedback("Connectez-vous pour vérifier un billet.", "error");
+    return;
+  }
+  if (!ticketId) {
+    setScannerFeedback("Code illisible. Scannez le QR/code-barres d'un billet TRANSORA ou saisissez son identifiant.", "error");
+    return;
+  }
+
+  submit.disabled = true;
+  setScannerFeedback("Vérification du billet…");
+  try {
+    const response = await fetch(`/api/v1/recherche/billet/${encodeURIComponent(ticketId)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("transora_token");
+        setAuthenticatedState(false);
+      }
+      throw new Error(result.message || "Billet introuvable.");
+    }
+    renderTicketCheck(result.data);
+    setScannerFeedback(
+      result.data.valide
+        ? "Billet vérifié. Cette vérification ne marque pas le passager comme embarqué."
+        : result.data.motif || "Billet non valide.",
+      result.data.valide ? "success" : "error"
+    );
+    if (scannerStream) stopTicketScanner();
+  } catch (error) {
+    setScannerFeedback(error.message || "Impossible de vérifier le billet.", "error");
+  } finally {
+    submit.disabled = false;
+    document.querySelector("#scanner-input").focus();
+  }
+}
+
+function stopTicketScanner() {
+  if (scannerAnimationFrame) window.cancelAnimationFrame(scannerAnimationFrame);
+  scannerAnimationFrame = undefined;
+  scannerStream?.getTracks().forEach((track) => track.stop());
+  scannerStream = undefined;
+  const video = document.querySelector("#scanner-video");
+  video.pause();
+  video.srcObject = null;
+  video.hidden = true;
+  document.querySelector("#scanner-stop").hidden = true;
+  document.querySelector("#scanner-start").hidden = false;
+}
+
+async function startTicketScanner() {
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    setScannerFeedback("La caméra nécessite HTTPS (ou localhost). Vous pouvez saisir un code ou utiliser un lecteur USB/Bluetooth.", "error");
+    return;
+  }
+  if (!("BarcodeDetector" in window)) {
+    setScannerFeedback("La lecture caméra n'est pas prise en charge par ce navigateur. Utilisez un lecteur USB/Bluetooth ou saisissez le code.", "error");
+    return;
+  }
+  try {
+    const supportedFormats = await window.BarcodeDetector.getSupportedFormats();
+    const formats = ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "upc_a", "upc_e", "itf"]
+      .filter((format) => supportedFormats.includes(format));
+    if (!formats.length) {
+      setScannerFeedback("Aucun format QR/code-barres compatible. Utilisez un lecteur USB/Bluetooth ou saisissez le code.", "error");
+      return;
+    }
+    scannerDetector = new window.BarcodeDetector({ formats });
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" } }
+    });
+    const video = document.querySelector("#scanner-video");
+    video.srcObject = scannerStream;
+    video.hidden = false;
+    await video.play();
+    document.querySelector("#scanner-start").hidden = true;
+    document.querySelector("#scanner-stop").hidden = false;
+    setScannerFeedback("Caméra active. Cadrez un QR code ou un code-barres.");
+    const scanFrame = async (now) => {
+      if (!scannerStream) return;
+      scannerAnimationFrame = window.requestAnimationFrame(scanFrame);
+      if (scannerDetecting || now - scannerLastFrameAt < 180 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      scannerLastFrameAt = now;
+      scannerDetecting = true;
+      try {
+        const detected = await scannerDetector.detect(video);
+        const code = detected.find((item) => item.rawValue)?.rawValue;
+        if (code) {
+          document.querySelector("#scanner-input").value = code;
+          stopTicketScanner();
+          await lookupScannedTicket(code);
+        }
+      } catch (error) {
+        stopTicketScanner();
+        setScannerFeedback(error.message || "La caméra n'a pas pu lire ce code.", "error");
+      } finally {
+        scannerDetecting = false;
+      }
+    };
+    scannerAnimationFrame = window.requestAnimationFrame(scanFrame);
+  } catch (error) {
+    stopTicketScanner();
+    setScannerFeedback(error.message || "Accès caméra refusé ou caméra indisponible.", "error");
+  }
+}
+
+async function openTicket(bookingId) {
+  const token = localStorage.getItem("transora_token");
+  if (!token) {
+    setAuthMode(false);
+    authDialog.showModal();
+    return;
+  }
+  const dialog = document.querySelector("#ticket-dialog");
+  const button = Array.from(document.querySelectorAll('#payment-rows button[data-action="ticket"]'))
+    .find((candidate) => candidate.dataset.bookingId === bookingId);
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch(`/api/v1/recherche/billet/${encodeURIComponent(bookingId)}?images=true`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("transora_token");
+        setAuthenticatedState(false);
+      }
+      throw new Error(result.message || "Impossible de charger le billet.");
+    }
+    const ticket = result.data;
+    if (!ticket.qrCode || !ticket.codeBarres) {
+      throw new Error(ticket.motif || "Le billet ne peut pas être généré avant la confirmation du paiement.");
+    }
+    document.querySelector("#ticket-title").textContent = `${ticket.origine} → ${ticket.destination}`;
+    document.querySelector("#ticket-description").textContent =
+      `${ticket.passager} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)}`;
+    document.querySelector("#ticket-qr").src = ticket.qrCode;
+    document.querySelector("#ticket-barcode").src = ticket.codeBarres;
+    document.querySelector("#ticket-id").textContent = `Référence billet : ${ticket.billetId}`;
+    dialog.showModal();
+  } catch (error) {
+    showToast(error.message || "Impossible de charger le billet.");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+globalSearch.addEventListener("focus", () => {
+  if (globalSearch.value.trim().length >= 2) searchDashboard(globalSearch.value);
 });
+globalSearch.addEventListener("input", () => {
+  window.clearTimeout(globalSearchTimer);
+  globalSearchTimer = window.setTimeout(() => searchDashboard(globalSearch.value), 220);
+});
+globalSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeGlobalSearch();
+    globalSearch.blur();
+  } else if (event.key === "ArrowDown" && !globalSearchResults.hidden) {
+    event.preventDefault();
+    globalSearchResults.querySelector("button")?.focus();
+  }
+});
+globalSearchResults.addEventListener("click", (event) => {
+  const option = event.target.closest("button[data-search-href]");
+  if (!option) return;
+  const type = option.dataset.searchType;
+  const title = option.dataset.searchTitle;
+  const href = option.dataset.searchHref;
+  closeGlobalSearch();
+  window.location.hash = href;
+  window.setTimeout(() => {
+    const localSearch = type === "billet"
+      ? document.querySelector("#payment-search")
+      : type === "départ" ? document.querySelector("#voyage-search")
+      : type === "véhicule" ? document.querySelector("#fleet-search")
+      : null;
+    if (localSearch) {
+      localSearch.value = title;
+      localSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, 0);
+});
+globalSearchResults.addEventListener("keydown", (event) => {
+  const options = Array.from(globalSearchResults.querySelectorAll("button[role='option']"));
+  const index = options.indexOf(event.target);
+  if (event.key === "ArrowDown" && index < options.length - 1) {
+    event.preventDefault();
+    options[index + 1].focus();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    if (index > 0) options[index - 1].focus();
+    else globalSearch.focus();
+  } else if (event.key === "Escape") {
+    closeGlobalSearch();
+    globalSearch.focus();
+  }
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!globalSearch.contains(event.target) && !globalSearchResults.contains(event.target)) closeGlobalSearch();
+});
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    globalSearch.focus();
+  }
+  if (event.key === "Escape") closeGlobalSearch();
+});
+window.addEventListener("resize", () => {
+  if (!globalSearchResults.hidden) positionGlobalSearchResults();
+});
+window.addEventListener("scroll", () => {
+  if (!globalSearchResults.hidden) positionGlobalSearchResults();
+}, true);
+document.querySelector(".sidebar-search kbd").textContent =
+  /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K";
 
 function localDateValue(date = new Date()) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -1252,6 +1612,10 @@ document.querySelector("#payment-status-filter").addEventListener("change", rend
 document.querySelector("#payment-rows").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-booking-id]");
   if (!button) return;
+  if (button.dataset.action === "ticket") {
+    openTicket(button.dataset.bookingId);
+    return;
+  }
   const payment = payments.find((item) => item.billetId === button.dataset.bookingId);
   if (!payment) {
     showToast("Cette réservation n'est plus dans la liste. Actualisez les paiements.");
@@ -1262,6 +1626,38 @@ document.querySelector("#payment-rows").addEventListener("click", (event) => {
 document.querySelector("#payment-dialog-close").addEventListener("click", () => {
   document.querySelector("#payment-dialog").close();
 });
+function openScannerDialog() {
+  if (!localStorage.getItem("transora_token")) {
+    setAuthMode(false);
+    authDialog.showModal();
+    return;
+  }
+  document.querySelector("#scanner-input").value = "";
+  document.querySelector("#scanner-result").hidden = true;
+  setScannerFeedback("Scannez un billet ou saisissez son code.");
+  document.querySelector("#scanner-dialog").showModal();
+  document.querySelector("#scanner-input").focus();
+}
+document.querySelector("#scanner-open").addEventListener("click", openScannerDialog);
+document.querySelector("#scanner-open-mobile").addEventListener("click", openScannerDialog);
+document.querySelector("#scanner-dialog-close").addEventListener("click", () => {
+  stopTicketScanner();
+  document.querySelector("#scanner-dialog").close();
+});
+document.querySelector("#scanner-dialog").addEventListener("close", stopTicketScanner);
+document.querySelector("#scanner-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  lookupScannedTicket(document.querySelector("#scanner-input").value);
+});
+document.querySelector("#scanner-start").addEventListener("click", startTicketScanner);
+document.querySelector("#scanner-stop").addEventListener("click", () => {
+  stopTicketScanner();
+  setScannerFeedback("Caméra arrêtée. Vous pouvez saisir un code ou scanner avec un lecteur externe.");
+});
+document.querySelector("#ticket-dialog-close").addEventListener("click", () => {
+  document.querySelector("#ticket-dialog").close();
+});
+document.querySelector("#ticket-print").addEventListener("click", () => window.print());
 document.querySelector("#payment-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!selectedPayment) return;

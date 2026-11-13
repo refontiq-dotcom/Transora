@@ -49,3 +49,11 @@ L'application TRANSORA se trouve dans `src/` (API), `public/` (interface), `migr
 5. Ouvrir `http://localhost:3000`.
 
 Les migrations de base de données s'appliquent avec `npm run db:migrate`. Exécuter `npm test` pour compiler le projet et lancer les tests.
+
+### Recherche et contrôle des billets
+
+- La recherche globale authentifiée (`GET /api/v1/recherche?q=...`) couvre les passagers/réservations et leurs paiements, les départs, les véhicules et les opérations financières du tenant connecté.
+- Un billet payé et associé à un paiement confirmé peut être affiché et imprimé avec un QR code et un code-barres Code 128. Le code représente l'identifiant du billet; les données du passager ne sont pas encodées dans le code.
+- Le contrôle (`GET /api/v1/recherche/billet/:id`) vérifie le tenant, le paiement, les annulations et l'heure du départ. Le scan est en lecture seule et ne confirme pas l'embarquement.
+- La caméra utilise les formats QR et Code 128/39/UPC/EAN pris en charge par le navigateur. Elle nécessite HTTPS (ou `localhost`) et une permission caméra. Les lecteurs USB/Bluetooth qui saisissent le code comme un clavier et la saisie manuelle restent disponibles comme solutions de repli.
+- Les données client actuellement enregistrées se limitent au nom du passager et à sa réservation; les numéros de téléphone et adresses e-mail des passagers ne sont pas encore stockés. Aucun fournisseur de paiement mobile ou bancaire n'est connecté : les règlements par carte et Mobile Money restent confirmés manuellement dans l'application.

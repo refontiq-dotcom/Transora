@@ -15,6 +15,7 @@ import personnelRoutes from "./modules/personnel/routes";
 import incidentRoutes from "./modules/incidents/routes";
 import notificationRoutes from "./modules/notifications/routes";
 import financeRoutes from "./modules/finance/routes";
+import searchRoutes from "./modules/recherche/routes";
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/v1/personnel", personnelRoutes);
 app.use("/api/v1/incidents", incidentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/finance", financeRoutes);
+app.use("/api/v1/recherche", searchRoutes);
 app.use(errorHandler);
 
 export default app;

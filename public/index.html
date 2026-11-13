@@ -24,11 +24,17 @@
           <span class="chevron" aria-hidden="true">⌄</span>
         </button>
 
-        <label class="search-box sidebar-search">
-          <span class="search-icon" aria-hidden="true"></span>
-          <input id="global-search" type="search" placeholder="Rechercher..." aria-label="Rechercher dans le tableau de bord">
-          <kbd>⌘ K</kbd>
-        </label>
+        <div class="global-search-wrap">
+          <label class="search-box sidebar-search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="global-search" type="search" placeholder="Billet, client, paiement..." aria-label="Rechercher dans tous les modules" autocomplete="off" aria-controls="global-search-results" aria-expanded="false">
+            <kbd>Ctrl K</kbd>
+          </label>
+          <button class="sidebar-scanner" id="scanner-open" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2m10 0h2a1 1 0 0 1 1 1v2M4 17v2a1 1 0 0 0 1 1h2m10 0h2a1 1 0 0 0 1-1v-2M4 12h16M8 9v6m4-6v6m4-6v6"/></svg>
+            Scanner un billet
+          </button>
+        </div>
 
         <p class="nav-label">ESPACE DE GESTION</p>
         <nav class="navigation" aria-label="Navigation principale">
@@ -429,6 +435,11 @@
         </div>
       </main>
     </div>
+    <div class="global-search-results" id="global-search-results" role="listbox" aria-label="Résultats de recherche" hidden></div>
+    <button class="scanner-fab" id="scanner-open-mobile" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2m10 0h2a1 1 0 0 1 1 1v2M4 17v2a1 1 0 0 0 1 1h2m10 0h2a1 1 0 0 0 1-1v-2M4 12h16M8 9v6m4-6v6m4-6v6"/></svg>
+      Scanner un billet
+    </button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <dialog class="auth-dialog" id="auth-dialog">
       <form class="auth-form" id="auth-form">
@@ -509,6 +520,42 @@
         <p class="payment-proof-note">La confirmation marque la réservation comme payée. Vérifiez le règlement avant de confirmer.</p>
         <button class="primary-button auth-submit" type="submit" id="payment-submit">Confirmer le paiement</button>
       </form>
+    </dialog>
+    <dialog class="auth-dialog scanner-dialog" id="scanner-dialog">
+      <div class="scanner-content">
+        <button class="dialog-close" id="scanner-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">CONTRÔLE DES BILLETS</p>
+        <h2>Scanner un billet</h2>
+        <p class="auth-description">Scannez un QR code ou un code-barres avec la caméra ou un lecteur USB/Bluetooth. La vérification ne valide pas l'embarquement.</p>
+        <video id="scanner-video" class="scanner-video" playsinline muted hidden></video>
+        <p class="scanner-feedback" id="scanner-feedback" role="status" aria-live="polite">Connectez-vous pour vérifier un billet.</p>
+        <form class="scanner-form" id="scanner-form">
+          <label for="scanner-input">Code du billet</label>
+          <div class="scanner-input-row">
+            <input id="scanner-input" type="text" autocomplete="off" placeholder="Scannez ou saisissez le code" required>
+            <button class="secondary-button" type="submit" id="scanner-submit">Vérifier</button>
+          </div>
+        </form>
+        <div class="scanner-actions">
+          <button class="secondary-button" id="scanner-start" type="button">Utiliser la caméra</button>
+          <button class="secondary-button" id="scanner-stop" type="button" hidden>Arrêter la caméra</button>
+        </div>
+        <section class="ticket-check-result" id="scanner-result" aria-live="polite" hidden></section>
+      </div>
+    </dialog>
+    <dialog class="auth-dialog ticket-dialog" id="ticket-dialog">
+      <div class="ticket-content">
+        <button class="dialog-close" id="ticket-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">BILLET TRANSORA</p>
+        <h2 id="ticket-title">Billet de voyage</h2>
+        <p class="auth-description" id="ticket-description"></p>
+        <div class="ticket-codes">
+          <figure><img id="ticket-qr" alt="QR code du billet"><figcaption>QR CODE</figcaption></figure>
+          <figure><img id="ticket-barcode" alt="Code-barres du billet"><figcaption>CODE-BARRES</figcaption></figure>
+        </div>
+        <p class="ticket-id" id="ticket-id"></p>
+        <button class="primary-button auth-submit ticket-print" id="ticket-print" type="button">Imprimer le billet</button>
+      </div>
     </dialog>
     <script src="/app.js" defer></script>
   </body>
