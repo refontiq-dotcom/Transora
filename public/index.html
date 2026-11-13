@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#09271b">
+    <title>Transora — Tableau de bord</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="Transora, accueil">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>transora</span>
+        </a>
+
+        <button class="workspace-picker" type="button">
+          <span class="workspace-avatar">A</span>
+          <span class="workspace-copy"><small>Espace de travail</small><strong>Mon entreprise</strong></span>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </button>
+
+        <label class="search-box sidebar-search">
+          <span class="search-icon" aria-hidden="true"></span>
+          <input id="global-search" type="search" placeholder="Rechercher..." aria-label="Rechercher dans le tableau de bord">
+          <kbd>⌘ K</kbd>
+        </label>
+
+        <p class="nav-label">ESPACE DE GESTION</p>
+        <nav class="navigation" aria-label="Navigation principale">
+          <a class="nav-link active" href="#overview" data-nav="Vue d'ensemble">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+            <span>Vue d'ensemble</span>
+          </a>
+          <a class="nav-link" href="#voyages" data-nav="Voyages">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 5.4 9a2 2 0 0 1 2-1.6h9.2a2 2 0 0 1 2 1.6l1.4 7.5"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19M7 11h10M8 14h.01M16 14h.01"/></svg>
+            <span>Voyages</span><span class="nav-count" id="voyage-count-badge" hidden>0</span>
+          </a>
+          <a class="nav-link" href="#flotte" data-nav="Flotte">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5Z"/><path d="M3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>
+            <span>Flotte</span><span class="nav-count" id="fleet-count-badge" hidden>0</span>
+          </a>
+          <a class="nav-link" href="#payments" data-nav="Paiements">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/></svg>
+            <span>Paiements</span>
+          </a>
+          <a class="nav-link" href="#reports" data-nav="Rapports">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16"/><path d="m7 15 4-4 3 2 5-6"/></svg>
+            <span>Rapports</span><span class="status-dot"></span>
+          </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <a class="nav-link" href="#settings" data-nav="Paramètres">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1a1.7 1.7 0 0 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 0 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 0 1-2.4-2.4l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a1.7 1.7 0 0 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 0 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V2a1.7 1.7 0 0 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 0 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 0 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2 2.9Z"/></svg>
+            <span>Paramètres</span>
+          </a>
+          <div class="profile">
+            <div class="profile-avatar">AM<span></span></div>
+            <div class="profile-copy"><strong>Utilisateur</strong><small>Administrateur</small></div>
+            <button class="more-button" type="button" aria-label="Options du compte">···</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content" id="overview">
+        <header class="topbar">
+          <div class="mobile-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span> transora</div>
+          <div class="breadcrumbs">Mon entreprise <span>/</span> <strong>Vue d'ensemble</strong></div>
+          <div class="topbar-actions">
+            <button class="demo-badge" id="login-button" type="button"><span></span> Mode démonstration · Connexion</button>
+            <button class="icon-button notification-button" type="button" aria-label="Notifications">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4"/></svg>
+              <i></i>
+            </button>
+            <button class="primary-button" id="export-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 18v3h14v-3"/></svg>
+              <span>Exporter le rapport</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="content" id="overview-page">
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow" id="today-label">JEUDI 12 NOVEMBRE 2026</p>
+              <h1>Bonjour <span class="wave">✳</span></h1>
+              <p class="subheading">Suivez l'activité de votre réseau et consultez vos indicateurs clés.</p>
+            </div>
+            <label class="date-filter" for="dashboard-date">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+              <span class="date-filter-label">Date des indicateurs</span>
+              <input id="dashboard-date" type="date" aria-label="Choisir la date des indicateurs">
+            </label>
+            <button class="secondary-button dashboard-refresh" id="dashboard-refresh" type="button">Actualiser</button>
+          </section>
+
+          <section class="metrics-grid" aria-label="Indicateurs clés">
+            <article class="metric-card featured-card">
+              <div class="metric-top"><span>Départs à cette date</span><span class="metric-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 5.4 9a2 2 0 0 1 2-1.6h9.2a2 2 0 0 1 2 1.6l1.4 7.5"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19"/></svg></span></div>
+              <div class="metric-value"><span class="metric-number" id="metric-departures">—</span> <span>départs</span></div>
+              <div class="metric-foot"><span id="overview-data-status">Connectez-vous pour charger vos données.</span></div>
+              <div class="mini-bars" aria-hidden="true"><i style="height:34%"></i><i style="height:55%"></i><i style="height:45%"></i><i style="height:72%"></i><i style="height:60%"></i><i style="height:86%"></i><i style="height:68%"></i><i style="height:100%"></i></div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span id="passenger-metric-label">Passagers transportés</span><span class="metric-icon soft-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0m2-11a3 3 0 0 1 0 6m1 1a4.5 4.5 0 0 1 3 4"/></svg></span></div>
+              <div class="metric-value"><span class="metric-number" id="metric-passengers">—</span> <span>passagers</span></div>
+              <div class="metric-foot"><span id="passenger-metric-foot">Réservations payées</span></div>
+              <div class="sparkline green-spark" aria-hidden="true"><svg viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 27 C12 24 14 27 23 19 S36 23 44 14 S57 17 66 13 S78 17 87 8 S101 13 110 5 L119 3"/></svg></div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>Revenus à cette date</span><span class="metric-icon soft-icon gold-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20m5-15c0-1.7-2.2-3-5-3S7 5.3 7 7s2.2 3 5 4 5 2.3 5 4-2.2 3-5 3-5-1.3-5-3"/></svg></span></div>
+              <div class="metric-value"><span class="metric-number" id="metric-revenue">—</span> <span>M FCFA</span></div>
+              <div class="metric-foot"><span>Paiements confirmés</span></div>
+              <div class="sparkline gold-spark" aria-hidden="true"><svg viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 24 C12 23 15 13 24 17 S37 22 46 12 S61 19 70 11 S82 14 91 8 S105 12 119 2"/></svg></div>
+            </article>
+          </section>
+
+          <section class="bottom-grid">
+            <article class="panel departures-panel" id="departures">
+              <div class="panel-heading departures-heading">
+                <div><h2>Départs de la journée</h2><p>Suivi des trajets à la date sélectionnée</p></div>
+                <div class="departure-actions">
+                  <a class="text-link" href="#voyages">Voir tous les voyages <span>→</span></a>
+                  <button class="text-link add-departure-button" id="add-departure-button" type="button">+ Ajouter</button>
+                </div>
+              </div>
+                <div class="table-wrap">
+                <table id="overview-departures-table">
+                  <thead><tr><th>TRAJET</th><th>HEURE</th><th>VÉHICULE</th><th>REMPLISSAGE</th><th>STATUT</th></tr></thead>
+                  <tbody id="departure-rows"></tbody>
+                </table>
+                <p class="empty-state" id="empty-state" hidden>Aucun départ ne correspond à cette recherche.</p>
+                <p class="overview-data-message" id="overview-departures-message">Connectez-vous pour consulter les départs de la journée.</p>
+              </div>
+            </article>
+
+            <article class="panel activity-panel">
+              <div class="panel-heading">
+                <div><h2>Activité du réseau</h2><p>Départs et réservations selon la période sélectionnée</p></div>
+                <label class="select-wrap"><select id="period-select" aria-label="Période du graphique"><option value="7">7 derniers jours</option><option value="30">30 derniers jours</option><option value="90">90 derniers jours</option></select></label>
+              </div>
+              <div class="chart-legend"><span><i class="legend-bar"></i> Départs</span><span><i class="legend-line"></i> Réservations</span></div>
+              <div class="chart-area">
+                <div class="y-axis"><span>400</span><span>300</span><span>200</span><span>100</span><span>0</span></div>
+                <div class="chart-main">
+                  <div class="grid-lines"><i></i><i></i><i></i><i></i><i></i></div>
+                  <div class="bars" aria-label="Graphique des départs">
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                    <div class="bar-group"><i></i><i></i><span></span></div>
+                  </div>
+                  <svg class="chart-line" viewBox="0 0 700 190" preserveAspectRatio="none" aria-hidden="true">
+                    <defs><linearGradient id="line-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#55b86a" stop-opacity=".16"/><stop offset="1" stop-color="#55b86a" stop-opacity="0"/></linearGradient></defs>
+                    <path class="line-fill" d=""/>
+                    <path class="line-stroke" d=""/>
+                  </svg>
+                </div>
+              </div>
+              <div class="chart-insight"><span class="insight-dot"></span><span id="overview-chart-insight">Activité des départs et réservations confirmées.</span></div>
+            </article>
+          </section>
+
+          <section class="dashboard-grid">
+            <article class="panel occupancy-panel" id="fleet">
+              <div class="panel-heading">
+                <div><h2>Occupation de la flotte</h2><p>Pour la date sélectionnée</p></div>
+                <button class="more-button panel-more" type="button" aria-label="Plus d'options">···</button>
+              </div>
+              <div class="occupancy-content">
+                <div class="donut-wrap">
+                  <svg viewBox="0 0 160 160" class="donut" role="img" aria-label="Occupation de la flotte">
+                    <circle class="donut-track" cx="80" cy="80" r="64"/>
+                    <circle class="donut-value" cx="80" cy="80" r="64"/>
+                  </svg>
+                  <div class="donut-label"><strong><span id="metric-occupancy">—</span><span>%</span></strong><small>occupation</small></div>
+                </div>
+                <div class="occupancy-legend">
+                  <div><i class="legend-green"></i><span>Places réservées</span><strong id="metric-seats-reserved">—</strong></div>
+                  <div><i class="legend-light"></i><span>Places disponibles</span><strong id="metric-seats-available">—</strong></div>
+                  <div><i class="legend-yellow"></i><span>Véhicules actifs</span><strong><span id="metric-vehicles">—</span></strong></div>
+                </div>
+              </div>
+              <div class="occupancy-note"><span class="note-icon">i</span><span id="occupancy-note-text">Les indicateurs apparaîtront après connexion.</span></div>
+            </article>
+            <article class="network-card" id="network-preview">
+              <div class="network-heading"><div><p>APERÇU ILLUSTRATIF</p><h2>La Côte d'Ivoire<br>en mouvement.</h2></div><span class="live-pill">Aperçu</span></div>
+              <div class="network-map" aria-hidden="true">
+                <svg viewBox="0 0 420 220" preserveAspectRatio="xMidYMid meet">
+                  <path class="map-shape" d="m73 22 40 14 34-8 25 22 31-4 24 22 30-7 22 26 35 1 14 28-14 23 4 29-34 15-24 23-38-10-17-26-28 3-19-24-32 5-8-23-32-3-17-30-28-15-1-30Z"/>
+                  <path class="map-road road-main" d="M93 164 Q149 124 185 126 T277 78 T347 103"/>
+                  <path class="map-road road-secondary" d="M93 164 Q139 80 192 62 T277 78M185 126 Q233 151 280 164M185 126 Q172 89 192 62"/>
+                  <path class="route-glow" d="M93 164 Q149 124 185 126 T277 78"/>
+                  <path class="route-line" d="M93 164 Q149 124 185 126 T277 78"/>
+                  <circle class="map-point" cx="93" cy="164" r="7"/><circle class="map-point" cx="185" cy="126" r="5"/><circle class="map-point" cx="277" cy="78" r="7"/><circle class="map-point small-point" cx="347" cy="103" r="4"/><circle class="map-point small-point" cx="192" cy="62" r="4"/><circle class="map-point small-point" cx="280" cy="164" r="4"/>
+                  <text x="66" y="187">Abidjan</text><text x="163" y="147">Yamoussoukro</text><text x="260" y="62">Bouaké</text><text x="330" y="124">Korhogo</text><text x="171" y="48">Man</text><text x="264" y="185">Gagnoa</text>
+                </svg>
+              </div>
+              <div class="network-footer"><span>Carte illustrative</span><span>Données réseau à connecter</span></div>
+            </article>
+          </section>
+          <footer class="page-footer"><span>© 2026 Transora</span><span>Votre réseau, en mouvement.</span></footer>
+        </div>
+        <div class="content voyages-page" id="voyages-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">GESTION DES TRAJETS</p>
+              <h1>Voyages</h1>
+              <p class="subheading">Programmez les départs, suivez le remplissage et gérez les réservations.</p>
+            </div>
+            <button class="primary-button" id="voyages-add-departure" type="button">
+              <span>+ Nouveau départ</span>
+            </button>
+          </section>
+
+          <section class="voyage-summary" aria-label="Résumé des départs">
+            <article class="voyage-summary-card"><span>Départs à venir</span><strong id="voyage-total">—</strong></article>
+            <article class="voyage-summary-card"><span>Départs aujourd'hui</span><strong id="voyage-today">—</strong></article>
+            <article class="voyage-summary-card"><span>Places disponibles</span><strong id="voyage-seats">—</strong></article>
+          </section>
+
+          <section class="panel voyage-list-panel">
+            <div class="voyage-toolbar">
+              <div>
+                <h2>Liste des départs</h2>
+                <p id="voyage-list-caption">Connectez-vous pour consulter les départs de votre entreprise.</p>
+              </div>
+              <div class="voyage-filters">
+                <label class="voyage-search">
+                  <span class="search-icon" aria-hidden="true"></span>
+                  <input id="voyage-search" type="search" placeholder="Ville ou véhicule" aria-label="Rechercher un départ">
+                </label>
+                <input id="voyage-date" class="voyage-date" type="date" aria-label="Filtrer par date">
+                <select id="voyage-status" aria-label="Filtrer par statut">
+                  <option value="">Tous les statuts</option>
+                  <option value="SCHEDULED">À l'heure</option>
+                  <option value="BOARDING">Embarquement</option>
+                  <option value="DEPARTED">Parti</option>
+                  <option value="CANCELLED">Annulé</option>
+                </select>
+                <button class="secondary-button" id="voyage-refresh" type="button">Actualiser</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="voyage-table">
+                <thead>
+                  <tr><th>TRAJET</th><th>DÉPART</th><th>VÉHICULE</th><th>PLACES</th><th>REMPLISSAGE</th><th>STATUT</th><th>OPTIONS</th></tr>
+                </thead>
+                <tbody id="voyage-rows"></tbody>
+              </table>
+              <p class="empty-state" id="voyage-empty" hidden>Aucun départ ne correspond à ces filtres.</p>
+              <p class="voyage-login-message" id="voyage-login-message" hidden>Connectez-vous pour afficher et gérer les voyages de votre entreprise.</p>
+            </div>
+          </section>
+          <footer class="page-footer"><span>Les places sont calculées à partir des réservations actives.</span><span>Transora · Voyages</span></footer>
+        </div>
+        <div class="content fleet-page" id="fleet-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">GESTION DU PARC AUTOMOBILE</p>
+              <h1>Flotte</h1>
+              <p class="subheading">Suivez vos véhicules, leur capacité et leur disponibilité.</p>
+            </div>
+            <button class="primary-button" id="fleet-add-vehicle" type="button"><span>+ Ajouter un véhicule</span></button>
+          </section>
+
+          <section class="fleet-summary" aria-label="Résumé de la flotte">
+            <article class="fleet-summary-card"><span>Véhicules au total</span><strong id="fleet-total">—</strong></article>
+            <article class="fleet-summary-card"><span>Disponibles</span><strong id="fleet-available">—</strong></article>
+            <article class="fleet-summary-card"><span>En service</span><strong id="fleet-active">—</strong></article>
+            <article class="fleet-summary-card"><span>En maintenance</span><strong id="fleet-maintenance">—</strong></article>
+          </section>
+
+          <section class="panel fleet-list-panel">
+            <div class="fleet-toolbar">
+              <div>
+                <h2>Véhicules de l'entreprise</h2>
+                <p id="fleet-list-caption">Connectez-vous pour consulter les véhicules enregistrés.</p>
+              </div>
+              <div class="fleet-filters">
+                <label class="fleet-search">
+                  <span class="search-icon" aria-hidden="true"></span>
+                  <input id="fleet-search" type="search" placeholder="Immatriculation ou modèle" aria-label="Rechercher un véhicule">
+                </label>
+                <select id="fleet-status-filter" aria-label="Filtrer par état">
+                  <option value="">Tous les états</option>
+                  <option value="disponible">Disponible</option>
+                  <option value="en_service">En service</option>
+                  <option value="en_maintenance">En maintenance</option>
+                  <option value="hors_service">Hors service</option>
+                </select>
+                <button class="secondary-button" id="fleet-refresh" type="button">Actualiser</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="fleet-table">
+                <thead>
+                  <tr><th>VÉHICULE</th><th>IMMATRICULATION</th><th>CAPACITÉ</th><th>ANNÉE</th><th>ÉTAT</th><th>OPTIONS</th></tr>
+                </thead>
+                <tbody id="fleet-rows"></tbody>
+              </table>
+              <p class="empty-state" id="fleet-empty" hidden>Aucun véhicule ne correspond à ces filtres.</p>
+              <p class="fleet-message" id="fleet-message" hidden></p>
+            </div>
+          </section>
+          <footer class="page-footer"><span>Les véhicules ne sont visibles que par leur entreprise.</span><span>Transora · Flotte</span></footer>
+        </div>
+        <div class="content payments-page" id="payments-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">ENCAISSEMENTS ET BILLETTERIE</p>
+              <h1>Paiements</h1>
+              <p class="subheading">Suivez les montants dus et confirmez les règlements reçus.</p>
+            </div>
+            <button class="secondary-button" id="payments-refresh" type="button">Actualiser</button>
+          </section>
+
+          <section class="payment-summary" aria-label="Résumé des paiements">
+            <article class="payment-summary-card"><span>À traiter</span><strong id="payment-pending-total">—</strong><small>réservations non réglées</small></article>
+            <article class="payment-summary-card"><span>Transport encaissé</span><strong id="payment-revenue-total">—</strong><small>FCFA confirmés</small></article>
+            <article class="payment-summary-card"><span>Frais TRANSORA</span><strong id="payment-fees-total">—</strong><small>FCFA confirmés</small></article>
+          </section>
+
+          <section class="panel payment-list-panel">
+            <div class="payment-toolbar">
+              <div>
+                <h2>Réservations et règlements</h2>
+                <p id="payment-list-caption">Connectez-vous pour consulter les paiements.</p>
+              </div>
+              <div class="payment-filters">
+                <label class="payment-search">
+                  <span class="search-icon" aria-hidden="true"></span>
+                  <input id="payment-search" type="search" placeholder="Passager ou trajet" aria-label="Rechercher un paiement">
+                </label>
+                <select id="payment-status-filter" aria-label="Filtrer par état du paiement">
+                  <option value="">Tous les paiements</option>
+                  <option value="UNPAID">À encaisser</option>
+                  <option value="PENDING">En attente de confirmation</option>
+                  <option value="CONFIRMED">Confirmés</option>
+                </select>
+                <button class="secondary-button" id="payment-export" type="button">Exporter CSV</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="payment-table">
+                <thead>
+                  <tr><th>PASSAGER / TRAJET</th><th>DÉPART</th><th>TRANSPORT</th><th>FRAIS</th><th>TOTAL</th><th>MOYEN</th><th>ÉTAT</th><th>OPTION</th></tr>
+                </thead>
+                <tbody id="payment-rows"></tbody>
+              </table>
+              <p class="empty-state" id="payment-empty" hidden>Aucun paiement ne correspond à ces filtres.</p>
+              <p class="payment-message" id="payment-message">Connectez-vous pour consulter et gérer les paiements de votre entreprise.</p>
+            </div>
+          </section>
+          <p class="payment-disclaimer">Les espèces et virements sont confirmés manuellement avec une preuve de règlement. Aucun opérateur mobile ou bancaire n'est encore connecté.</p>
+          <footer class="page-footer"><span>Les frais TRANSORA sont ajoutés au prix du transport.</span><span>Transora · Paiements</span></footer>
+        </div>
+        <div class="content reports-page" id="reports-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">PERFORMANCE DE L'ENTREPRISE</p>
+              <h1>Rapports</h1>
+              <p class="subheading">Consultez vos revenus, dépenses et opérations sur la période choisie.</p>
+            </div>
+            <div class="report-actions">
+              <button class="secondary-button" id="report-refresh" type="button">Actualiser</button>
+              <button class="primary-button" id="report-export" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 18v3h14v-3"/></svg>
+                <span>Exporter CSV</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel report-period-panel" aria-label="Période du rapport">
+            <div class="report-period-copy">
+              <h2>Période du rapport</h2>
+              <p>Les données sont limitées à l'espace de votre entreprise.</p>
+            </div>
+            <div class="report-period-fields">
+              <label>Du<input id="report-start-date" type="date"></label>
+              <label>Au<input id="report-end-date" type="date"></label>
+              <button class="secondary-button" id="report-apply" type="button">Appliquer</button>
+            </div>
+          </section>
+
+          <section class="report-summary" aria-label="Résumé financier">
+            <article class="report-summary-card"><span>Billets réglés</span><strong id="report-tickets">—</strong><small>paiements confirmés</small></article>
+            <article class="report-summary-card"><span>Revenus transport</span><strong id="report-revenue">—</strong><small>FCFA sur la période</small></article>
+            <article class="report-summary-card"><span>Frais TRANSORA</span><strong id="report-fees">—</strong><small>FCFA sur la période</small></article>
+            <article class="report-summary-card"><span>Dépenses</span><strong id="report-expenses">—</strong><small>FCFA enregistrés</small></article>
+            <article class="report-summary-card"><span>Remboursements</span><strong id="report-refunds">—</strong><small>FCFA enregistrés</small></article>
+            <article class="report-summary-card report-net-card"><span>Bénéfice net estimé</span><strong id="report-net">—</strong><small>revenus − dépenses − remboursements</small></article>
+          </section>
+
+          <section class="panel report-list-panel">
+            <div class="report-toolbar">
+              <div>
+                <h2>Détail des opérations</h2>
+                <p id="report-list-caption">Connectez-vous pour consulter les rapports.</p>
+              </div>
+              <select id="report-type-filter" aria-label="Filtrer par type d'opération">
+                <option value="">Tous les types</option>
+                <option value="revenu">Revenus</option>
+                <option value="dépense">Dépenses</option>
+                <option value="remboursement">Remboursements</option>
+                <option value="commission">Commissions</option>
+                <option value="frais_transora">Frais TRANSORA</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table class="report-table">
+                <thead><tr><th>DATE</th><th>TYPE</th><th>DESCRIPTION</th><th>CATÉGORIE</th><th>RÉFÉRENCE</th><th>MONTANT</th></tr></thead>
+                <tbody id="report-rows"></tbody>
+              </table>
+              <p class="empty-state" id="report-empty" hidden>Aucune opération sur cette période.</p>
+              <p class="report-message" id="report-message">Connectez-vous pour consulter les rapports de votre entreprise.</p>
+            </div>
+          </section>
+          <p class="report-disclaimer">Le bénéfice affiché est une estimation basée sur les opérations enregistrées; les frais TRANSORA sont présentés séparément.</p>
+          <footer class="page-footer"><span>Les rapports sont générés à partir des données enregistrées.</span><span>Transora · Rapports</span></footer>
+        </div>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog class="auth-dialog" id="auth-dialog">
+      <form class="auth-form" id="auth-form">
+        <button class="dialog-close" id="dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">ESPACE DE GESTION</p>
+        <h2 id="auth-title">Connexion à Transora</h2>
+        <p class="auth-description" id="auth-description">Connectez-vous pour charger les données de votre entreprise.</p>
+        <label id="name-field" hidden>Nom complet<input name="name" autocomplete="name" minlength="2"></label>
+        <label id="company-field" hidden>Entreprise<input name="companyName" autocomplete="organization" minlength="2"></label>
+        <label>Adresse e-mail<input name="email" type="email" autocomplete="email" required></label>
+        <label>Mot de passe<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
+        <label id="siret-field" hidden>SIRET (facultatif)<input name="siret" inputmode="numeric"></label>
+        <button class="primary-button auth-submit" type="submit" id="auth-submit">Se connecter</button>
+        <button class="auth-toggle" id="auth-toggle" type="button">Créer un espace entreprise</button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="departure-dialog">
+      <form class="auth-form" id="departure-form">
+        <button class="dialog-close" id="departure-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">NOUVEAU TRAJET</p>
+        <h2>Programmer un départ</h2>
+        <p class="auth-description">Le départ sera enregistré dans l'espace de votre entreprise.</p>
+        <label>Ville de départ<input name="origin" required maxlength="100"></label>
+        <label>Destination<input name="destination" required maxlength="100"></label>
+        <label>Date et heure<input name="departureAt" type="datetime-local" required></label>
+        <label>Code du véhicule<input name="vehicleCode" required maxlength="30"></label>
+        <label>Capacité en places<input name="capacity" type="number" min="1" max="200" required></label>
+        <button class="primary-button auth-submit" type="submit" id="departure-submit">Enregistrer le départ</button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="booking-dialog">
+      <form class="auth-form" id="booking-form">
+        <button class="dialog-close" id="booking-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">RÉSERVATION</p>
+        <h2>Réserver une place</h2>
+        <p class="auth-description" id="booking-trip-description"></p>
+        <label>Nom du passager<input name="passengerName" required maxlength="160"></label>
+        <label>Prix du transport (FCFA)<input name="amountTransport" type="number" min="1" step="1" required></label>
+        <button class="primary-button auth-submit" type="submit" id="booking-submit"><span>Créer la réservation</span></button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="fleet-dialog">
+      <form class="auth-form" id="fleet-form">
+        <button class="dialog-close" id="fleet-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow" id="fleet-form-eyebrow">NOUVEAU VÉHICULE</p>
+        <h2 id="fleet-form-title">Ajouter un véhicule</h2>
+        <p class="auth-description">Les informations sont enregistrées dans la flotte de votre entreprise.</p>
+        <label>Immatriculation<input name="immatriculation" required maxlength="32" autocomplete="off"></label>
+        <label>Modèle<input name="modele" required maxlength="120"></label>
+        <label>Capacité (places)<input name="capacite" type="number" min="1" max="500" required></label>
+        <label>Année de fabrication (facultatif)<input name="annee" type="number" min="1900" max="2100"></label>
+        <label>État
+          <select name="statut">
+            <option value="disponible">Disponible</option>
+            <option value="en_service">En service</option>
+            <option value="en_maintenance">En maintenance</option>
+            <option value="hors_service">Hors service</option>
+          </select>
+        </label>
+        <button class="primary-button auth-submit" type="submit" id="fleet-submit">Enregistrer le véhicule</button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="payment-dialog">
+      <form class="auth-form" id="payment-form">
+        <button class="dialog-close" id="payment-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">ENCAISSEMENT</p>
+        <h2 id="payment-dialog-title">Confirmer le règlement</h2>
+        <p class="auth-description" id="payment-dialog-description"></p>
+        <label>Moyen de paiement
+          <select name="moyenPaiement" required>
+            <option value="cash">Espèces</option>
+            <option value="mobile_money">Mobile Money (confirmation manuelle)</option>
+            <option value="bank_transfer">Virement bancaire (confirmation manuelle)</option>
+            <option value="card">Carte (confirmation manuelle)</option>
+          </select>
+        </label>
+        <label>Référence ou preuve de règlement<input name="preuvePaiement" required maxlength="500" placeholder="Ex. numéro de reçu ou référence de transaction"></label>
+        <p class="payment-proof-note">La confirmation marque la réservation comme payée. Vérifiez le règlement avant de confirmer.</p>
+        <button class="primary-button auth-submit" type="submit" id="payment-submit">Confirmer le paiement</button>
+      </form>
+    </dialog>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

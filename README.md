@@ -35,3 +35,17 @@ TRANSORA n'est pas seulement une billetterie. Il doit devenir le système opéra
 
 ## Règle de démarrage
 La première mission de l'agent de codage est un **AUDIT UNIQUEMENT**. Aucun développement fonctionnel ne doit commencer avant validation humaine de l'audit et de la stratégie d'implémentation.
+
+## Application
+
+L'application TRANSORA se trouve dans `src/` (API), `public/` (interface), `migrations/` (schéma PostgreSQL) et `test/` (tests).
+
+### Démarrage local
+
+1. Installer Node.js 20 ou plus récent.
+2. Copier `.env.example` vers `.env`, puis renseigner les identifiants de base de données Supabase et le secret JWT. Ne jamais publier `.env` ni le certificat de base de données.
+3. Installer les dépendances : `npm ci`.
+4. Lancer l'API et le tableau de bord : `npm run dev`.
+5. Ouvrir `http://localhost:3000`.
+
+Les migrations de base de données s'appliquent avec `npm run db:migrate`. Exécuter `npm test` pour compiler le projet et lancer les tests.
