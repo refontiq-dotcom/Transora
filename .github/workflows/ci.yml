@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: transora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      JWT_SECRET: test-secret-key-for-ci-at-least-32-characters
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/transora_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/transora_test
+      SUPABASE_DB_HOST: localhost
+      SUPABASE_DB_USER: postgres
+      SUPABASE_DB_PASSWORD: postgres
+      SUPABASE_DB_NAME: transora_test
+      SUPABASE_POOLER_TRANSACTION_PORT: 5432
+      SUPABASE_POOLER_SESSION_PORT: 5432
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installation des dépendances
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Application des migrations de base de données
+        run: node dist/db/migrate.js
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Tests (Vitest)
+        run: npm test
