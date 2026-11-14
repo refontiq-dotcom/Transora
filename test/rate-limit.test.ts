@@ -5,7 +5,8 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import {
   createRateLimiter,
   MemoryRateLimitStore,
-  RedisRestRateLimitStore
+  RedisRestRateLimitStore,
+  createRateLimitStoreFromEnv
 } from "../src/middleware/rate-limit";
 
 let server: Server;
@@ -140,5 +141,59 @@ test("rate limiter fails closed with 503 when its shared store fails", async () 
     await new Promise<void>((resolve, reject) => {
       failingServer.close((error) => error ? reject(error) : resolve());
     });
+  }
+});
+
+
+test("rate limit Redis keys hash client IP addresses", async () => {
+  const keys: string[] = [];
+  const keyCaptureApp = express();
+  keyCaptureApp.post("/login", createRateLimiter({
+    namespace: "key-test",
+    windowMs: 60_000,
+    maxRequests: 2,
+    message: "Too many attempts",
+    store: {
+      consume: async (key) => {
+        keys.push(key);
+        return { count: 1, resetAt: Date.now() + 60_000 };
+      }
+    }
+  }), (_req, res) => res.json({ success: true }));
+  const keyServer = keyCaptureApp.listen(0);
+  await new Promise<void>((resolve, reject) => {
+    keyServer.once("listening", resolve);
+    keyServer.once("error", reject);
+  });
+  const address = keyServer.address() as AddressInfo;
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/login`, { method: "POST" });
+    expect(response.status).toBe(200);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^transora:rate-limit:key-test:[a-f0-9]{64}$/);
+    expect(keys[0]).not.toContain("127.0.0.1");
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      keyServer.close((error) => error ? reject(error) : resolve());
+    });
+  }
+});
+
+test("rate limit store requires both Redis environment variables", async () => {
+  const previousUrl = process.env.REDIS_REST_URL;
+  const previousToken = process.env.REDIS_REST_TOKEN;
+  try {
+    delete process.env.REDIS_REST_URL;
+    delete process.env.REDIS_REST_TOKEN;
+    expect(createRateLimitStoreFromEnv()).toBeInstanceOf(MemoryRateLimitStore);
+
+    process.env.REDIS_REST_URL = "https://example.upstash.io";
+    delete process.env.REDIS_REST_TOKEN;
+    await expect(createRateLimitStoreFromEnv().consume("key", 60_000)).rejects.toThrow();
+  } finally {
+    if (previousUrl === undefined) delete process.env.REDIS_REST_URL;
+    else process.env.REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.REDIS_REST_TOKEN;
+    else process.env.REDIS_REST_TOKEN = previousToken;
   }
 });
