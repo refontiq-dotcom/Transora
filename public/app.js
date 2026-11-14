@@ -685,10 +685,12 @@ function renderPayments() {
 
     const transportCell = document.createElement("td");
     transportCell.textContent = formatFcfa(payment.montantTransport);
-    const feesCell = document.createElement("td");
-    feesCell.textContent = formatFcfa(payment.fraisTransora);
+    const companyFeesCell = document.createElement("td");
+    companyFeesCell.textContent = formatFcfa(payment.fraisCompagnie || 0);
+    const platformFeesCell = document.createElement("td");
+    platformFeesCell.textContent = formatFcfa(payment.fraisTransora);
     const totalCell = document.createElement("td");
-    totalCell.textContent = formatFcfa(Number(payment.montantTransport) + Number(payment.fraisTransora));
+    totalCell.textContent = formatFcfa(Number(payment.montantTransport) + Number(payment.fraisCompagnie || 0) + Number(payment.fraisTransora));
     const methodCell = document.createElement("td");
     methodCell.textContent = methodLabels[payment.moyenPaiement] || "—";
 
@@ -719,7 +721,7 @@ function renderPayments() {
       actionCell.append(ticketButton);
     }
 
-    row.append(passengerCell, departureCell, transportCell, feesCell, totalCell, methodCell, statusCell, actionCell);
+    row.append(passengerCell, departureCell, transportCell, companyFeesCell, platformFeesCell, totalCell, methodCell, statusCell, actionCell);
     body.append(row);
   });
 
