@@ -47,7 +47,7 @@ router.post("/réserver", [
       `SELECT b.id, b.departure_id, d.capacity
        FROM bookings b JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
        WHERE b.id = $1 AND b.tenant_id = $2 AND b.status <> 'CANCELLED'
-       FOR UPDATE OF b`,
+       FOR UPDATE OF d, b`,
       [req.body.billetId, req.tenantId]
     );
     if (!booking.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Réservation introuvable dans cette compagnie" }); }
@@ -55,11 +55,6 @@ router.post("/réserver", [
     if (seat > Number(booking.rows[0].capacity)) {
       await client.query("ROLLBACK"); return res.status(400).json({ success: false, message: "Ce numéro de siège dépasse la capacité du véhicule" });
     }
-    const departureLock = await client.query(
-      "SELECT id FROM departures WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
-      [booking.rows[0].departure_id, req.tenantId]
-    );
-    if (!departureLock.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Départ introuvable" }); }
     const updated = await client.query(
       "UPDATE bookings SET seat_number = $3 WHERE id = $1 AND tenant_id = $2 RETURNING id, seat_number AS \"seatNumber\"",
       [req.body.billetId, req.tenantId, seat]
