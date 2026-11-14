@@ -6,7 +6,6 @@ describe("Client access-token handling", () => {
   const clientScript = readFileSync(resolve(process.cwd(), "public/app.js"), "utf8");
 
   it("never persists access tokens in browser localStorage", () => {
-    expect(clientScript).not.toMatch(/localStorage\\.(?:getItem|setItem|removeItem)\\(["']transora_token/);
     expect(clientScript).not.toContain("transora_token");
   });
 
