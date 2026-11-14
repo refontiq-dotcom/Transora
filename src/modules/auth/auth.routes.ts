@@ -8,8 +8,8 @@
 import { NextFunction, Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { pool } from "../../db/pool";
+import { createAccessToken } from "../../lib/jwt";
 
 const router = Router();
 
@@ -30,19 +30,6 @@ const isUniqueViolation = (error: unknown): boolean =>
   error !== null &&
   "code" in error &&
   error.code === "23505";
-
-const createToken = (user: { id: string; email: string; role: string; tenantId: string }) => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET n'est pas configuré");
-  }
-
-  return jwt.sign(
-    { email: user.email, role: user.role, tenantId: user.tenantId },
-    secret,
-    { subject: user.id, expiresIn: "8h" }
-  );
-};
 
 router.post(
   "/register",
@@ -81,7 +68,7 @@ router.post(
         [tenantId, name.trim(), email.toLowerCase(), passwordHash]
       );
       const user = { ...userResult.rows[0], tenantId };
-      const token = createToken(user);
+      const token = createAccessToken(user);
       await client.query("COMMIT");
 
       return res.status(201).json({
@@ -154,7 +141,7 @@ router.post(
     return res.json({
       success: true,
       data: {
-        token: createToken({
+        token: createAccessToken({
           id: user.id,
           email: user.email,
           role: user.role,
