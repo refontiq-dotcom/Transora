@@ -710,3 +710,45 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
     "ENREGISTRE", "PAYE", "AFFECTE", "CONFIE_CHAUFFEUR", "EN_TRANSIT", "ARRIVE", "REMIS"
   ]);
 });
+
+
+test("administrator provisions a role-specific staff account and deactivation revokes access", async () => {
+  const email = `app-test-courier-agent-${Date.now()}@example.test`;
+  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  const employee = await fetch(`${baseUrl}/api/v1/personnel`, {
+    method: "POST", headers,
+    body: JSON.stringify({ nom: "Agent Courrier Test", poste: "Agent courrier", role: "agent_courrier", email })
+  });
+  expect(employee.status).toBe(201);
+  const employeeBody = await employee.json() as { data: { id: string } };
+
+  const account = await fetch(`${baseUrl}/api/v1/personnel/${employeeBody.data.id}/compte`, {
+    method: "POST", headers,
+    body: JSON.stringify({ motDePasse: "MotDePasseTest!2026" })
+  });
+  expect(account.status).toBe(201);
+
+  const login = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: "MotDePasseTest!2026" })
+  });
+  expect(login.status).toBe(200);
+  const loginBody = await login.json() as { data: { user: { role: string; token: string } } };
+  expect(loginBody.data.user.role).toBe("agent_courrier");
+  const agentHeaders = { Authorization: `Bearer ${loginBody.data.user.token}`, "Content-Type": "application/json" };
+
+  const finance = await fetch(`${baseUrl}/api/v1/finance/`, { headers: agentHeaders });
+  expect(finance.status).toBe(403);
+  const courierRead = await fetch(`${baseUrl}/api/v1/courrier/colis`, { headers: agentHeaders });
+  expect(courierRead.status).toBe(200);
+
+  const deactivate = await fetch(`${baseUrl}/api/v1/personnel/${employeeBody.data.id}`, {
+    method: "PUT", headers, body: JSON.stringify({ statut: "inactif" })
+  });
+  expect(deactivate.status).toBe(200);
+  const blockedLogin = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: "MotDePasseTest!2026" })
+  });
+  expect(blockedLogin.status).toBe(401);
+});
