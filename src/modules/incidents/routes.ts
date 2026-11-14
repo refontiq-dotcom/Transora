@@ -4,9 +4,9 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const staffRoles = ["administrateur", "superviseur", "conducteur", "mécanicien", "agent_acceuil", "caissier"];
+const staffRoles = ["administrateur", "responsable_exploitation", "responsable_logistique", "agent_accueil", "agent_guichet", "caissier", "chauffeur", "controleur", "mécanicien", "agent_courrier", "responsable_courrier"];
 const reportIncident = authorize(staffRoles);
-const manageIncidents = authorize(["administrateur", "superviseur"]);
+const manageIncidents = authorize(["administrateur", "responsable_exploitation", "responsable_logistique"]);
 const types = ["panne", "accident", "retard", "absence_chauffeur", "probleme_passager", "bagage", "billet", "paiement", "caisse"];
 const severities = ["faible", "moyenne", "eleve", "critique"];
 const statuses = ["OUVERT", "EN_COURS", "RESOLU", "CLOTURÉ"];
