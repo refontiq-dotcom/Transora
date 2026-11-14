@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
+import bcrypt from "bcryptjs";
 import app from "../src/app";
 import { pool } from "../src/db/pool";
 import { createAccessToken } from "../src/lib/jwt";
@@ -109,6 +110,55 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
   expect(guichetResponse.status).toBe(401);
   expect(boardingResponse.status).toBe(401);
   expect(departureStatusResponse.status).toBe(401);
+});
+
+test("staff roles cannot manage company administration, finance, or sensitive records", async () => {
+  const email = `app-test-driver-${Date.now()}@example.test`;
+  const user = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'Driver Test User', $2, 'test-hash', 'conducteur') RETURNING id`,
+    [tenantId, email]
+  );
+  const driverId = user.rows[0].id as string;
+  const driverSession = `app-test-driver-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [driverSession, driverId, tenantId, "f".repeat(64)]
+  );
+  const token = createAccessToken({
+    id: driverId, email, role: "conducteur", tenantId, sessionId: driverSession
+  });
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const id = "550e8400-e29b-41d4-a716-446655440000";
+
+  const [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate,
+    bookingCreate, fleetRead] = await Promise.all([
+    fetch(`${baseUrl}/api/v1/personnel`, { headers }),
+    fetch(`${baseUrl}/api/v1/personnel`, { method: "POST", headers, body: JSON.stringify({ nom: "Test", poste: "Conducteur" }) }),
+    fetch(`${baseUrl}/api/v1/flotte`, { method: "POST", headers, body: JSON.stringify({ immatriculation: "TEST-ROLE", modele: "Bus", capacite: 30 }) }),
+    fetch(`${baseUrl}/api/v1/flotte/${id}`, { method: "PUT", headers, body: JSON.stringify({ statut: "hors_service" }) }),
+    fetch(`${baseUrl}/api/v1/flotte/${id}`, { method: "DELETE", headers }),
+    fetch(`${baseUrl}/api/v1/finance`, { headers }),
+    fetch(`${baseUrl}/api/v1/finance/operation`, { method: "POST", headers, body: JSON.stringify({ type: "dépense", montant: 1000 }) }),
+    fetch(`${baseUrl}/api/v1/audit`, { headers }),
+    fetch(`${baseUrl}/api/v1/audit/anti-fraude`, { method: "POST", headers, body: JSON.stringify({ analyse: {} }) }),
+    fetch(`${baseUrl}/api/v1/incidents/${id}`, { method: "PUT", headers, body: JSON.stringify({ statut: "RESOLU" }) }),
+    fetch(`${baseUrl}/api/v1/voyages/departures/${id}/bookings`, { method: "POST", headers, body: JSON.stringify({ passengerName: "Passager Test" }) }),
+    fetch(`${baseUrl}/api/v1/flotte`, { headers })
+  ]);
+
+  for (const response of [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate, bookingCreate]) {
+    expect(response.status).toBe(403);
+  }
+  expect(fleetRead.status).toBe(200);
+
+  const report = await fetch(`${baseUrl}/api/v1/incidents`, {
+    method: "POST", headers,
+    body: JSON.stringify({ type: "panne", description: "Signalement de test par un conducteur" })
+  });
+  expect(report.status).toBe(201);
 });
 
 test("registration and login endpoints enforce per-IP attempt limits", async () => {
@@ -557,4 +607,187 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
   } finally {
     await pool.query("DELETE FROM tenants WHERE id = $1", [tenantB]);
   }
+});
+
+
+test("courier workflow enforces company tariffs, driver handoff, transit and recipient delivery", async () => {
+  const driverEmail = `app-test-courier-driver-${Date.now()}@example.test`;
+  const driver = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'Courier Driver', $2, 'test-hash', 'chauffeur') RETURNING id`,
+    [tenantId, driverEmail]
+  );
+  const driverId = driver.rows[0].id as string;
+  const driverSession = `app-test-courier-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [driverSession, driverId, tenantId, "d".repeat(64)]
+  );
+  const driverToken = createAccessToken({
+    id: driverId, email: driverEmail, role: "chauffeur", tenantId, sessionId: driverSession
+  });
+  const driverHeaders = { Authorization: `Bearer ${driverToken}`, "Content-Type": "application/json" };
+  const adminHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+  const tariff = await fetch(`${baseUrl}/api/v1/courrier/tarifs`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({ origin: "Abidjan", destination: "Yamoussoukro", amountFcfa: 2500 })
+  });
+  expect(tariff.status).toBe(201);
+
+  const transportTariff = await fetch(`${baseUrl}/api/v1/tarifs`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({ origin: "Abidjan", destination: "Yamoussoukro", fareAmount: 5000, companyBookingFee: 0 })
+  });
+  expect(transportTariff.status).toBe(201);
+
+  const departure = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({
+      origin: "Abidjan", destination: "Yamoussoukro",
+      departureAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      vehicleCode: "COURRIER-TEST", capacity: 30
+    })
+  });
+  expect(departure.status).toBe(201);
+  const departureBody = await departure.json() as { data: { id: string } };
+
+  const created = await fetch(`${baseUrl}/api/v1/courrier/colis`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({
+      origin: "Abidjan", destination: "Yamoussoukro",
+      senderName: "Expéditeur Test", senderPhone: "+2250700000001",
+      recipientName: "Destinataire Test", recipientPhone: "+2250700000002",
+      description: "Documents administratifs", weightKg: 1.5, declaredValue: 10000
+    })
+  });
+  expect(created.status).toBe(201);
+  const createdBody = await created.json() as {
+    data: { id: string; trackingCode: string; amountFcfa: number; status: string };
+  };
+  expect(Number(createdBody.data.amountFcfa)).toBe(2500);
+  expect(createdBody.data.status).toBe("EN_ATTENTE_PAIEMENT");
+
+  const cashSession = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ openingAmount: 0 })
+  });
+  expect(cashSession.status).toBe(201);
+
+  const payment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/paiement`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ paymentMethod: "cash" })
+  });
+  expect(payment.status).toBe(200);
+
+  const receipt = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/recu`, { headers: adminHeaders });
+  expect(receipt.status).toBe(200);
+  const receiptBody = await receipt.json() as { data: { type: string; trackingCode: string; amountFcfa: number } };
+  expect(receiptBody.data.type).toBe("recu_courrier");
+  expect(receiptBody.data.trackingCode).toBe(createdBody.data.trackingCode);
+  expect(receiptBody.data.amountFcfa).toBe(2500);
+
+  const assignment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/affectation`, {
+    method: "PATCH", headers: adminHeaders,
+    body: JSON.stringify({ departureId: departureBody.data.id, driverUserId: driverId })
+  });
+  expect(assignment.status).toBe(200);
+
+  const driverAssignments = await fetch(`${baseUrl}/api/v1/courrier/chauffeur/affectations`, { headers: driverHeaders });
+  expect(driverAssignments.status).toBe(200);
+  const assignmentsBody = await driverAssignments.json() as { data: Array<{ id: string }> };
+  expect(assignmentsBody.data.some((item) => item.id === createdBody.data.id)).toBe(true);
+
+  const handoff = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/prise-en-charge`, {
+    method: "PATCH", headers: driverHeaders, body: JSON.stringify({})
+  });
+  expect(handoff.status).toBe(200);
+  const transit = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/en-transit`, {
+    method: "PATCH", headers: driverHeaders, body: JSON.stringify({})
+  });
+  expect(transit.status).toBe(200);
+
+  const arrival = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/arrivee`, {
+    method: "PATCH", headers: adminHeaders, body: JSON.stringify({})
+  });
+  expect(arrival.status).toBe(200);
+  const delivery = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/remise`, {
+    method: "PATCH", headers: adminHeaders,
+    body: JSON.stringify({ receiverName: "Destinataire Test", receiverReference: "CNI-TEST" })
+  });
+  expect(delivery.status).toBe(200);
+
+  const tracking = await fetch(`${baseUrl}/api/v1/courrier/suivi/${createdBody.data.trackingCode}`, {
+    headers: adminHeaders
+  });
+  expect(tracking.status).toBe(200);
+  const trackingBody = await tracking.json() as {
+    data: { parcel: { status: string; paymentStatus: string }; history: Array<{ eventType: string }> };
+  };
+  expect(trackingBody.data.parcel.status).toBe("REMIS");
+  expect(trackingBody.data.parcel.paymentStatus).toBe("PAID");
+
+  const publicTracking = await fetch(`${baseUrl}/api/public/courrier/${createdBody.data.trackingCode}`);
+  expect(publicTracking.status).toBe(200);
+  const publicTrackingBody = await publicTracking.json() as {
+    data: { parcel: { status: string; trackingCode: string; senderPhone?: string; recipientPhone?: string } };
+  };
+  expect(publicTrackingBody.data.parcel.status).toBe("REMIS");
+  expect(publicTrackingBody.data.parcel.trackingCode).toBe(createdBody.data.trackingCode);
+  expect(publicTrackingBody.data.parcel.senderPhone).toBeUndefined();
+  expect(publicTrackingBody.data.parcel.recipientPhone).toBeUndefined();
+
+  expect(trackingBody.data.history.map((event) => event.eventType)).toEqual([
+    "ENREGISTRE", "PAYE", "AFFECTE", "CONFIE_CHAUFFEUR", "EN_TRANSIT", "ARRIVE", "REMIS"
+  ]);
+
+  const cashClose = await fetch(`${baseUrl}/api/v1/guichet/session/current`, { headers: adminHeaders });
+  expect(cashClose.status).toBe(200);
+  const cashCloseBody = await cashClose.json() as { data: { id: string } };
+  const close = await fetch(`${baseUrl}/api/v1/guichet/session/${cashCloseBody.data.id}/close`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ closingAmount: 2500 })
+  });
+  expect(close.status).toBe(200);
+  const closeBody = await close.json() as { data: { discrepancy: number } };
+  expect(closeBody.data.discrepancy).toBe(0);
+});
+
+
+test("administrator provisions a role-specific staff account and deactivation revokes access", async () => {
+  const email = `app-test-courier-agent-${Date.now()}@example.test`;
+  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  const employee = await fetch(`${baseUrl}/api/v1/personnel`, {
+    method: "POST", headers,
+    body: JSON.stringify({ nom: "Agent Courrier Test", poste: "Agent courrier", role: "agent_courrier", email })
+  });
+  expect(employee.status).toBe(201);
+  const employeeBody = await employee.json() as { data: { id: string } };
+
+  const account = await fetch(`${baseUrl}/api/v1/personnel/${employeeBody.data.id}/compte`, {
+    method: "POST", headers,
+    body: JSON.stringify({ motDePasse: "MotDePasseTest!2026" })
+  });
+  expect(account.status).toBe(201);
+
+  const stored = await pool.query("SELECT id, role, password_hash FROM users WHERE email = $1 AND tenant_id = $2", [email, tenantId]);
+  expect(stored.rowCount).toBe(1);
+  expect(stored.rows[0].role).toBe("agent_courrier");
+  expect(await bcrypt.compare("MotDePasseTest!2026", stored.rows[0].password_hash)).toBe(true);
+  const agentSession = `app-test-courier-agent-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [agentSession, stored.rows[0].id, tenantId, "e".repeat(64)]
+  );
+  const agentToken = createAccessToken({ id: stored.rows[0].id, email, role: stored.rows[0].role, tenantId, sessionId: agentSession });
+  const agentHeaders = { Authorization: `Bearer ${agentToken}`, "Content-Type": "application/json" };
+
+  const finance = await fetch(`${baseUrl}/api/v1/finance/`, { headers: agentHeaders });
+  expect(finance.status).toBe(403);
+  const courierRead = await fetch(`${baseUrl}/api/v1/courrier/colis`, { headers: agentHeaders });
+  expect(courierRead.status).toBe(200);
+
+  const deactivate = await fetch(`${baseUrl}/api/v1/personnel/${employeeBody.data.id}`, {
+    method: "PUT", headers, body: JSON.stringify({ statut: "inactif" })
+  });
+  expect(deactivate.status).toBe(200);
+  const blockedSession = await fetch(`${baseUrl}/api/v1/courrier/colis`, { headers: agentHeaders });
+  expect(blockedSession.status).toBe(401);
 });

@@ -562,3 +562,56 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
   .tariff-form-actions { grid-column: auto; flex-wrap: wrap; }
   .tariff-actions { min-width: 132px; }
 }
+
+
+/* Service courrier */
+.courier-page { display: grid; gap: 18px; }
+.courier-page[hidden], .courier-form[hidden], #courier-login-message[hidden], #courier-empty[hidden], #courier-tariff-empty[hidden], #courier-tracking-result[hidden] { display: none; }
+.courier-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
+.courier-form label { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.courier-form input, .courier-form select, .courier-tracking-form input {
+  width: 100%; min-width: 0; min-height: 43px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink);
+}
+.courier-form button { align-self: end; min-height: 43px; }
+.courier-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.courier-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 12px; }
+.courier-toolbar select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.courier-table td { vertical-align: middle; }
+.courier-table td strong, .courier-table td small { display: block; }
+.courier-table td small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.courier-actions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 150px; }
+.courier-actions .secondary-button { min-height: 31px; padding: 6px 9px; font-size: 10px; }
+.courier-tracking-form { display: flex; gap: 10px; padding: 0 22px 20px; }
+.courier-tracking-form input { max-width: 360px; }
+.courier-tracking-result { margin: 0 22px 20px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: #f8faf8; }
+.courier-tracking-result strong { display: block; margin-bottom: 6px; }
+.courier-tracking-result ol { display: grid; gap: 7px; margin: 12px 0 0; padding-left: 20px; color: var(--muted); font-size: 12px; }
+.courier-assign-panel .courier-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 760px) {
+  .courier-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .courier-toolbar { align-items: flex-start; flex-direction: column; }
+  .courier-toolbar select { width: 100%; }
+  .courier-table { min-width: 720px; }
+}
+@media (max-width: 520px) {
+  .courier-form, .courier-assign-panel .courier-form { grid-template-columns: 1fr; }
+  .courier-tracking-form { flex-direction: column; }
+  .courier-tracking-form input { max-width: none; }
+  .courier-tracking-form button { width: 100%; }
+}
+
+
+.personnel-page[hidden], #personnel-login-message[hidden], #personnel-empty[hidden] { display: none; }
+.personnel-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
+.personnel-form label { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.personnel-form input, .personnel-form select, .personnel-role-select { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.personnel-form button { align-self: end; min-height: 40px; }
+.personnel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 210px; }
+.personnel-actions .secondary-button { min-height: 30px; padding: 5px 8px; font-size: 10px; }
+.personnel-table td { vertical-align: middle; }
+.personnel-table td strong, .personnel-table td small { display: block; }
+.personnel-table td small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.personnel-role-select { min-width: 170px; font-size: 11px; }
+@media (max-width: 760px) { .personnel-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .personnel-table { min-width: 760px; } }
+@media (max-width: 520px) { .personnel-form { grid-template-columns: 1fr; } }

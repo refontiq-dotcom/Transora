@@ -4,7 +4,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const manageTariffs = authorize(["administrateur", "superviseur"]);
+const manageTariffs = authorize(["administrateur", "responsable_exploitation"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);

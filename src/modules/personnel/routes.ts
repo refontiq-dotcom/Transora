@@ -1,9 +1,13 @@
 import { NextFunction, Request, Response, Router } from "express";
+import bcrypt from "bcryptjs";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const roles = ["conducteur", "mécanicien", "agent_acceuil", "superviseur", "administrateur"];
+const managePersonnel = authorize(["administrateur"]);
+const readPersonnel = authorize(["administrateur", "responsable_exploitation"]);
+const roles = ["responsable_exploitation", "agent_guichet", "caissier", "responsable_financier", "responsable_logistique", "chauffeur", "controleur", "mécanicien", "agent_accueil", "responsable_courrier", "agent_courrier", "administrateur"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -15,6 +19,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/",
+  managePersonnel,
   [
     body("nom").isString().trim().notEmpty().isLength({ max: 160 }),
     body("poste").isString().trim().notEmpty().isLength({ max: 120 }),
@@ -38,7 +43,7 @@ router.post(
                    created_at AS "crééLe"`,
         [
           req.tenantId, String(req.body.nom).trim(), String(req.body.poste).trim(),
-          req.body.role || "conducteur", req.body.telephone?.trim() || null,
+          req.body.role || "chauffeur", req.body.telephone?.trim() || null,
           req.body.email?.toLowerCase() || null, req.body.dateEmbauche || null
         ]
       );
@@ -51,6 +56,7 @@ router.post(
 
 router.get(
   "/",
+  readPersonnel,
   [
     query("poste").optional().isString().trim().notEmpty(),
     query("role").optional().isIn(roles),
@@ -64,7 +70,7 @@ router.get(
     try {
       const result = await pool.query(
         `SELECT id, name AS "nom", position AS "poste", role, phone AS "telephone",
-                email, hire_date AS "dateEmbauche", status AS "statut",
+                email, user_id AS "compteId", hire_date AS "dateEmbauche", status AS "statut",
                 created_at AS "crééLe"
          FROM employees
          WHERE tenant_id = $1 AND deleted_at IS NULL
@@ -88,6 +94,7 @@ router.get(
 
 router.get(
   "/:id",
+  readPersonnel,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -97,7 +104,7 @@ router.get(
     try {
       const result = await pool.query(
         `SELECT id, name AS "nom", position AS "poste", role, phone AS "telephone",
-                email, hire_date AS "dateEmbauche", status AS "statut",
+                email, user_id AS "compteId", hire_date AS "dateEmbauche", status AS "statut",
                 created_at AS "crééLe", updated_at AS "misAJourLe"
          FROM employees WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.tenantId]
@@ -114,6 +121,7 @@ router.get(
 
 router.put(
   "/:id",
+  managePersonnel,
   [
     param("id").isUUID(),
     body("nom").optional().isString().trim().notEmpty().isLength({ max: 160 }),
@@ -148,7 +156,7 @@ router.put(
              updated_at = NOW()
          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
          RETURNING id, name AS "nom", position AS "poste", role, phone AS "telephone",
-                   email, hire_date AS "dateEmbauche", status AS "statut",
+                   email, user_id AS "compteId", hire_date AS "dateEmbauche", status AS "statut",
                    updated_at AS "misAJourLe"`,
         [
           req.params.id, req.tenantId,
@@ -164,6 +172,18 @@ router.put(
       if (!result.rowCount) {
         return res.status(404).json({ success: false, message: "Employé introuvable" });
       }
+      const employee = result.rows[0] as { compteId?: string; role: string; statut: string };
+      if (employee.compteId) {
+        await pool.query(
+          "UPDATE users SET role = $3, is_active = $4 WHERE id = $1 AND tenant_id = $2",
+          [employee.compteId, req.tenantId, employee.role, employee.statut === "actif"]
+        );
+        // Toute modification de rôle ou de statut invalide les anciens jetons d'accès.
+        await pool.query(
+          "UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+          [employee.compteId, req.tenantId]
+        );
+      }
       return res.json({ success: true, data: result.rows[0] });
     } catch (error) {
       return next(error);
@@ -171,8 +191,41 @@ router.put(
   }
 );
 
+router.post(
+  "/:id/compte",
+  managePersonnel,
+  [param("id").isUUID(), body("motDePasse").isString().isLength({ min: 12, max: 128 })],
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    const client = await pool.connect();
+    try {
+      const passwordHash = await bcrypt.hash(String(req.body.motDePasse), 12);
+      await client.query("BEGIN");
+      const employee = await client.query(
+        "SELECT id, name, email, role, user_id FROM employees WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE",
+        [req.params.id, req.tenantId]
+      );
+      if (!employee.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Employé introuvable" }); }
+      const record = employee.rows[0];
+      if (!record.email) { await client.query("ROLLBACK"); return res.status(400).json({ success: false, message: "Ajoutez une adresse e-mail à la fiche avant de créer son accès" }); }
+      if (record.user_id) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Cet employé possède déjà un compte" }); }
+      const created = await client.query(
+        "INSERT INTO users (tenant_id, name, email, password_hash, role) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (email) DO NOTHING RETURNING id, email, role",
+        [req.tenantId, record.name, record.email.toLowerCase(), passwordHash, record.role]
+      );
+      if (!created.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Cette adresse e-mail est déjà utilisée" }); }
+      await client.query("UPDATE employees SET user_id = $3, updated_at = NOW() WHERE id = $1 AND tenant_id = $2", [req.params.id, req.tenantId, created.rows[0].id]);
+      await client.query("COMMIT");
+      return res.status(201).json({ success: true, data: { employeeId: req.params.id, userId: created.rows[0].id, email: created.rows[0].email, role: created.rows[0].role }, message: "Compte créé. Communiquez le mot de passe initial à l’employé par un canal privé." });
+    } catch (error) { await client.query("ROLLBACK"); return next(error); }
+    finally { client.release(); }
+  }
+);
+
 router.delete(
   "/:id",
+  managePersonnel,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -188,7 +241,13 @@ router.delete(
       if (!result.rowCount) {
         return res.status(404).json({ success: false, message: "Employé introuvable" });
       }
-      return res.json({ success: true, data: { id: req.params.id, deleted: true } });
+      const linked = await pool.query("SELECT user_id FROM employees WHERE id = $1 AND tenant_id = $2", [req.params.id, req.tenantId]);
+      const userId = linked.rows[0]?.user_id as string | undefined;
+      if (userId) {
+        await pool.query("UPDATE users SET is_active = FALSE WHERE id = $1 AND tenant_id = $2", [userId, req.tenantId]);
+        await pool.query("UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL", [userId, req.tenantId]);
+      }
+      return res.json({ success: true, data: { id: req.params.id, deleted: true, accountDisabled: Boolean(userId) } });
     } catch (error) {
       return next(error);
     }

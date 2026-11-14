@@ -19,6 +19,11 @@ let payments = [];
 let paymentLoadError = false;
 let selectedPayment;
 let reportOperations = [];
+let courierParcels = [];
+let courierTariffs = [];
+let courierDrivers = [];
+let courierDepartures = [];
+let personnelEmployees = [];
 let reportLoadError = false;
 let globalSearchController;
 let globalSearchSequence = 0;
@@ -225,6 +230,8 @@ function setAuthenticatedState(authenticated) {
     ? " Données en direct · Déconnexion"
     : " Mode démonstration · Connexion";
   loginButton.querySelector("span").style.background = authenticated ? "#55b968" : "#e6ad58";
+  if (authenticated && window.location.hash === "#courrier") loadCourier();
+  if (authenticated && window.location.hash === "#personnel") loadPersonnel();
 }
 
 function applyDashboard(data) {
@@ -1717,6 +1724,573 @@ document.querySelector("#guichet-close-form").addEventListener("submit", async (
   finally { submit.disabled = false; }
 });
 
+
+
+const personnelRoles = [
+  ["administrateur", "Administrateur"],
+  ["responsable_exploitation", "Responsable exploitation"],
+  ["agent_guichet", "Agent guichet"],
+  ["caissier", "Caissier"],
+  ["responsable_financier", "Responsable financier"],
+  ["responsable_logistique", "Responsable logistique"],
+  ["chauffeur", "Chauffeur"],
+  ["controleur", "Contrôleur"],
+  ["mécanicien", "Mécanicien"],
+  ["agent_accueil", "Agent accueil"],
+  ["responsable_courrier", "Responsable courrier"],
+  ["agent_courrier", "Agent courrier"]
+];
+function personnelRoleLabel(role) {
+  const canonical = courierNormalizeRole(role);
+  return (personnelRoles.find((item) => item[0] === canonical) || [role, role])[1];
+}
+function renderPersonnel() {
+  const body = document.querySelector("#personnel-rows");
+  body.replaceChildren();
+  const canManage = courierHasRole("administrateur");
+  personnelEmployees.forEach((employee) => {
+    const row = document.createElement("tr");
+    const identity = document.createElement("td");
+    const name = document.createElement("strong");
+    name.textContent = employee.nom;
+    const email = document.createElement("small");
+    email.textContent = employee.email || "Aucun e-mail";
+    identity.append(name, document.createElement("br"), email);
+    const position = document.createElement("td");
+    position.textContent = employee.poste;
+    const role = document.createElement("td");
+    if (canManage) {
+      const select = document.createElement("select");
+      select.className = "personnel-role-select";
+      select.dataset.employeeId = employee.id;
+      personnelRoles.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.selected = value === courierNormalizeRole(employee.role);
+        select.append(option);
+      });
+      role.append(select);
+    } else {
+      role.textContent = personnelRoleLabel(employee.role);
+    }
+    const status = document.createElement("td");
+    status.textContent = employee.statut === "actif" ? "Actif" : "Inactif";
+    const actions = document.createElement("td");
+    actions.className = "personnel-actions";
+    if (canManage) {
+      const saveRole = courierButton("Enregistrer rôle", "save-role", employee.id);
+      actions.append(saveRole);
+      if (!employee.compteId && employee.email) {
+        actions.append(courierButton("Créer accès", "create-account", employee.id));
+      } else if (employee.compteId) {
+        const account = document.createElement("small");
+        account.textContent = "Compte lié";
+        actions.append(account);
+      }
+      actions.append(courierButton(employee.statut === "actif" ? "Désactiver" : "Réactiver", "toggle-status", employee.id));
+      actions.append(courierButton("Supprimer", "delete", employee.id));
+    } else {
+      actions.textContent = employee.compteId ? "Compte lié" : "Aucun accès";
+    }
+    row.append(identity, position, role, status, actions);
+    body.append(row);
+  });
+  document.querySelector("#personnel-empty").hidden = personnelEmployees.length > 0;
+  document.querySelector("#personnel-list-caption").textContent =
+    personnelEmployees.length + " employé" + (personnelEmployees.length === 1 ? "" : "s") + " enregistré" + (personnelEmployees.length === 1 ? "" : "s");
+}
+async function loadPersonnel() {
+  const message = document.querySelector("#personnel-login-message");
+  if (!accessToken) {
+    message.hidden = false;
+    document.querySelector("#personnel-create-panel").hidden = true;
+    document.querySelector("#personnel-list-caption").textContent = "Connectez-vous pour consulter le personnel.";
+    return;
+  }
+  const canManage = courierHasRole("administrateur");
+  document.querySelector("#personnel-create-panel").hidden = !canManage;
+  try {
+    const response = await fetch("/api/v1/personnel", { headers: { Authorization: "Bearer " + accessToken } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Votre rôle ne permet pas de consulter le personnel.");
+    personnelEmployees = result.data.employés || [];
+    message.hidden = true;
+    renderPersonnel();
+  } catch (error) {
+    message.hidden = false;
+    message.textContent = error.message || "Impossible de charger le personnel.";
+    document.querySelector("#personnel-list-caption").textContent = "Accès au personnel indisponible.";
+  }
+}
+document.querySelector("#personnel-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#personnel-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/personnel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({
+        nom: values.nom, poste: values.poste, role: values.role,
+        telephone: values.telephone || null, email: values.email || null,
+        dateEmbauche: values.dateEmbauche || null
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'ajouter cet employé.");
+    form.reset();
+    showToast("Employé ajouté à l'équipe.");
+    await loadPersonnel();
+  } catch (error) { showToast(error.message || "Erreur d'enregistrement du personnel."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#personnel-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-courier-action]");
+  if (!button) return;
+  const employee = personnelEmployees.find((item) => item.id === button.dataset.parcelId);
+  if (!employee) return;
+  const action = button.dataset.courierAction;
+  button.disabled = true;
+  try {
+    if (action === "save-role") {
+      const select = document.querySelector('.personnel-role-select[data-employee-id="' + employee.id + '"]');
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ role: select.value })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de modifier ce rôle.");
+      showToast("Rôle mis à jour. L'employé devra se reconnecter.");
+    } else if (action === "create-account") {
+      const password = window.prompt("Définissez un mot de passe initial d'au moins 12 caractères. Communiquez-le en privé à l'employé :");
+      if (!password) return;
+      if (password.length < 12) throw new Error("Le mot de passe doit contenir au moins 12 caractères.");
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id) + "/compte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ motDePasse: password })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de créer le compte.");
+      showToast("Compte créé pour " + employee.nom + ". Transmettez le mot de passe par un canal privé.");
+    } else if (action === "toggle-status") {
+      const nextStatus = employee.statut === "actif" ? "inactif" : "actif";
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ statut: nextStatus })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de modifier le statut.");
+      showToast(nextStatus === "actif" ? "Compte employé réactivé." : "Accès employé désactivé.");
+    } else if (action === "delete") {
+      if (!window.confirm("Supprimer la fiche de " + employee.nom + " ? Son compte de connexion sera désactivé.")) return;
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "DELETE", headers: { Authorization: "Bearer " + accessToken }
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de supprimer cet employé.");
+      showToast("Fiche supprimée et accès désactivé.");
+    }
+    await loadPersonnel();
+  } catch (error) { showToast(error.message || "Opération sur le personnel impossible."); }
+  finally { button.disabled = false; }
+});
+document.querySelector("#personnel-refresh").addEventListener("click", loadPersonnel);
+
+function courierCurrentRole() {
+  try { return JSON.parse(localStorage.getItem("transora_user") || "{}").role || ""; }
+  catch { return ""; }
+}
+function courierNormalizeRole(role) {
+  return ({ superviseur: "responsable_exploitation", conducteur: "chauffeur", agent_acceuil: "agent_accueil" })[role] || role;
+}
+function courierHasRole() {
+  const role = courierNormalizeRole(courierCurrentRole());
+  return Array.from(arguments).some((allowed) => courierNormalizeRole(allowed) === role);
+}
+const courierStatusLabels = {
+  EN_ATTENTE_PAIEMENT: "À payer",
+  EN_ATTENTE_AFFECTATION: "À affecter",
+  AFFECTE: "Affecté",
+  CONFIE_CHAUFFEUR: "Confié au chauffeur",
+  EN_TRANSIT: "En transit",
+  ARRIVE: "Arrivé",
+  REMIS: "Remis",
+  ANNULE: "Annulé"
+};
+function courierButton(label, action, parcelId) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-button courier-action";
+  button.dataset.courierAction = action;
+  button.dataset.parcelId = parcelId;
+  button.textContent = label;
+  return button;
+}
+function renderCourierTariffs() {
+  const body = document.querySelector("#courier-tariff-rows");
+  body.replaceChildren();
+  courierTariffs.forEach((tariff) => {
+    const row = document.createElement("tr");
+    const route = document.createElement("td");
+    route.textContent = tariff.origin + " → " + tariff.destination;
+    const amount = document.createElement("td");
+    amount.textContent = formatFcfa(tariff.amountFcfa);
+    const status = document.createElement("td");
+    status.textContent = tariff.isActive ? "Actif" : "Désactivé";
+    const actions = document.createElement("td");
+    if (courierHasRole("administrateur", "responsable_courrier")) {
+      const toggle = courierButton(tariff.isActive ? "Désactiver" : "Activer", "toggle-tariff", tariff.id);
+      actions.append(toggle);
+    } else {
+      actions.textContent = "—";
+    }
+    row.append(route, amount, status, actions);
+    body.append(row);
+  });
+  document.querySelector("#courier-tariff-empty").hidden = courierTariffs.length > 0;
+}
+async function loadCourierTariffs() {
+  const response = await fetch("/api/v1/courrier/tarifs", { headers: { Authorization: "Bearer " + accessToken } });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message || "Impossible de charger les tarifs courrier.");
+  courierTariffs = result.data || [];
+  renderCourierTariffs();
+}
+function renderCourier() {
+  const body = document.querySelector("#courier-rows");
+  const statusFilter = document.querySelector("#courier-status-filter").value;
+  const rows = statusFilter ? courierParcels.filter((parcel) => parcel.status === statusFilter) : courierParcels;
+  body.replaceChildren();
+  rows.forEach((parcel) => {
+    const row = document.createElement("tr");
+    const identity = document.createElement("td");
+    const tracking = document.createElement("strong");
+    tracking.textContent = parcel.trackingCode;
+    const recipient = document.createElement("small");
+    recipient.textContent = parcel.recipientName;
+    identity.append(tracking, document.createElement("br"), recipient);
+    const route = document.createElement("td");
+    route.textContent = parcel.origin + " → " + parcel.destination;
+    const amount = document.createElement("td");
+    amount.textContent = formatFcfa(parcel.amountFcfa);
+    const status = document.createElement("td");
+    status.textContent = courierStatusLabels[parcel.status] || parcel.status;
+    const actions = document.createElement("td");
+    actions.className = "courier-actions";
+    if (parcel.status === "EN_ATTENTE_PAIEMENT" && courierHasRole("administrateur", "caissier")) {
+      actions.append(courierButton("Encaisser", "pay", parcel.id));
+    }
+    if (parcel.paymentStatus === "PAID" && ["EN_ATTENTE_AFFECTATION", "AFFECTE"].includes(parcel.status)
+        && courierHasRole("administrateur", "responsable_exploitation", "responsable_courrier")) {
+      actions.append(courierButton("Affecter", "assign", parcel.id));
+    }
+    if (parcel.status === "AFFECTE" && courierHasRole("chauffeur", "conducteur")) {
+      actions.append(courierButton("Prise en charge", "handoff", parcel.id));
+    }
+    if (parcel.status === "CONFIE_CHAUFFEUR" && courierHasRole("chauffeur", "conducteur")) {
+      actions.append(courierButton("Départ en transit", "transit", parcel.id));
+    }
+    if (parcel.status === "EN_TRANSIT" && courierHasRole("administrateur", "responsable_courrier", "agent_courrier")) {
+      actions.append(courierButton("Confirmer l'arrivée", "arrival", parcel.id));
+    }
+    if (parcel.status === "ARRIVE" && courierHasRole("administrateur", "responsable_courrier", "agent_courrier")) {
+      actions.append(courierButton("Remettre", "deliver", parcel.id));
+    }
+    if (parcel.paymentStatus === "PAID" && courierHasRole("administrateur", "caissier", "responsable_courrier", "agent_courrier")) {
+      actions.append(courierButton("Reçu", "receipt", parcel.id));
+    }
+    if (!actions.childElementCount) actions.textContent = "—";
+    row.append(identity, route, amount, status, actions);
+    body.append(row);
+  });
+  document.querySelector("#courier-empty").hidden = rows.length > 0;
+  document.querySelector("#courier-list-caption").textContent =
+    rows.length + " courrier" + (rows.length === 1 ? "" : "s") + " affiché" + (rows.length === 1 ? "" : "s");
+}
+async function loadCourierAssignmentOptions(parcel) {
+  const [driverResponse, departureResponse] = await Promise.all([
+    fetch("/api/v1/courrier/chauffeurs", { headers: { Authorization: "Bearer " + accessToken } }),
+    fetch("/api/v1/voyages/departures", { headers: { Authorization: "Bearer " + accessToken } })
+  ]);
+  const [driverResult, departureResult] = await Promise.all([driverResponse.json(), departureResponse.json()]);
+  if (!driverResponse.ok) throw new Error(driverResult.message || "Impossible de charger les chauffeurs.");
+  if (!departureResponse.ok) throw new Error(departureResult.message || "Impossible de charger les départs.");
+  courierDrivers = driverResult.data || [];
+  courierDepartures = departureResult.data.departures || [];
+  const driverSelect = document.querySelector("#courier-driver-select");
+  driverSelect.replaceChildren();
+  courierDrivers.forEach((driver) => {
+    const option = document.createElement("option");
+    option.value = driver.id;
+    option.textContent = driver.name + (driver.email ? " · " + driver.email : "");
+    driverSelect.append(option);
+  });
+  const departureSelect = document.querySelector("#courier-departure-select");
+  departureSelect.replaceChildren();
+  courierDepartures.filter((departure) => {
+    const sameOrigin = departure.origin.trim().toLocaleLowerCase("fr") === parcel.origin.trim().toLocaleLowerCase("fr");
+    const sameDestination = departure.destination.trim().toLocaleLowerCase("fr") === parcel.destination.trim().toLocaleLowerCase("fr");
+    return sameOrigin && sameDestination && ["SCHEDULED", "BOARDING"].includes(departure.status);
+  }).forEach((departure) => {
+    const option = document.createElement("option");
+    option.value = departure.id;
+    option.textContent = new Date(departure.departureAt).toLocaleString("fr-FR") + " · " + departure.vehicleCode;
+    departureSelect.append(option);
+  });
+  if (!courierDrivers.length || !departureSelect.options.length) {
+    throw new Error("Aucun chauffeur actif ou départ correspondant à ce trajet.");
+  }
+}
+async function loadCourier() {
+  const token = accessToken;
+  const loginMessage = document.querySelector("#courier-login-message");
+  if (!token) {
+    loginMessage.hidden = false;
+    document.querySelector("#courier-tariff-panel").hidden = true;
+    document.querySelector("#courier-register-panel").hidden = true;
+    document.querySelector("#courier-assign-panel").hidden = true;
+    document.querySelector("#courier-list-caption").textContent = "Connectez-vous pour consulter les courriers.";
+    return;
+  }
+  const isDriver = courierHasRole("chauffeur", "conducteur");
+  const canRead = courierHasRole("administrateur", "responsable_exploitation", "caissier", "responsable_courrier", "agent_courrier");
+  document.querySelector("#courier-tariff-panel").hidden = isDriver;
+  document.querySelector("#courier-tariff-form").hidden = !courierHasRole("administrateur", "responsable_courrier");
+  document.querySelector("#courier-register-panel").hidden = !courierHasRole("administrateur", "responsable_courrier", "agent_courrier");
+  document.querySelector("#courier-assign-panel").hidden = true;
+  if (!canRead && !isDriver) {
+    loginMessage.hidden = false;
+    loginMessage.textContent = "Votre rôle ne dispose pas d'un accès au service courrier.";
+    return;
+  }
+  loginMessage.hidden = true;
+  try {
+    const endpoint = isDriver ? "/api/v1/courrier/chauffeur/affectations" : "/api/v1/courrier/colis";
+    const response = await fetch(endpoint, { headers: { Authorization: "Bearer " + token } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les courriers.");
+    courierParcels = result.data || [];
+    if (!isDriver) await loadCourierTariffs();
+    renderCourier();
+  } catch (error) {
+    document.querySelector("#courier-list-caption").textContent = error.message || "Erreur de chargement du service courrier.";
+    showToast(error.message || "Impossible de charger le service courrier.");
+  }
+}
+async function printCourierReceipt(parcelId) {
+  const printWindow = window.open("about:blank", "_blank");
+  if (!printWindow) { showToast("Autorisez l'ouverture de la fenêtre d'impression."); return; }
+  try {
+    const response = await fetch("/api/v1/courrier/colis/" + encodeURIComponent(parcelId) + "/recu", {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger le reçu.");
+    const receipt = result.data;
+    const doc = printWindow.document;
+    doc.title = "Reçu courrier " + receipt.trackingCode;
+    doc.body.replaceChildren();
+    const style = doc.createElement("style");
+    style.textContent = "body{font:14px Arial,sans-serif;color:#17241d;max-width:720px;margin:36px auto;padding:24px}h1{font-size:24px}h2{font-size:16px;margin-top:28px}.code{font-size:20px;font-weight:700;letter-spacing:1px;padding:14px;background:#f1f5f1}p{line-height:1.6}.total{font-size:22px;font-weight:700;border-top:1px solid #ccc;padding-top:16px}@media print{body{margin:0}}";
+    doc.head.append(style);
+    const title = doc.createElement("h1");
+    title.textContent = receipt.companyName || "Reçu de courrier";
+    const subtitle = doc.createElement("p");
+    subtitle.textContent = "REÇU DE PRISE EN CHARGE · " + new Date(receipt.paidAt).toLocaleString("fr-FR");
+    const code = doc.createElement("div");
+    code.className = "code";
+    code.textContent = receipt.trackingCode;
+    const sender = doc.createElement("p");
+    sender.textContent = "Expéditeur : " + receipt.senderName + " · " + receipt.senderPhone;
+    const recipient = doc.createElement("p");
+    recipient.textContent = "Destinataire : " + receipt.recipientName + " · " + receipt.recipientPhone;
+    const route = doc.createElement("p");
+    route.textContent = "Trajet : " + receipt.origin + " → " + receipt.destination;
+    const description = doc.createElement("p");
+    description.textContent = "Contenu : " + receipt.description + (receipt.weightKg ? " · " + receipt.weightKg + " kg" : "");
+    const total = doc.createElement("p");
+    total.className = "total";
+    total.textContent = "Montant payé : " + formatFcfa(receipt.amountFcfa);
+    const method = doc.createElement("p");
+    method.textContent = "Mode de paiement : " + receipt.paymentMethod + " · Reçu par : " + receipt.receivedBy;
+    const note = doc.createElement("p");
+    note.textContent = "Conservez ce reçu pour suivre le courrier jusqu'à sa remise au destinataire.";
+    doc.body.append(title, subtitle, code, sender, recipient, route, description, total, method, note);
+    printWindow.focus();
+    printWindow.print();
+  } catch (error) {
+    printWindow.close();
+    showToast(error.message || "Impossible d'imprimer le reçu.");
+  }
+}
+async function runCourierAction(action, parcel) {
+  const base = "/api/v1/courrier/colis/" + encodeURIComponent(parcel.id);
+  if (action === "assign") {
+    try {
+      await loadCourierAssignmentOptions(parcel);
+      document.querySelector("#courier-assign-form").elements.parcelId.value = parcel.id;
+      document.querySelector("#courier-assign-panel").hidden = false;
+      document.querySelector("#courier-assign-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) { showToast(error.message || "Impossible de préparer l'affectation."); }
+    return;
+  }
+  if (action === "receipt") { await printCourierReceipt(parcel.id); return; }
+  let method = "PATCH";
+  let endpoint = "";
+  let body = {};
+  if (action === "pay") { method = "POST"; endpoint = "/paiement"; body = { paymentMethod: "cash" }; }
+  if (action === "handoff") endpoint = "/prise-en-charge";
+  if (action === "transit") endpoint = "/en-transit";
+  if (action === "arrival") endpoint = "/arrivee";
+  if (action === "deliver") {
+    endpoint = "/remise";
+    const receiverName = window.prompt("Nom de la personne qui récupère le courrier :");
+    if (!receiverName || receiverName.trim().length < 2) return;
+    const receiverReference = window.prompt("Référence de remise (facultatif) :") || "";
+    body = { receiverName: receiverName.trim(), receiverReference: receiverReference.trim() };
+  }
+  try {
+    const response = await fetch(base + endpoint, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Opération courrier impossible.");
+    showToast(result.message || "Opération courrier enregistrée.");
+    await loadCourier();
+  } catch (error) { showToast(error.message || "Connexion à l'API impossible."); }
+}
+document.querySelector("#courier-tariff-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#courier-tariff-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/courrier/tarifs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({ origin: values.origin, destination: values.destination, amountFcfa: Number(values.amountFcfa) })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer le tarif courrier.");
+    form.reset();
+    showToast("Tarif courrier enregistré.");
+    await loadCourier();
+  } catch (error) { showToast(error.message || "Erreur d'enregistrement du tarif."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#courier-tariff-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-courier-action='toggle-tariff']");
+  if (!button) return;
+  const tariff = courierTariffs.find((item) => item.id === button.dataset.parcelId);
+  if (!tariff) return;
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/v1/courrier/tarifs/" + encodeURIComponent(tariff.id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({ isActive: !tariff.isActive })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de modifier le tarif.");
+    await loadCourierTariffs();
+  } catch (error) { showToast(error.message || "Erreur de modification du tarif."); }
+  finally { button.disabled = false; }
+});
+document.querySelector("#courier-parcel-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#courier-parcel-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/courrier/colis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({
+        origin: values.origin, destination: values.destination,
+        senderName: values.senderName, senderPhone: values.senderPhone,
+        recipientName: values.recipientName, recipientPhone: values.recipientPhone,
+        description: values.description, weightKg: values.weightKg ? Number(values.weightKg) : null,
+        declaredValue: Number(values.declaredValue || 0)
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer le courrier.");
+    form.reset();
+    showToast("Courrier enregistré. Code de suivi : " + result.data.trackingCode);
+    await loadCourier();
+  } catch (error) { showToast(error.message || "Erreur d'enregistrement du courrier."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#courier-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-courier-action]");
+  if (!button) return;
+  const parcel = courierParcels.find((item) => item.id === button.dataset.parcelId);
+  if (!parcel) return;
+  button.disabled = true;
+  await runCourierAction(button.dataset.courierAction, parcel);
+  button.disabled = false;
+});
+document.querySelector("#courier-assign-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#courier-assign-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/courrier/colis/" + encodeURIComponent(values.parcelId) + "/affectation", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({ departureId: values.departureId, driverUserId: values.driverUserId })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'affecter ce courrier.");
+    document.querySelector("#courier-assign-panel").hidden = true;
+    showToast("Courrier affecté au voyage.");
+    await loadCourier();
+  } catch (error) { showToast(error.message || "Erreur d'affectation."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#courier-assign-cancel").addEventListener("click", () => {
+  document.querySelector("#courier-assign-panel").hidden = true;
+});
+document.querySelector("#courier-status-filter").addEventListener("change", renderCourier);
+document.querySelector("#courier-refresh").addEventListener("click", loadCourier);
+document.querySelector("#courier-tracking-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const code = String(new FormData(event.currentTarget).get("trackingCode") || "").trim().toUpperCase();
+  const target = document.querySelector("#courier-tracking-result");
+  target.hidden = false;
+  target.textContent = "Recherche du courrier…";
+  try {
+    const response = await fetch("/api/public/courrier/" + encodeURIComponent(code));
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Courrier introuvable.");
+    target.replaceChildren();
+    const parcel = result.data.parcel;
+    const heading = document.createElement("strong");
+    heading.textContent = parcel.trackingCode + " · " + (courierStatusLabels[parcel.status] || parcel.status);
+    const route = document.createElement("p");
+    route.textContent = parcel.origin + " → " + parcel.destination;
+    const history = document.createElement("ol");
+    result.data.history.forEach((item) => {
+      const entry = document.createElement("li");
+      entry.textContent = (courierStatusLabels[item.eventType] || item.eventType) + " · " + new Date(item.createdAt).toLocaleString("fr-FR");
+      history.append(entry);
+    });
+    target.append(heading, route, history);
+  } catch (error) { target.textContent = error.message || "Erreur de suivi."; }
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
@@ -1725,15 +2299,19 @@ function showCurrentView() {
   const isPayments = hash === "#payments";
   const isReports = hash === "#reports";
   const isGuichet = hash === "#guichet";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet;
+  const isCourier = hash === "#courrier";
+  const isPersonnel = hash === "#personnel";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
   document.querySelector("#payments-page").hidden = !isPayments;
   document.querySelector("#reports-page").hidden = !isReports;
   document.querySelector("#guichet-page").hidden = !isGuichet;
+  document.querySelector("#courier-page").hidden = !isCourier;
+  document.querySelector("#personnel-page").hidden = !isPersonnel;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -1743,6 +2321,8 @@ function showCurrentView() {
   if (isPayments) loadPayments();
   if (isReports) loadReports();
   if (isGuichet) loadGuichet();
+  if (isCourier) loadCourier();
+  if (isPersonnel) loadPersonnel();
 }
 
 window.addEventListener("hashchange", showCurrentView);

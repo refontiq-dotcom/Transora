@@ -111,7 +111,7 @@ router.post("/login", [
     const { email, password } = req.body;
     const result = await pool.query<{
       id: string; name: string; email: string; role: string; tenant_id: string; password_hash: string;
-    }>("SELECT id, name, email, role, tenant_id, password_hash FROM users WHERE email = $1", [email.toLowerCase()]);
+    }>("SELECT id, name, email, role, tenant_id, password_hash FROM users WHERE email = $1 AND is_active = TRUE", [email.toLowerCase()]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ success: false, message: "Adresse e-mail ou mot de passe incorrect" });
@@ -141,7 +141,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     }>(
       `SELECT s.id, s.user_id, s.tenant_id, u.email, u.role, u.name
        FROM user_sessions s JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
-       WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+       WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND u.is_active = TRUE
        FOR UPDATE OF s`,
       [hashToken(oldToken)]
     );

@@ -1,8 +1,12 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const staffRoles = ["administrateur", "responsable_exploitation", "responsable_logistique", "agent_accueil", "agent_guichet", "caissier", "chauffeur", "controleur", "mécanicien", "agent_courrier", "responsable_courrier"];
+const reportIncident = authorize(staffRoles);
+const manageIncidents = authorize(["administrateur", "responsable_exploitation", "responsable_logistique"]);
 const types = ["panne", "accident", "retard", "absence_chauffeur", "probleme_passager", "bagage", "billet", "paiement", "caisse"];
 const severities = ["faible", "moyenne", "eleve", "critique"];
 const statuses = ["OUVERT", "EN_COURS", "RESOLU", "CLOTURÉ"];
@@ -17,6 +21,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/",
+  reportIncident,
   [
     body("type").isIn(types),
     body("description").isString().trim().notEmpty().isLength({ max: 5000 }),
@@ -72,6 +77,7 @@ router.post(
 
 router.get(
   "/",
+  reportIncident,
   [
     query("type").optional().isIn(types),
     query("statut").optional().isIn(statuses),
@@ -107,6 +113,7 @@ router.get(
 
 router.get(
   "/:id",
+  reportIncident,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -135,6 +142,7 @@ router.get(
 
 router.put(
   "/:id",
+  manageIncidents,
   [
     param("id").isUUID(),
     body("statut").optional().isIn(statuses),

@@ -20,9 +20,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
     const sessionId = payload.sessionId;
     const active = await pool.query(
-      `SELECT 1 FROM user_sessions
-       WHERE id = $1 AND user_id = $2 AND tenant_id = $3
-         AND revoked_at IS NULL AND expires_at > NOW()`,
+      `SELECT 1 FROM user_sessions s
+       JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+       WHERE s.id = $1 AND s.user_id = $2 AND s.tenant_id = $3
+         AND s.revoked_at IS NULL AND s.expires_at > NOW() AND u.is_active = TRUE`,
       [sessionId, payload.sub, payload.tenantId]
     );
     if (!active.rowCount) return res.status(401).json({
@@ -46,10 +47,25 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   }
 };
 
+/**
+ * Canonicalise les anciens rôles sans leur accorder de privilèges supplémentaires.
+ * Les comptes existants restent compatibles pendant la migration progressive.
+ */
+const roleAliases: Record<string, string> = {
+  superviseur: "responsable_exploitation",
+  conducteur: "chauffeur",
+  agent_acceuil: "agent_accueil"
+};
+
+export const normalizeRole = (role: string): string => roleAliases[role] || role;
+
+export const hasRole = (role: string | undefined, rolesAllowed: string[]): boolean =>
+  Boolean(role && rolesAllowed.some((allowed) => normalizeRole(allowed) === normalizeRole(role)));
+
 export const authorize = (rolesAllowed: string[]) => (
   req: Request, res: Response, next: NextFunction
 ) => {
-  if (!req.user || !rolesAllowed.includes(req.user.role)) return res.status(403).json({
+  if (!req.user || !hasRole(req.user.role, rolesAllowed)) return res.status(403).json({
     success: false, message: "Non autorisé - Vous n'avez pas les droits requis"
   });
   return next();

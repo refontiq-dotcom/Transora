@@ -7,8 +7,12 @@ import { NextFunction, Router, Request, Response } from "express";
 import { body, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const paymentReaders = authorize(["administrateur", "responsable_financier", "caissier"]);
+const paymentOperators = authorize(["administrateur", "agent_guichet", "caissier", "agent_accueil"]);
+const paymentConfirmer = authorize(["administrateur", "caissier"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -22,7 +26,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", paymentReaders, async (req: Request, res: Response, next: NextFunction) => {
   const tenantId = req.tenantId;
   if (!tenantId) {
     return res.status(401).json({ success: false, message: "Tenant non identifié" });
@@ -54,6 +58,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/init",
+  paymentOperators,
   [
     body("billetId").isUUID().withMessage("L'ID billet est invalide"),
     body("moyenPaiement")
@@ -131,6 +136,7 @@ router.post(
 
 router.post(
   "/confirm",
+  paymentConfirmer,
   [
     body("transactionId").isUUID().withMessage("L'ID transaction est invalide"),
     body("preuvePaiement").isString().trim().notEmpty().withMessage("La preuve de paiement est requise")
@@ -138,19 +144,13 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     const tenantId = req.tenantId;
-    if (!tenantId) {
+    if (!tenantId || !req.user) {
       return res.status(401).json({ success: false, message: "Tenant non identifié" });
     }
 
     let client: PoolClient | undefined;
     let transactionStarted = false;
     try {
-      if (req.user?.role !== "administrateur") {
-        return res.status(403).json({
-          success: false,
-          message: "Seul un administrateur peut confirmer un paiement"
-        });
-      }
 
       client = await pool.connect();
       const { transactionId, preuvePaiement } = req.body;

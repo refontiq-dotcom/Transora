@@ -1,8 +1,11 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const manageFleet = authorize(["administrateur", "responsable_logistique"]);
+const readFleet = authorize(["administrateur", "responsable_logistique", "responsable_exploitation", "chauffeur", "mécanicien"]);
 const statuses = ["disponible", "en_service", "en_maintenance", "hors_service"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -15,6 +18,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/",
+  manageFleet,
   [
     body("immatriculation").isString().trim().notEmpty().isLength({ max: 32 }),
     body("modele").isString().trim().notEmpty().isLength({ max: 120 }),
@@ -53,6 +57,7 @@ router.post(
 
 router.get(
   "/",
+  readFleet,
   [query("statut").optional().isIn(statuses)],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -80,6 +85,7 @@ router.get(
 
 router.get(
   "/:id",
+  readFleet,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -107,6 +113,7 @@ router.get(
 
 router.put(
   "/:id",
+  manageFleet,
   [
     param("id").isUUID(),
     body("immatriculation").optional().isString().trim().notEmpty().isLength({ max: 32 }),
@@ -160,6 +167,7 @@ router.put(
 
 router.delete(
   "/:id",
+  manageFleet,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
