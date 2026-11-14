@@ -83,7 +83,7 @@ test("dashboard is protected when no bearer token is supplied", async () => {
 });
 
 test("tenant, trip, fleet, payment, search, and finance APIs are protected when no bearer token is supplied", async () => {
-  const [tenantResponse, tripResponse, departureListResponse, fleetResponse, paymentResponse, searchResponse, ticketResponse, financeResponse] = await Promise.all([
+  const [tenantResponse, tripResponse, departureListResponse, fleetResponse, paymentResponse, searchResponse, ticketResponse, financeResponse, guichetResponse, boardingResponse] = await Promise.all([
     fetch(`${baseUrl}/api/v1/tenant`),
     fetch(`${baseUrl}/api/v1/voyages`),
     fetch(`${baseUrl}/api/v1/voyages/departures`),
@@ -91,7 +91,9 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
     fetch(`${baseUrl}/api/v1/paiements`),
     fetch(`${baseUrl}/api/v1/recherche?q=dupont`),
     fetch(`${baseUrl}/api/v1/recherche/billet/550e8400-e29b-41d4-a716-446655440000`),
-    fetch(`${baseUrl}/api/v1/finance/`)
+    fetch(`${baseUrl}/api/v1/finance/`),
+    fetch(`${baseUrl}/api/v1/guichet/session/current`),
+    fetch(`${baseUrl}/api/v1/embarquement/stats`)
   ]);
   expect(tenantResponse.status).toBe(401);
   expect(tripResponse.status).toBe(401);
@@ -101,6 +103,8 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
   expect(searchResponse.status).toBe(401);
   expect(ticketResponse.status).toBe(401);
   expect(financeResponse.status).toBe(401);
+  expect(guichetResponse.status).toBe(401);
+  expect(boardingResponse.status).toBe(401);
 });
 
 test("registration and login endpoints enforce per-IP attempt limits", async () => {
@@ -196,6 +200,11 @@ test("dashboard assets are served from the web root", async () => {
   expect(html).toMatch(/id="global-search"/);
   expect(html).toMatch(/id="scanner-dialog"/);
   expect(html).toMatch(/id="ticket-dialog"/);
+  expect(html).toMatch(/id="guichet-page"/);
+
+  const publicBooking = await fetch(`${baseUrl}/reservation.html`);
+  expect(publicBooking.status).toBe(200);
+  expect(await publicBooking.text()).toMatch(/Réserver votre voyage/);
 });
 
 
