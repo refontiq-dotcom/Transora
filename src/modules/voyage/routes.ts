@@ -188,7 +188,8 @@ router.post(
 
       const reservations = await client.query<{ count: number }>(
         `SELECT COUNT(*)::int AS count FROM bookings
-         WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'`,
+         WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'
+           AND segment_range && '[0,)'::int4range`,
         [id, tenantId]
       );
       if (reservations.rows[0].count >= departure.rows[0].capacity) {
@@ -201,7 +202,8 @@ router.post(
       }
 
       const taken = await client.query<{ seat_number: number }>(
-        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL",
+        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL
+           AND segment_range && '[0,)'::int4range",
         [id, tenantId]
       );
       const occupied = new Set(taken.rows.map((row) => Number(row.seat_number)));
@@ -213,8 +215,8 @@ router.post(
         return res.status(409).json({ success: false, message: "Aucune place disponible" });
       }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number, segment_range)
+         VALUES ($1, $2, $3, $4, $5, $6, '[0,)'::int4range)
          RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId",
                    passenger_name AS "passengerName", amount_transport AS "amountTransport",
                    platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
