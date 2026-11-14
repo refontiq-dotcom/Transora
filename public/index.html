@@ -54,6 +54,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg>
             <span>Guichet</span>
           </a>
+          <a class="nav-link" href="#personnel" data-nav="Personnel">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M17 8a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 4"/></svg>
+            <span>Personnel</span>
+          </a>
           <a class="nav-link" href="#courrier" data-nav="Service courrier">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3zM3 7l9 7 9-7M7 4h10"/></svg>
             <span>Courrier</span>
@@ -485,6 +489,55 @@
           </section>
           <p class="report-disclaimer">Le bénéfice estimé inclut les frais de réservation de votre compagnie; les frais TRANSORA sont présentés séparément.</p>
           <footer class="page-footer"><span>Les rapports sont générés à partir des données enregistrées.</span><span>Transora · Rapports</span></footer>
+        </div>
+        <div class="content personnel-page" id="personnel-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">ÉQUIPE ET ACCÈS</p>
+              <h1>Gestion du personnel</h1>
+              <p class="subheading">Attribuez à chaque employé un rôle adapté à ses responsabilités et gérez ses accès.</p>
+            </div>
+            <button class="secondary-button" id="personnel-refresh" type="button">Actualiser</button>
+          </section>
+          <p class="voyage-login-message" id="personnel-login-message" hidden>Connectez-vous pour consulter le personnel de votre compagnie.</p>
+          <section class="panel personnel-create-panel" id="personnel-create-panel">
+            <div class="panel-heading"><div><h2>Ajouter un employé</h2><p>Un compte de connexion pourra ensuite être créé pour cet employé.</p></div></div>
+            <form id="personnel-form" class="personnel-form">
+              <label>Nom complet<input name="nom" required minlength="2" maxlength="160"></label>
+              <label>Poste<input name="poste" required minlength="2" maxlength="120" placeholder="Ex. Agent courrier"></label>
+              <label>Rôle
+                <select name="role" required>
+                  <option value="chauffeur">Chauffeur</option>
+                  <option value="agent_guichet">Agent guichet</option>
+                  <option value="caissier">Caissier</option>
+                  <option value="responsable_exploitation">Responsable exploitation</option>
+                  <option value="responsable_financier">Responsable financier</option>
+                  <option value="responsable_logistique">Responsable logistique</option>
+                  <option value="controleur">Contrôleur</option>
+                  <option value="mécanicien">Mécanicien</option>
+                  <option value="agent_accueil">Agent accueil</option>
+                  <option value="responsable_courrier">Responsable courrier</option>
+                  <option value="agent_courrier">Agent courrier</option>
+                  <option value="administrateur">Administrateur</option>
+                </select>
+              </label>
+              <label>Téléphone<input name="telephone" type="tel" maxlength="40"></label>
+              <label>E-mail professionnel<input name="email" type="email"></label>
+              <label>Date d'embauche<input name="dateEmbauche" type="date"></label>
+              <button class="primary-button" id="personnel-submit" type="submit">Ajouter à l'équipe</button>
+            </form>
+          </section>
+          <section class="panel personnel-list-panel">
+            <div class="panel-heading"><div><h2>Employés de la compagnie</h2><p id="personnel-list-caption">Chargement du personnel…</p></div></div>
+            <div class="table-wrap">
+              <table class="voyage-table personnel-table">
+                <thead><tr><th>EMPLOYÉ</th><th>POSTE</th><th>RÔLE ET ACCÈS</th><th>STATUT</th><th>OPTIONS</th></tr></thead>
+                <tbody id="personnel-rows"></tbody>
+              </table>
+              <p class="empty-state" id="personnel-empty" hidden>Aucun employé enregistré.</p>
+            </div>
+          </section>
+          <footer class="page-footer"><span>Chaque compte est individuel et ses droits sont contrôlés par l'API.</span><span>TRANSORA · Personnel</span></footer>
         </div>
         <div class="content courier-page" id="courier-page" hidden>
           <section class="page-heading">
