@@ -1138,18 +1138,21 @@ function setScannerFeedback(message, state = "") {
   feedback.dataset.state = state;
 }
 
-function renderTicketCheck(ticket) {
+function renderTicketCheck(ticket, ticketId) {
   const result = document.querySelector("#scanner-result");
-  result.dataset.valid = String(ticket.valide);
+  result.dataset.valid = String(ticket.peutEmbarquer);
   result.replaceChildren();
   const heading = document.createElement("h3");
-  heading.textContent = ticket.valide ? "Paiement confirmé · billet valide" : "Billet non valide";
+  heading.textContent = ticket.peutEmbarquer ? "Billet valide pour l'embarquement" : "Embarquement refusé";
   const details = [
+    `Compagnie : ${ticket.compagnie}`,
     `Passager : ${ticket.passager}`,
     `Trajet : ${ticket.origine} → ${ticket.destination}`,
-    `Départ : ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ticket.départLe))}`,
-    `Véhicule : ${ticket.véhicule}`,
-    `Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "non confirmé"}`
+    `Départ : ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ticket.departLe))}`,
+    `Véhicule : ${ticket.vehicule}`,
+    `Siège : ${ticket.siege || "—"}`,
+    `Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "non confirmé"}`,
+    `État du départ : ${ticket.statutDepart}`
   ];
   if (ticket.motif) details.push(ticket.motif);
   const paragraphs = details.map((detail) => {
@@ -1158,6 +1161,30 @@ function renderTicketCheck(ticket) {
     return paragraph;
   });
   result.append(heading, ...paragraphs);
+  if (ticket.peutEmbarquer) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary-button";
+    button.textContent = "Confirmer l'embarquement";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/v1/embarquement/valider", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ billetId: ticketId })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || "Impossible de valider l'embarquement.");
+        setScannerFeedback("Embarquement enregistré avec succès.", "success");
+        await lookupScannedTicket(ticketId);
+      } catch (error) {
+        setScannerFeedback(error.message || "Erreur pendant la validation.", "error");
+        button.disabled = false;
+      }
+    });
+    result.append(button);
+  }
   result.hidden = false;
 }
 
@@ -1178,7 +1205,7 @@ async function lookupScannedTicket(rawValue) {
   submit.disabled = true;
   setScannerFeedback("Vérification du billet…");
   try {
-    const response = await fetch(`/api/v1/recherche/billet/${encodeURIComponent(ticketId)}`, {
+    const response = await fetch(`/api/v1/embarquement/scan/${encodeURIComponent(ticketId)}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const result = await response.json();
@@ -1189,7 +1216,7 @@ async function lookupScannedTicket(rawValue) {
       }
       throw new Error(result.message || "Billet introuvable.");
     }
-    renderTicketCheck(result.data);
+    renderTicketCheck(result.data, ticketId);
     setScannerFeedback(
       result.data.valide
         ? "Billet vérifié. Cette vérification ne marque pas le passager comme embarqué."
@@ -1304,10 +1331,10 @@ async function openTicket(bookingId) {
     }
     document.querySelector("#ticket-title").textContent = `${ticket.origine} → ${ticket.destination}`;
     document.querySelector("#ticket-description").textContent =
-      `${ticket.passager} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)}`;
+      `${ticket.compagnie || "Compagnie"} · ${ticket.passager} · Siège ${ticket.siege || "—"} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)} · Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "en attente"}`;
     setTicketImage("#ticket-qr", ticket.qrCode);
     setTicketImage("#ticket-barcode", ticket.codeBarres);
-    document.querySelector("#ticket-id").textContent = `Référence billet : ${ticket.billetId}`;
+    document.querySelector("#ticket-id").textContent = `Référence : ${ticket.billetId} · ${ticket.valide ? "Billet payé" : "Réservation non payée — embarquement interdit"}`;
     dialog.showModal();
   } catch (error) {
     showToast(error.message || "Impossible de charger le billet.");
@@ -1464,6 +1491,7 @@ document.querySelector("#voyage-rows").addEventListener("click", (event) => {
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
+  document.querySelector("#booking-fare").textContent = `Tarif du trajet : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Siège attribué automatiquement`;
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -1529,8 +1557,7 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
         Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
-        passengerName: values.passengerName,
-        amountTransport: Number(values.amountTransport)
+        passengerName: values.passengerName
       })
     });
     const result = await response.json();
@@ -1538,9 +1565,10 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
     form.reset();
     bookingDialog.close();
     selectedDeparture = undefined;
-    showToast("Réservation créée. Ouverture des paiements pour encaisser le billet.");
+    showToast("Réservation créée. Votre billet est prêt.");
     await loadDashboard();
-    window.location.hash = "#payments";
+    await loadPayments();
+    await openTicket(result.data.id);
   } catch (error) {
     showToast(error.message || "Connexion à l'API impossible.");
   } finally {
@@ -1823,7 +1851,8 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
       body: JSON.stringify({
         ...values,
         departureAt: new Date(values.departureAt).toISOString(),
-        capacity: Number(values.capacity)
+        capacity: Number(values.capacity),
+        fareAmount: Number(values.fareAmount)
       })
     });
     const result = await response.json();
