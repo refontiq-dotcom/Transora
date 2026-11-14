@@ -135,6 +135,7 @@ router.get(
         pool.query<{
           tickets: string;
           transport_revenue: string;
+          company_booking_fees: string;
           transora_fees: string;
         }>(
           `SELECT COUNT(*) AS tickets,
@@ -176,6 +177,7 @@ router.get(
           résumé: {
             billetsTraités: Number(paid.tickets),
             revenusTransport: transportRevenue,
+            fraisCompagnie: companyBookingFees,
             fraisTransora: Number(paid.transora_fees),
             dépensesTotales: expenses,
             remboursements: refunds,
