@@ -10,6 +10,7 @@ import { body, validationResult } from "express-validator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../../db/pool";
+import { authRateLimit } from "../../middleware/auth-rate-limit";
 
 const router = Router();
 
@@ -46,6 +47,12 @@ const createToken = (user: { id: string; email: string; role: string; tenantId: 
 
 router.post(
   "/register",
+  authRateLimit({
+    limits: [
+      { scope: "register:ip", identifier: (req) => req.ip || req.socket.remoteAddress || "unknown", maxAttempts: 3, windowSeconds: 3600 },
+      { scope: "register:email", identifier: (req) => String(req.body?.email || "").trim().toLowerCase(), maxAttempts: 2, windowSeconds: 3600 }
+    ]
+  }),
   [
     body("name").isString().trim().notEmpty(),
     body("email").isEmail().normalizeEmail(),
@@ -115,6 +122,12 @@ router.post(
 
 router.post(
   "/login",
+  authRateLimit({
+    limits: [
+      { scope: "login:ip", identifier: (req) => req.ip || req.socket.remoteAddress || "unknown", maxAttempts: 10, windowSeconds: 900 },
+      { scope: "login:email", identifier: (req) => String(req.body?.email || "").trim().toLowerCase(), maxAttempts: 5, windowSeconds: 900 }
+    ]
+  }),
   [
     body("email").isEmail().normalizeEmail(),
     body("password").isString().notEmpty()
