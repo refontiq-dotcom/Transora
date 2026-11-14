@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 describe("Client access-token handling", () => {
   const clientScript = readFileSync(resolve(process.cwd(), "public/app.js"), "utf8");
 
-  it("never persists access tokens in browser localStorage", () => {
-    expect(clientScript).not.toContain("transora_token");
+  it("does not read or write access tokens in browser localStorage and clears legacy storage", () => {
+    expect(clientScript).not.toContain('localStorage.getItem("transora_token")');
+    expect(clientScript).not.toContain('localStorage.setItem("transora_token"');
+    expect(clientScript).toContain('localStorage.removeItem("transora_token")');
   });
 
   it("keeps access tokens in memory and attaches them to same-origin API requests", () => {
