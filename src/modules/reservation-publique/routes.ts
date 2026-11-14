@@ -65,8 +65,7 @@ router.post("/:publicCode/reservations", [
       return res.status(409).json({ success: false, message: "Ce départ n'a pas encore de tarif défini" });
     }
     const reservations = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'
-         AND segment_range && '[0,)'::int4range",
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
       [trip.id, trip.tenant_id]
     );
     const occupied = new Set(reservations.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
