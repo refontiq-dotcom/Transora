@@ -6,7 +6,10 @@ import { pool } from "../../db/pool";
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorizePermission("finance.read"));
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "finance.read" : "finance.manage";
+  return authorizePermission(permission)(req, res, next);
+});
 const operationTypes = ["revenu", "dépense", "remboursement", "commission", "frais_transora"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
