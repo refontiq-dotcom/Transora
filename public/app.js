@@ -23,6 +23,7 @@ let courierParcels = [];
 let courierTariffs = [];
 let courierDrivers = [];
 let courierDepartures = [];
+let personnelEmployees = [];
 let reportLoadError = false;
 let globalSearchController;
 let globalSearchSequence = 0;
@@ -1722,6 +1723,182 @@ document.querySelector("#guichet-close-form").addEventListener("submit", async (
   finally { submit.disabled = false; }
 });
 
+
+
+const personnelRoles = [
+  ["administrateur", "Administrateur"],
+  ["responsable_exploitation", "Responsable exploitation"],
+  ["agent_guichet", "Agent guichet"],
+  ["caissier", "Caissier"],
+  ["responsable_financier", "Responsable financier"],
+  ["responsable_logistique", "Responsable logistique"],
+  ["chauffeur", "Chauffeur"],
+  ["controleur", "Contrôleur"],
+  ["mécanicien", "Mécanicien"],
+  ["agent_accueil", "Agent accueil"],
+  ["responsable_courrier", "Responsable courrier"],
+  ["agent_courrier", "Agent courrier"]
+];
+function personnelRoleLabel(role) {
+  return (personnelRoles.find((item) => item[0] === role) || [role, role])[1];
+}
+function renderPersonnel() {
+  const body = document.querySelector("#personnel-rows");
+  body.replaceChildren();
+  const canManage = courierHasRole("administrateur");
+  personnelEmployees.forEach((employee) => {
+    const row = document.createElement("tr");
+    const identity = document.createElement("td");
+    const name = document.createElement("strong");
+    name.textContent = employee.nom;
+    const email = document.createElement("small");
+    email.textContent = employee.email || "Aucun e-mail";
+    identity.append(name, document.createElement("br"), email);
+    const position = document.createElement("td");
+    position.textContent = employee.poste;
+    const role = document.createElement("td");
+    if (canManage) {
+      const select = document.createElement("select");
+      select.className = "personnel-role-select";
+      select.dataset.employeeId = employee.id;
+      personnelRoles.forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.selected = value === employee.role;
+        select.append(option);
+      });
+      role.append(select);
+    } else {
+      role.textContent = personnelRoleLabel(employee.role);
+    }
+    const status = document.createElement("td");
+    status.textContent = employee.statut === "actif" ? "Actif" : "Inactif";
+    const actions = document.createElement("td");
+    actions.className = "personnel-actions";
+    if (canManage) {
+      const saveRole = courierButton("Enregistrer rôle", "save-role", employee.id);
+      actions.append(saveRole);
+      if (!employee.compteId && employee.email) {
+        actions.append(courierButton("Créer accès", "create-account", employee.id));
+      } else if (employee.compteId) {
+        const account = document.createElement("small");
+        account.textContent = "Compte lié";
+        actions.append(account);
+      }
+      actions.append(courierButton(employee.statut === "actif" ? "Désactiver" : "Réactiver", "toggle-status", employee.id));
+      actions.append(courierButton("Supprimer", "delete", employee.id));
+    } else {
+      actions.textContent = employee.compteId ? "Compte lié" : "Aucun accès";
+    }
+    row.append(identity, position, role, status, actions);
+    body.append(row);
+  });
+  document.querySelector("#personnel-empty").hidden = personnelEmployees.length > 0;
+  document.querySelector("#personnel-list-caption").textContent =
+    personnelEmployees.length + " employé" + (personnelEmployees.length === 1 ? "" : "s") + " enregistré" + (personnelEmployees.length === 1 ? "" : "s");
+}
+async function loadPersonnel() {
+  const message = document.querySelector("#personnel-login-message");
+  if (!accessToken) {
+    message.hidden = false;
+    document.querySelector("#personnel-create-panel").hidden = true;
+    document.querySelector("#personnel-list-caption").textContent = "Connectez-vous pour consulter le personnel.";
+    return;
+  }
+  const canManage = courierHasRole("administrateur");
+  document.querySelector("#personnel-create-panel").hidden = !canManage;
+  try {
+    const response = await fetch("/api/v1/personnel", { headers: { Authorization: "Bearer " + accessToken } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Votre rôle ne permet pas de consulter le personnel.");
+    personnelEmployees = result.data.employés || [];
+    message.hidden = true;
+    renderPersonnel();
+  } catch (error) {
+    message.hidden = false;
+    message.textContent = error.message || "Impossible de charger le personnel.";
+    document.querySelector("#personnel-list-caption").textContent = "Accès au personnel indisponible.";
+  }
+}
+document.querySelector("#personnel-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#personnel-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/personnel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({
+        nom: values.nom, poste: values.poste, role: values.role,
+        telephone: values.telephone || null, email: values.email || null,
+        dateEmbauche: values.dateEmbauche || null
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'ajouter cet employé.");
+    form.reset();
+    showToast("Employé ajouté à l'équipe.");
+    await loadPersonnel();
+  } catch (error) { showToast(error.message || "Erreur d'enregistrement du personnel."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#personnel-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-courier-action]");
+  if (!button) return;
+  const employee = personnelEmployees.find((item) => item.id === button.dataset.parcelId);
+  if (!employee) return;
+  const action = button.dataset.courierAction;
+  button.disabled = true;
+  try {
+    if (action === "save-role") {
+      const select = document.querySelector('.personnel-role-select[data-employee-id="' + employee.id + '"]');
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ role: select.value })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de modifier ce rôle.");
+      showToast("Rôle mis à jour. L'employé devra se reconnecter.");
+    } else if (action === "create-account") {
+      const password = window.prompt("Définissez un mot de passe initial d'au moins 12 caractères. Communiquez-le en privé à l'employé :");
+      if (!password) return;
+      if (password.length < 12) throw new Error("Le mot de passe doit contenir au moins 12 caractères.");
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id) + "/compte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ motDePasse: password })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de créer le compte.");
+      showToast("Compte créé pour " + employee.nom + ". Transmettez le mot de passe par un canal privé.");
+    } else if (action === "toggle-status") {
+      const nextStatus = employee.statut === "actif" ? "inactif" : "actif";
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ statut: nextStatus })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de modifier le statut.");
+      showToast(nextStatus === "actif" ? "Compte employé réactivé." : "Accès employé désactivé.");
+    } else if (action === "delete") {
+      if (!window.confirm("Supprimer la fiche de " + employee.nom + " ? Son compte de connexion sera désactivé.")) return;
+      const response = await fetch("/api/v1/personnel/" + encodeURIComponent(employee.id), {
+        method: "DELETE", headers: { Authorization: "Bearer " + accessToken }
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible de supprimer cet employé.");
+      showToast("Fiche supprimée et accès désactivé.");
+    }
+    await loadPersonnel();
+  } catch (error) { showToast(error.message || "Opération sur le personnel impossible."); }
+  finally { button.disabled = false; }
+});
+document.querySelector("#personnel-refresh").addEventListener("click", loadPersonnel);
 
 function courierCurrentRole() {
   try { return JSON.parse(localStorage.getItem("transora_user") || "{}").role || ""; }
