@@ -9,6 +9,6 @@ Les routes `POST /api/v1/auth/login` et `POST /api/v1/auth/register` utilisent u
 
 Les identifiants sont hachés par HMAC-SHA-256 avec `JWT_SECRET` avant stockage ; les adresses IP et e-mails ne sont pas conservés en clair dans la table. Les réponses bloquées utilisent HTTP 429 et l’en-tête `Retry-After`.
 
-La table `auth_rate_limits` est protégée par RLS et n’accorde aucun accès aux rôles API publics. Le serveur y accède via sa connexion PostgreSQL. Les lignes expirées sont purgées périodiquement.
+La table `auth_rate_limits` est protégée par RLS et n’accorde aucun accès aux rôles API publics (`anon` et `authenticated`, lorsqu’ils existent). Le serveur y accède via sa connexion PostgreSQL. Les lignes expirées sont purgées périodiquement.
 
 La création du premier compte administrateur d’un nouveau tenant reste inchangée : ce compte initialise l’espace de l’entreprise. Cette correction ne modifie ni le modèle d’inscription ni les comptes existants.
