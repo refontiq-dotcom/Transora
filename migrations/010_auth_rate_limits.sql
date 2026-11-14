@@ -8,4 +8,15 @@ CREATE TABLE IF NOT EXISTS auth_rate_limits (
 );
 
 ALTER TABLE auth_rate_limits ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE auth_rate_limits FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE auth_rate_limits FROM PUBLIC;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL ON TABLE public.auth_rate_limits FROM anon';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    EXECUTE 'REVOKE ALL ON TABLE public.auth_rate_limits FROM authenticated';
+  END IF;
+END
+$$;
