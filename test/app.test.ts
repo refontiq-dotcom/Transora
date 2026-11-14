@@ -112,6 +112,51 @@ test("global search rejects terms that are too short", async () => {
   expect(body.success).toBe(false);
 });
 
+test("CORS only allows explicitly configured origins", async () => {
+  const previous = process.env.CORS_ORIGINS;
+  process.env.CORS_ORIGINS = "https://portal.transora.test";
+  try {
+    const allowed = await fetch(`${baseUrl}/health`, {
+      headers: { Origin: "https://portal.transora.test" }
+    });
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://portal.transora.test");
+    expect(allowed.headers.get("access-control-allow-credentials")).toBe("true");
+
+    const denied = await fetch(`${baseUrl}/health`, {
+      headers: { Origin: "https://untrusted.example" }
+    });
+    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+  } finally {
+    if (previous === undefined) delete process.env.CORS_ORIGINS;
+    else process.env.CORS_ORIGINS = previous;
+  }
+});
+
+test("metrics endpoint is hidden unless a strong bearer token is configured", async () => {
+  const previous = process.env.METRICS_TOKEN;
+  try {
+    delete process.env.METRICS_TOKEN;
+    const hidden = await fetch(`${baseUrl}/metrics`);
+    expect(hidden.status).toBe(404);
+
+    process.env.METRICS_TOKEN = "metrics-test-token-with-at-least-32-characters";
+    const denied = await fetch(`${baseUrl}/metrics`, {
+      headers: { Authorization: "Bearer incorrect-token" }
+    });
+    expect(denied.status).toBe(401);
+
+    const allowed = await fetch(`${baseUrl}/metrics`, {
+      headers: { Authorization: `Bearer ${process.env.METRICS_TOKEN}` }
+    });
+    expect(allowed.status).toBe(200);
+    const body = await allowed.json() as { memoryUsage?: unknown };
+    expect(body.memoryUsage).toBeTruthy();
+  } finally {
+    if (previous === undefined) delete process.env.METRICS_TOKEN;
+    else process.env.METRICS_TOKEN = previous;
+  }
+});
+
 test("dashboard assets are served from the web root", async () => {
   const response = await fetch(`${baseUrl}/`);
   expect(response.status).toBe(200);
