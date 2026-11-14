@@ -46,3 +46,17 @@ Le serveur définit explicitement une CSP via Helmet :
 - feuilles de style inline conservées pour les styles existants, avec les feuilles Google Fonts et les polices Google nécessaires à l'interface.
 
 La politique est couverte par un test d'intégration qui vérifie les directives de sécurité et l'absence de `unsafe-inline` pour les scripts. Cette CSP réduit les possibilités d'exploitation d'une injection, mais ne remplace pas la correction de toute source XSS.
+
+
+## Contrôles d'accès HTTP complémentaires
+
+### CORS
+Le serveur n'autorise plus toutes les origines. Définir `CORS_ORIGINS` avec une liste d'origines exactes séparées par des virgules (schéma, hôte et port). Si la variable est absente ou vide, aucun accès navigateur inter-origines n'est autorisé. Les requêtes sans en-tête `Origin` restent utilisables pour les clients serveur à serveur.
+
+### Limitation des tentatives d'authentification
+Les routes de création de compte sont limitées à 5 tentatives par adresse IP et par heure. Les connexions sont limitées à 10 tentatives par adresse IP et par fenêtre de 15 minutes. Une réponse HTTP 429 et un en-tête `Retry-After` signalent le blocage.
+
+**Limite opérationnelle :** le compteur actuel est conservé en mémoire dans chaque processus. Il protège une instance unique, mais n'est pas partagé entre plusieurs instances et est réinitialisé au redémarrage. Pour un déploiement multi-instance, remplacer ce stockage par un magasin partagé (par exemple Redis) et configurer explicitement la confiance envers le proxy inverse avant de s'appuyer sur les adresses IP transmises.
+
+### Endpoint de métriques
+`/metrics` est masqué (HTTP 404) par défaut. Pour l'activer, définir `METRICS_TOKEN` avec au moins 32 caractères aléatoires. L'accès nécessite `Authorization: Bearer <METRICS_TOKEN>`; la comparaison du secret est effectuée en temps constant. Ne jamais exposer ce secret dans le navigateur.
