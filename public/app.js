@@ -1342,7 +1342,10 @@ async function openTicket(bookingId) {
       `${ticket.compagnie || "Compagnie"} · ${ticket.passager} · Siège ${ticket.siege || "—"} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)} · Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "en attente"}`;
     setTicketImage("#ticket-qr", ticket.qrCode);
     setTicketImage("#ticket-barcode", ticket.codeBarres);
-    document.querySelector("#ticket-id").textContent = `Référence : ${ticket.billetId} · ${ticket.valide ? "Billet payé" : "Réservation non payée — embarquement interdit"}`;
+    const ticketState = ticket.statutPaiement === "CONFIRMED"
+      ? (ticket.valide ? "Billet payé" : ticket.motif || "Billet payé mais non utilisable")
+      : "Réservation non payée — embarquement interdit";
+    document.querySelector("#ticket-id").textContent = `Référence : ${ticket.billetId} · ${ticketState}`;
     dialog.showModal();
   } catch (error) {
     showToast(error.message || "Impossible de charger le billet.");
