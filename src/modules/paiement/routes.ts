@@ -10,7 +10,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const paymentStaff = authorize(["administrateur", "superviseur", "caissier", "agent_acceuil"]);
+const paymentReaders = authorize(["administrateur", "responsable_financier", "caissier"]);\nconst paymentOperators = authorize(["administrateur", "agent_guichet", "caissier", "agent_accueil"]);\nconst paymentConfirmer = authorize(["administrateur", "caissier"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -24,7 +24,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-router.get("/", paymentStaff, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", paymentReaders, async (req: Request, res: Response, next: NextFunction) => {
   const tenantId = req.tenantId;
   if (!tenantId) {
     return res.status(401).json({ success: false, message: "Tenant non identifié" });
