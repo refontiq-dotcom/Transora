@@ -28,10 +28,10 @@ const ROLE_PERMISSIONS: Record<string, ReadonlySet<Permission> | "*"> = {
     "payments.read", "payments.manage"
   ]),
   conducteur: new Set<Permission>([
-    "voyages.read", "seats.read", "incidents.read", "notifications.read"
+    "voyages.read", "seats.read", "incidents.read", "incidents.report", "notifications.read"
   ]),
   mécanicien: new Set<Permission>([
-    "fleet.read", "incidents.read"
+    "fleet.read", "fleet.update", "incidents.read"
   ])
 };
 
