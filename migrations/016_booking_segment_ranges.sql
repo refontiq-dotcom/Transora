@@ -10,7 +10,7 @@ ALTER TABLE bookings
   ALTER COLUMN segment_range SET NOT NULL;
 
 -- Ensure the range-aware exclusion constraint exists on every supported database.
-DO $
+DO $transora$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -24,7 +24,7 @@ BEGIN
       EXCLUDE USING gist (departure_id WITH =, seat_number WITH =, segment_range WITH &&)
       WHERE (status <> 'CANCELLED');
   END IF;
-END $;
+END $transora$;
 
 -- The old whole-departure unique index prevented safe reuse of a seat on disjoint segments.
 -- The range-aware exclusion constraint is now authoritative.
