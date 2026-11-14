@@ -268,11 +268,12 @@ router.get(
         vehicle_code: string;
         capacity: number;
         fare_amount: number;
+        company_booking_fee: number;
         status: string;
         reserved_seats: string;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.fare_amount, d.status,
+                d.capacity, d.fare_amount, d.company_booking_fee, d.status,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
