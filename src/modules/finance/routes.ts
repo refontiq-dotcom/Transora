@@ -43,7 +43,14 @@ const financialRowsQuery = `
       AND ($2::date IS NULL OR confirmed_at >= $2::date)
       AND ($3::date IS NULL OR confirmed_at < $3::date + INTERVAL '1 day')
     UNION ALL
-    SELECT id, 'revenu'::text, company_booking_fee::numeric, 'frais compagnie'::text,\n           'Frais de réservation compagnie'::text, booking_id::text, confirmed_at, 'paiement'::text\n    FROM payments\n    WHERE tenant_id = $1 AND status = 'CONFIRMED' AND company_booking_fee > 0\n      AND ($2::date IS NULL OR confirmed_at >= $2::date)\n      AND ($3::date IS NULL OR confirmed_at < $3::date + INTERVAL '1 day')\n    UNION ALL\n    SELECT id, 'frais_transora'::text, platform_fee::numeric, 'commission'::text,
+    SELECT id, 'revenu'::text, company_booking_fee::numeric, 'frais compagnie'::text,
+           'Frais de réservation compagnie'::text, booking_id::text, confirmed_at, 'paiement'::text
+    FROM payments
+    WHERE tenant_id = $1 AND status = 'CONFIRMED' AND company_booking_fee > 0
+      AND ($2::date IS NULL OR confirmed_at >= $2::date)
+      AND ($3::date IS NULL OR confirmed_at < $3::date + INTERVAL '1 day')
+    UNION ALL
+    SELECT id, 'frais_transora'::text, platform_fee::numeric, 'commission'::text,
            'Frais TRANSORA sur paiement confirmé'::text, booking_id::text,
            confirmed_at, 'paiement'::text
     FROM payments
@@ -132,7 +139,8 @@ router.get(
         }>(
           `SELECT COUNT(*) AS tickets,
                   COALESCE(SUM(amount_transport), 0) AS transport_revenue,
-                  COALESCE(SUM(company_booking_fee), 0) AS company_booking_fees,\n                  COALESCE(SUM(platform_fee), 0) AS transora_fees
+                  COALESCE(SUM(company_booking_fee), 0) AS company_booking_fees,
+                  COALESCE(SUM(platform_fee), 0) AS transora_fees
            FROM payments
            WHERE tenant_id = $1 AND status = 'CONFIRMED'
              AND ($2::date IS NULL OR confirmed_at >= $2::date)
@@ -157,7 +165,8 @@ router.get(
       ]);
       const paid = payments.rows[0];
       const manualTotals = manual.rows[0];
-      const transportRevenue = Number(paid.transport_revenue) + Number(manualTotals.manual_revenue);\n      const companyBookingFees = Number(paid.company_booking_fees);
+      const transportRevenue = Number(paid.transport_revenue) + Number(manualTotals.manual_revenue);
+      const companyBookingFees = Number(paid.company_booking_fees);
       const expenses = Number(manualTotals.expenses);
       const refunds = Number(manualTotals.refunds);
       return res.json({
