@@ -417,6 +417,13 @@ function renderVoyages() {
     bookingButton.disabled = departure.status !== "SCHEDULED"
       || departure.availableSeats < 1
       || new Date(departure.departureAt) <= new Date();
+    const tariffButton = document.createElement("button");
+    tariffButton.className = "voyage-action";
+    tariffButton.type = "button";
+    tariffButton.dataset.departureId = departure.id;
+    tariffButton.dataset.action = "tariff";
+    tariffButton.textContent = "Appliquer tarif";
+    tariffButton.hidden = Boolean(departure.routeTariffId);
     const statusButton = document.createElement("button");
     statusButton.className = "voyage-action";
     statusButton.type = "button";
@@ -425,7 +432,7 @@ function renderVoyages() {
     statusButton.dataset.nextStatus = departure.status === "SCHEDULED" ? "BOARDING" : "DEPARTED";
     statusButton.textContent = departure.status === "SCHEDULED" ? "Ouvrir embarquement" : "Clôturer départ";
     statusButton.hidden = !["SCHEDULED", "BOARDING"].includes(departure.status);
-    options.append(bookingButton, statusButton);
+    options.append(bookingButton, tariffButton, statusButton);
     optionsCell.append(options);
 
     row.append(routeCell, departureCell, vehicleCell, seatsCell, occupancyCell, statusCell, optionsCell);
@@ -1788,6 +1795,21 @@ async function updateDepartureStatus(departureId, nextStatus) {
 document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
+  if (button.dataset.action === "tariff") {
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/v1/voyages/departures/${encodeURIComponent(button.dataset.departureId)}/tarif`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible d'appliquer le tarif.");
+      showToast(result.message || "Tarif appliqué.");
+      await loadVoyages();
+    } catch (error) {
+      showToast(error.message || "Aucun tarif actif ne correspond à ce trajet.");
+    } finally { button.disabled = false; }
+    return;
+  }
   if (button.dataset.action === "status") {
     await updateDepartureStatus(button.dataset.departureId, button.dataset.nextStatus);
     return;
