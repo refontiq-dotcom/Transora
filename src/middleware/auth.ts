@@ -28,7 +28,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       if (!active.rowCount) return res.status(401).json({
         success: false, message: "Session révoquée ou expirée"
       });
-      await pool.query("UPDATE user_sessions SET last_used_at = NOW() WHERE id = $1", [sessionId]);
     }
     req.user = {
       id: payload.sub, email: payload.email, role: payload.role,
