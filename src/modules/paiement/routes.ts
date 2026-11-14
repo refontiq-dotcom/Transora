@@ -10,7 +10,9 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const paymentReaders = authorize(["administrateur", "responsable_financier", "caissier"]);\nconst paymentOperators = authorize(["administrateur", "agent_guichet", "caissier", "agent_accueil"]);\nconst paymentConfirmer = authorize(["administrateur", "caissier"]);
+const paymentReaders = authorize(["administrateur", "responsable_financier", "caissier"]);
+const paymentOperators = authorize(["administrateur", "agent_guichet", "caissier", "agent_accueil"]);
+const paymentConfirmer = authorize(["administrateur", "caissier"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
