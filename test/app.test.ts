@@ -29,6 +29,23 @@ test("health endpoint returns the API status", async () => {
   expect(body.status).toBe("ok");
 });
 
+test("dashboard responses enforce the explicit content security policy", async () => {
+  const response = await fetch(`${baseUrl}/`);
+  const policy = response.headers.get("content-security-policy");
+
+  expect(policy).toBeTruthy();
+  expect(policy).toContain("default-src 'self'");
+  expect(policy).toContain("script-src 'self'");
+  expect(policy).toContain("script-src-attr 'none'");
+  expect(policy).toContain("object-src 'none'");
+  expect(policy).toContain("base-uri 'self'");
+  expect(policy).toContain("frame-ancestors 'none'");
+  expect(policy).toContain("connect-src 'self'");
+  expect(policy).toContain("https://fonts.googleapis.com");
+  expect(policy).toContain("https://fonts.gstatic.com");
+  expect(policy).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+});
+
 test("dashboard is protected when no bearer token is supplied", async () => {
   const response = await fetch(`${baseUrl}/api/v1/dashboard?date=2026-11-12&period=30`);
   expect(response.status).toBe(401);

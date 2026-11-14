@@ -35,3 +35,14 @@ Le jeton d'accès est conservé uniquement dans la mémoire JavaScript de la pag
 Au rechargement de la page, le client restaure la session via le cookie HttpOnly et obtient un nouvel Access Token. Le profil utilisateur non secret peut rester dans `localStorage`.
 
 **Limite de sécurité :** le stockage en mémoire réduit le risque de récupération ultérieure d'un jeton persistant, mais ne neutralise pas une faille XSS active. Un script malveillant exécuté dans la page peut toujours agir au nom de l'utilisateur. La prévention XSS, la validation/échappement des sorties et une politique CSP stricte restent nécessaires.
+
+## Politique de sécurité du contenu (CSP)
+
+Le serveur définit explicitement une CSP via Helmet :
+- scripts et connexions limités à la même origine ;
+- scripts inline et gestionnaires d'événements HTML inline interdits ;
+- objets embarqués interdits et aucune origine autorisée à encadrer l'application ;
+- images autorisées depuis la même origine, les données embarquées et les blobs nécessaires aux QR codes ;
+- feuilles de style inline conservées pour les styles existants, avec les feuilles Google Fonts et les polices Google nécessaires à l'interface.
+
+La politique est couverte par un test d'intégration qui vérifie les directives de sécurité et l'absence de `unsafe-inline` pour les scripts. Cette CSP réduit les possibilités d'exploitation d'une injection, mais ne remplace pas la correction de toute source XSS.
