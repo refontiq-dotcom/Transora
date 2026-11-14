@@ -51,10 +51,10 @@ router.post(
         `SELECT id, fare_amount, company_booking_fee
          FROM company_route_tariffs
          WHERE tenant_id = $1 AND is_active = TRUE
-           AND lower(regexp_replace(btrim(origin), '\\s+', ' ', 'g')) =
-               lower(regexp_replace(btrim($2), '\\s+', ' ', 'g'))
-           AND lower(regexp_replace(btrim(destination), '\\s+', ' ', 'g')) =
-               lower(regexp_replace(btrim($3), '\\s+', ' ', 'g'))
+           AND lower(regexp_replace(btrim(origin), '[[:space:]]+', ' ', 'g')) =
+               lower(regexp_replace(btrim($2), '[[:space:]]+', ' ', 'g'))
+           AND lower(regexp_replace(btrim(destination), '[[:space:]]+', ' ', 'g')) =
+               lower(regexp_replace(btrim($3), '[[:space:]]+', ' ', 'g'))
          LIMIT 1`,
         [tenantId, origin.trim(), destination.trim()]
       );
