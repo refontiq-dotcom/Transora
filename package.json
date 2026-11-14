@@ -7,9 +7,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "dev": "ts-node --files src/index.ts",
-    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/app.test.js dist-test/test/db-connection.test.js",
+    "test": "vitest run",
     "lint": "eslint . --ext .ts",
-    "db:migrate": "npm run build && node dist/db/migrate.js"
+    "db:migrate": "npm run build && node dist/db/migrate.js",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -34,7 +35,11 @@
     "@types/pg": "^8.11.11",
     "@types/qrcode": "^1.5.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4",
+    "eslint": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4"
   },
   "keywords": [
     "saas",

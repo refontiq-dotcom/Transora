@@ -1,11 +1,11 @@
-import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, test } from "node:test";
+import { afterEach, expect, test } from "vitest";
 import { getDatabaseConnectionString } from "../src/db/connection";
 
 const variableNames = [
+  "NODE_ENV",
   "DATABASE_URL",
   "DIRECT_URL",
   "SUPABASE_DB_HOST",
@@ -39,17 +39,18 @@ test("builds an encoded transaction-pooler URL for the application", () => {
   process.env.SUPABASE_DB_HOST = "aws-0-eu-west-3.pooler.supabase.com";
   process.env.SUPABASE_DB_USER = "postgres.project";
   process.env.SUPABASE_DB_PASSWORD = "pa:ss@word";
+  process.env.SUPABASE_POOLER_TRANSACTION_PORT = "6543";
   process.env.SUPABASE_DB_CA_CERT_PATH = certPath;
 
   const url = new URL(getDatabaseConnectionString("application"));
 
-  assert.equal(url.hostname, "aws-0-eu-west-3.pooler.supabase.com");
-  assert.equal(url.username, "postgres.project");
-  assert.equal(decodeURIComponent(url.password), "pa:ss@word");
-  assert.equal(url.port, "6543");
-  assert.equal(url.searchParams.get("pgbouncer"), "true");
-  assert.equal(url.searchParams.get("sslmode"), "verify-full");
-  assert.equal(url.searchParams.get("sslrootcert"), certPath);
+  expect(url.hostname).toBe("aws-0-eu-west-3.pooler.supabase.com");
+  expect(url.username).toBe("postgres.project");
+  expect(decodeURIComponent(url.password)).toBe("pa:ss@word");
+  expect(url.port).toBe("6543");
+  expect(url.searchParams.get("pgbouncer")).toBe("true");
+  expect(url.searchParams.get("sslmode")).toBe("verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe(certPath);
   rmSync(certDir, { recursive: true, force: true });
 });
 
@@ -66,9 +67,31 @@ test("builds a session-pooler URL for migrations", () => {
 
   const url = new URL(getDatabaseConnectionString("migration"));
 
-  assert.equal(url.port, "5432");
-  assert.equal(url.searchParams.get("pgbouncer"), null);
-  assert.equal(url.searchParams.get("sslmode"), "verify-full");
-  assert.equal(url.searchParams.get("sslrootcert"), certPath);
+  expect(url.port).toBe("5432");
+  expect(url.searchParams.get("pgbouncer")).toBe(null);
+  expect(url.searchParams.get("sslmode")).toBe("verify-full");
+  expect(url.searchParams.get("sslrootcert")).toBe(certPath);
   rmSync(certDir, { recursive: true, force: true });
+});
+
+test("allows migrations on the isolated local PostgreSQL test database without a Supabase CA", () => {
+  process.env.NODE_ENV = "test";
+  process.env.DIRECT_URL = "postgresql://postgres:postgres@localhost:5432/transora_test";
+  delete process.env.SUPABASE_DB_CA_CERT_PATH;
+
+  const url = new URL(getDatabaseConnectionString("migration"));
+
+  expect(url.hostname).toBe("localhost");
+  expect(url.searchParams.get("sslmode")).toBe("disable");
+  expect(url.searchParams.get("sslrootcert")).toBe(null);
+});
+
+test("still requires the Supabase CA certificate for remote migration databases in tests", () => {
+  process.env.NODE_ENV = "test";
+  process.env.DIRECT_URL = "postgresql://postgres:postgres@db.example.test:5432/transora_test";
+  delete process.env.SUPABASE_DB_CA_CERT_PATH;
+
+  expect(() => getDatabaseConnectionString("migration")).toThrow(
+    /certificat racine/
+  );
 });

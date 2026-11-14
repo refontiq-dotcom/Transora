@@ -8,6 +8,8 @@ let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
 let tenantAId: string;
 let tenantBId: string;
+let userAId: string;
+let userBId: string;
 let tokenA: string;
 let tokenB: string;
 
@@ -32,22 +34,40 @@ beforeAll(async () => {
   );
   tenantBId = tb.rows[0].id;
 
-  // Générer des JWT avec tenant_id différent pour chaque tenant
+  const userA = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'User A', 'a@tenant.test', 'test-hash', 'administrateur')
+     RETURNING id`,
+    [tenantAId]
+  );
+  userAId = userA.rows[0].id;
+
+  const userB = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'User B', 'b@tenant.test', 'test-hash', 'administrateur')
+     RETURNING id`,
+    [tenantBId]
+  );
+  userBId = userB.rows[0].id;
+
+  // Les JWT utilisent des utilisateurs réellement présents en base.
   tokenA = jwt.sign(
     { email: "a@tenant.test", role: "administrateur", tenantId: tenantAId },
     process.env.JWT_SECRET,
-    { subject: "user-a" }
+    { subject: userAId }
   );
   tokenB = jwt.sign(
     { email: "b@tenant.test", role: "administrateur", tenantId: tenantBId },
     process.env.JWT_SECRET,
-    { subject: "user-b" }
+    { subject: userBId }
   );
 });
 
 afterAll(async () => {
   await pool.query("DELETE FROM audit_events WHERE tenant_id = $1", [tenantAId]);
   await pool.query("DELETE FROM audit_events WHERE tenant_id = $1", [tenantBId]);
+  await pool.query("DELETE FROM users WHERE id = $1", [userAId]);
+  await pool.query("DELETE FROM users WHERE id = $1", [userBId]);
   await pool.query("DELETE FROM tenants WHERE id = $1", [tenantAId]);
   await pool.query("DELETE FROM tenants WHERE id = $1", [tenantBId]);
 

@@ -36,6 +36,16 @@ export function getDatabaseConnectionString(mode: DatabaseConnectionMode): strin
   }
 
   const certificatePath = process.env.SUPABASE_DB_CA_CERT_PATH;
+  const isLocalTestDatabase = process.env.NODE_ENV === "test" &&
+    ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+
+  // CI uses an isolated local PostgreSQL service, not Supabase TLS.
+  if (isLocalTestDatabase && !certificatePath) {
+    url.searchParams.set("sslmode", "disable");
+    url.searchParams.delete("sslrootcert");
+    return url.toString();
+  }
+
   if (!certificatePath && mode === "migration") {
     throw new Error(
       "Télécharge le certificat racine dans Supabase > Settings > Database > SSL Configuration, " +
