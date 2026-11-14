@@ -186,11 +186,12 @@ router.get(
         departure_at: Date;
         vehicle_code: string;
         capacity: number;
+        fare_amount: number;
         status: string;
         reserved_seats: string;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.status,
+                d.capacity, d.fare_amount, d.status,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
@@ -220,6 +221,7 @@ router.get(
               departureAt: departure.departure_at,
               vehicleCode: departure.vehicle_code,
               capacity: departure.capacity,
+              fareAmount: Number(departure.fare_amount),
               reservedSeats,
               availableSeats: Math.max(0, departure.capacity - reservedSeats),
               occupancyRate: departure.capacity === 0
