@@ -1741,7 +1741,8 @@ const personnelRoles = [
   ["agent_courrier", "Agent courrier"]
 ];
 function personnelRoleLabel(role) {
-  return (personnelRoles.find((item) => item[0] === role) || [role, role])[1];
+  const canonical = courierNormalizeRole(role);
+  return (personnelRoles.find((item) => item[0] === canonical) || [role, role])[1];
 }
 function renderPersonnel() {
   const body = document.querySelector("#personnel-rows");
@@ -1766,7 +1767,7 @@ function renderPersonnel() {
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
-        option.selected = value === employee.role;
+        option.selected = value === courierNormalizeRole(employee.role);
         select.append(option);
       });
       role.append(select);
