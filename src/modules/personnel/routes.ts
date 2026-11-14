@@ -5,7 +5,7 @@ import { authorize } from "../../middleware/auth";
 
 const router = Router();
 const managePersonnel = authorize(["administrateur"]);
-const readPersonnel = authorize(["administrateur", "superviseur"]);
+const readPersonnel = authorize(["administrateur", "responsable_exploitation"]);
 const roles = ["conducteur", "mécanicien", "agent_acceuil", "superviseur", "administrateur"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
