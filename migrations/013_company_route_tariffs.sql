@@ -11,15 +11,15 @@ CREATE TABLE IF NOT EXISTS company_route_tariffs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT company_route_tariffs_distinct_cities
-    CHECK (lower(regexp_replace(btrim(origin), '\\s+', ' ', 'g')) <>
-           lower(regexp_replace(btrim(destination), '\\s+', ' ', 'g')))
+    CHECK (lower(regexp_replace(btrim(origin), '[[:space:]]+', ' ', 'g')) <>
+           lower(regexp_replace(btrim(destination), '[[:space:]]+', ' ', 'g')))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS company_route_tariffs_route_unique
   ON company_route_tariffs (
     tenant_id,
-    lower(regexp_replace(btrim(origin), '\\s+', ' ', 'g')),
-    lower(regexp_replace(btrim(destination), '\\s+', ' ', 'g'))
+    lower(regexp_replace(btrim(origin), '[[:space:]]+', ' ', 'g')),
+    lower(regexp_replace(btrim(destination), '[[:space:]]+', ' ', 'g'))
   );
 
 CREATE INDEX IF NOT EXISTS company_route_tariffs_tenant_active_idx
