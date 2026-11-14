@@ -600,3 +600,18 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
   .courier-tracking-form input { max-width: none; }
   .courier-tracking-form button { width: 100%; }
 }
+
+
+.personnel-page[hidden], #personnel-login-message[hidden], #personnel-empty[hidden] { display: none; }
+.personnel-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
+.personnel-form label { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.personnel-form input, .personnel-form select, .personnel-role-select { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.personnel-form button { align-self: end; min-height: 40px; }
+.personnel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 210px; }
+.personnel-actions .secondary-button { min-height: 30px; padding: 5px 8px; font-size: 10px; }
+.personnel-table td { vertical-align: middle; }
+.personnel-table td strong, .personnel-table td small { display: block; }
+.personnel-table td small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.personnel-role-select { min-width: 170px; font-size: 11px; }
+@media (max-width: 760px) { .personnel-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .personnel-table { min-width: 760px; } }
+@media (max-width: 520px) { .personnel-form { grid-template-columns: 1fr; } }
