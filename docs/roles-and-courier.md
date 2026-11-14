@@ -33,13 +33,13 @@ Le mot de passe initial n'est jamais renvoyé par l'API. Il doit être communiqu
 
 1. Le responsable courrier configure un tarif par gare de départ et gare d'arrivée.
 2. L'agent courrier enregistre l'expéditeur, le destinataire, leurs téléphones, la description et, si utile, le poids et la valeur déclarée.
-3. TRANSORA génère un code de suivi unique et conserve le prix applicable au moment de l'enregistrement.
-4. Le caissier ouvre sa session de caisse et encaisse le prix du courrier. Le paiement est inscrit au journal courrier, au journal financier et dans les opérations de caisse.
+3. TRANSORA génère un code de suivi aléatoire unique et conserve le prix applicable au moment de l'enregistrement.
+4. Le caissier ouvre sa session de caisse et encaisse le prix du courrier. Le reçu de paiement est consultable via l'API et le paiement est inscrit au journal courrier, au journal financier et dans les opérations de caisse.
 5. Le responsable courrier ou le responsable exploitation affecte le colis à un départ et à un compte chauffeur de la même compagnie.
 6. Le chauffeur confirme la prise en charge, puis le départ du colis en transit. Il ne peut consulter que ses propres affectations.
 7. L'agent courrier de la gare d'arrivée confirme la réception.
 8. Lors de la remise, l'agent enregistre le nom du réceptionnaire et une référence facultative.
-9. Le code de suivi et l'historique des événements permettent aux employés habilités de retrouver chaque étape.
+9. Le code de suivi et l'historique des événements permettent aux employés habilités de retrouver chaque étape. L'expéditeur ou le destinataire peut aussi consulter publiquement l'état du colis avec ce code, sans voir les coordonnées personnelles.
 
 ## Sécurité
 
