@@ -7,7 +7,8 @@ const user = {
   id: "550e8400-e29b-41d4-a716-446655440002",
   email: "jwt@example.test",
   role: "administrateur",
-  tenantId: "550e8400-e29b-41d4-a716-446655440001"
+  tenantId: "550e8400-e29b-41d4-a716-446655440001",
+  sessionId: "jwt-test-session-0001"
 };
 
 const previous = {
@@ -40,6 +41,16 @@ describe("JWT access token security", () => {
     expect(payload.exp).toBeTypeOf("number");
     expect(payload.iat).toBeTypeOf("number");
     expect((payload.exp as number) - (payload.iat as number)).toBe(15 * 60);
+  });
+
+  it("rejects access tokens without a session identifier", () => {
+    process.env.JWT_SECRET = secret;
+    const token = jwt.sign(
+      { email: user.email, role: user.role, tenantId: user.tenantId },
+      secret,
+      { algorithm: "HS256", subject: user.id, issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
+    );
+    expect(() => verifyAccessToken(token)).toThrow(/incomplet ou invalide/);
   });
 
   it("rejects tokens signed with a different algorithm", () => {
