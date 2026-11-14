@@ -362,6 +362,16 @@ test("company route tariffs control departures and preserve historical reservati
     expect(cashDeskOperation.rowCount).toBe(1);
     expect(Number(cashDeskOperation.rows[0].amount)).toBe(4850);
 
+    const cashDeskSessionBody = await cashDeskSession.json() as { data: { id: string } };
+    const closeCashDesk = await fetch(`${baseUrl}/api/v1/guichet/session/${cashDeskSessionBody.data.id}/close`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({ closingAmount: 54850 })
+    });
+    expect(closeCashDesk.status).toBe(200);
+    const closeCashDeskBody = await closeCashDesk.json() as { data: { discrepancy: number } };
+    expect(closeCashDeskBody.data.discrepancy).toBe(0);
+
     const updateResponse = await fetch(`${baseUrl}/api/v1/tarifs/${tariffBody.data.id}`, {
       method: "PATCH", headers: headersA,
       body: JSON.stringify({ fareAmount: 5200, companyBookingFee: 400 })
