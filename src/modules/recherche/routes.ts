@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response, Router } from "express";
-import { authorize } from "../../middleware/auth";
+import { authorizePermission } from "../../middleware/rbac";
 import { param, query, validationResult } from "express-validator";
 import bwipjs from "bwip-js";
 import QRCode from "qrcode";
@@ -8,7 +8,7 @@ import { pool } from "../../db/pool";
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorize(["administrateur"]));
+router.use(authorizePermission("search.read"));
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
