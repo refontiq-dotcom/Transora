@@ -1,8 +1,11 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const managePersonnel = authorize(["administrateur"]);
+const readPersonnel = authorize(["administrateur", "superviseur"]);
 const roles = ["conducteur", "mécanicien", "agent_acceuil", "superviseur", "administrateur"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -15,6 +18,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/",
+  managePersonnel,
   [
     body("nom").isString().trim().notEmpty().isLength({ max: 160 }),
     body("poste").isString().trim().notEmpty().isLength({ max: 120 }),
@@ -51,6 +55,7 @@ router.post(
 
 router.get(
   "/",
+  readPersonnel,
   [
     query("poste").optional().isString().trim().notEmpty(),
     query("role").optional().isIn(roles),
@@ -88,6 +93,7 @@ router.get(
 
 router.get(
   "/:id",
+  readPersonnel,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -114,6 +120,7 @@ router.get(
 
 router.put(
   "/:id",
+  managePersonnel,
   [
     param("id").isUUID(),
     body("nom").optional().isString().trim().notEmpty().isLength({ max: 160 }),
@@ -173,6 +180,7 @@ router.put(
 
 router.delete(
   "/:id",
+  managePersonnel,
   [param("id").isUUID()],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
