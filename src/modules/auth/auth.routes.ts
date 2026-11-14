@@ -111,7 +111,7 @@ router.post("/login", [
     const { email, password } = req.body;
     const result = await pool.query<{
       id: string; name: string; email: string; role: string; tenant_id: string; password_hash: string;
-    }>("SELECT id, name, email, role, tenant_id, password_hash FROM users WHERE email = $1", [email.toLowerCase()]);
+    }>("SELECT id, name, email, role, tenant_id, password_hash FROM users WHERE email = $1 AND is_active = TRUE", [email.toLowerCase()]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ success: false, message: "Adresse e-mail ou mot de passe incorrect" });
