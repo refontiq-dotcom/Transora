@@ -26,6 +26,7 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 be.boarded_at AS "embarqueLe",
                 (b.status = 'PAID' AND p.status = 'CONFIRMED'
                   AND b.status <> 'CANCELLED' AND d.status <> 'CANCELLED'
+                  AND d.status = 'BOARDING'
                   AND d.departure_at > NOW() - INTERVAL '2 hours'
                   AND be.id IS NULL) AS "peutEmbarquer"
          FROM bookings b
@@ -33,7 +34,7 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
          JOIN tenants t ON t.id = b.tenant_id
          LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
          LEFT JOIN boarding_events be ON be.booking_id = b.id AND be.tenant_id = b.tenant_id
-         WHERE b.id = $1 AND b.tenant_id = $2`,
+         WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2`,
         [req.params.billetId, req.tenantId]
       );
       if (!result.rowCount) return res.status(404).json({ success: false, message: "Billet introuvable dans cette compagnie" });
