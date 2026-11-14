@@ -12,6 +12,8 @@ let userAId: string;
 let userBId: string;
 let tokenA: string;
 let tokenB: string;
+let sessionAId: string;
+let sessionBId: string;
 
 beforeAll(async () => {
   server = app.listen(0);
@@ -50,14 +52,25 @@ beforeAll(async () => {
   );
   userBId = userB.rows[0].id;
 
+  sessionAId = `audit-session-${Date.now()}-a`;
+  sessionBId = `audit-session-${Date.now()}-b`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [sessionAId, userAId, tenantAId, "a".repeat(64)]
+  );
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [sessionBId, userBId, tenantBId, "b".repeat(64)]
+  );
+
   // Les JWT utilisent des utilisateurs réellement présents en base.
   tokenA = jwt.sign(
-    { email: "a@tenant.test", role: "administrateur", tenantId: tenantAId },
+    { email: "a@tenant.test", role: "administrateur", tenantId: tenantAId, sessionId: sessionAId },
     process.env.JWT_SECRET,
     { subject: userAId, algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
   );
   tokenB = jwt.sign(
-    { email: "b@tenant.test", role: "administrateur", tenantId: tenantBId },
+    { email: "b@tenant.test", role: "administrateur", tenantId: tenantBId, sessionId: sessionBId },
     process.env.JWT_SECRET,
     { subject: userBId, algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
   );
