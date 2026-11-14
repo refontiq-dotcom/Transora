@@ -22,7 +22,7 @@ import financeRoutes from "./modules/finance/routes";
 import auditRoutes from "./modules/audit/routes";
 import searchRoutes from "./modules/recherche/routes";
 import guichetRoutes from "./modules/guichet/routes";
-import embarquementRoutes from "./modules/embarquement/routes";
+import embarquementRoutes from "./modules/embarquement/routes";\nimport courrierRoutes from "./modules/courrier/routes";
 import publicReservationRoutes from "./modules/reservation-publique/routes";
 
 const app = express();
@@ -125,7 +125,7 @@ app.use("/api/v1/finance", financeRoutes);
 app.use("/api/v1/audit", auditRoutes);
 app.use("/api/v1/recherche", searchRoutes);
 app.use("/api/v1/guichet", guichetRoutes);
-app.use("/api/v1/embarquement", embarquementRoutes);
+app.use("/api/v1/embarquement", embarquementRoutes);\napp.use("/api/v1/courrier", courrierRoutes);
 app.use(errorHandler);
 
 export default app;
