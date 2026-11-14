@@ -25,7 +25,7 @@ Ne pas changer les valeurs `JWT_ISSUER` et `JWT_AUDIENCE` entre les instances d'
 
 ## Sessions et renouvellement
 
-Les jetons d'accès sont valides 15 minutes et sont liés à une session serveur. Le jeton de renouvellement est aléatoire, conservé sous forme de hash dans PostgreSQL et transmis au navigateur dans un cookie HttpOnly, SameSite=Strict. Chaque renouvellement effectue une rotation du jeton. La déconnexion révoque la session côté serveur; les endpoints `/auth/sessions`, `/auth/sessions/:sessionId` et `/auth/logout-all` permettent de consulter et révoquer les sessions du compte.
+Les jetons d'accès sont valides 15 minutes et sont liés à une session serveur. Le claim `sessionId` est obligatoire : un jeton sans identifiant de session est rejeté. Chaque requête authentifiée vérifie que cette session existe, appartient au même utilisateur et tenant, n'est pas révoquée et n'a pas expiré. Le jeton de renouvellement est aléatoire, conservé sous forme de hash dans PostgreSQL et transmis au navigateur dans un cookie HttpOnly, SameSite=Strict. Chaque renouvellement effectue une rotation du jeton. La déconnexion révoque la session côté serveur; les endpoints `/auth/sessions`, `/auth/sessions/:sessionId` et `/auth/logout-all` permettent de consulter et révoquer les sessions du compte.
 
 
 ## Stockage du jeton d'accès dans le navigateur
