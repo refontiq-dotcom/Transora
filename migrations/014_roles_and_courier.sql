@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS courier_parcels (
   delivered_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT courier_parcels_tracking_unique UNIQUE (tenant_id, tracking_code),
+  CONSTRAINT courier_parcels_tracking_unique UNIQUE (tenant_id, tracking_code),\n  CONSTRAINT courier_parcels_id_tenant_unique UNIQUE (id, tenant_id),
   CONSTRAINT courier_parcels_departure_tenant_fk
     FOREIGN KEY (departure_id, tenant_id) REFERENCES departures(id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT courier_parcels_driver_tenant_fk
