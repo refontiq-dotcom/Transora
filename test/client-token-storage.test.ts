@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+const clientScript = readFileSync(resolve(process.cwd(), "public/app.js"), "utf8");
+
 describe("Client access-token handling", () => {
-  const clientScript = readFileSync(resolve(process.cwd(), "public/app.js"), "utf8");
 
   it("does not read or write access tokens in browser localStorage and clears legacy storage", () => {
     expect(clientScript).not.toContain('localStorage.getItem("transora_token")');
