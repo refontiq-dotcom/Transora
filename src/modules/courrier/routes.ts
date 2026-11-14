@@ -11,7 +11,7 @@ import { authorize, hasRole } from "../../middleware/auth";
 
 const router = Router();
 const courierReaders = authorize([
-  "administrateur", "responsable_exploitation", "responsable_financier",
+  "administrateur", "responsable_exploitation",
   "responsable_courrier", "agent_courrier"
 ]);
 const manageTariffs = authorize(["administrateur", "responsable_courrier"]);
