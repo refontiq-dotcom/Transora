@@ -67,7 +67,7 @@ router.post("/valider", controllerRoles, [
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
        WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2
-       FOR UPDATE OF b`,
+       FOR UPDATE OF b, d`,
       [req.body.billetId, req.tenantId]
     );
     if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Billet introuvable dans cette compagnie" }); }
