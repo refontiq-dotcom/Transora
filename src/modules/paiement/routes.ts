@@ -7,8 +7,10 @@ import { NextFunction, Router, Request, Response } from "express";
 import { body, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const paymentStaff = authorize(["administrateur", "superviseur", "caissier", "agent_acceuil"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -22,7 +24,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
+router.get("/", paymentStaff, async (req: Request, res: Response, next: NextFunction) => {
   const tenantId = req.tenantId;
   if (!tenantId) {
     return res.status(401).json({ success: false, message: "Tenant non identifié" });
@@ -54,6 +56,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
 
 router.post(
   "/init",
+  paymentStaff,
   [
     body("billetId").isUUID().withMessage("L'ID billet est invalide"),
     body("moyenPaiement")
