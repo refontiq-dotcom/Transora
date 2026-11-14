@@ -67,7 +67,15 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
 
 export const authorize = (rolesAllowed: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user || !rolesAllowed.includes(req.user.role)) {
+    const user = req.user;
+    const authorized =
+      rolesAllowed.length > 0 &&
+      Boolean(user?.id && user.email && user.role) &&
+      Boolean(req.tenantId) &&
+      user?.tenantId === req.tenantId &&
+      rolesAllowed.includes(user.role);
+
+    if (!authorized) {
       return res.status(403).json({
         success: false,
         message: "Non autorisé - Vous n'avez pas les droits requis"
