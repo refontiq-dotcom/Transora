@@ -103,6 +103,28 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
   expect(financeResponse.status).toBe(401);
 });
 
+test("registration and login endpoints enforce per-IP attempt limits", async () => {
+  const registrationAttempts = await Promise.all(Array.from({ length: 6 }, () =>
+    fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
+  ));
+  expect(registrationAttempts.slice(0, 5).every((response) => response.status === 400)).toBe(true);
+  expect(registrationAttempts[5].status).toBe(429);
+
+  const loginAttempts = await Promise.all(Array.from({ length: 11 }, () =>
+    fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "unknown@example.test", password: "not-a-valid-account" })
+    })
+  ));
+  expect(loginAttempts[10].status).toBe(429);
+  expect(loginAttempts[10].headers.get("retry-after")).toBeTruthy();
+});
+
 test("global search rejects terms that are too short", async () => {
   const response = await fetch(`${baseUrl}/api/v1/recherche?q=a`, {
     headers: { Authorization: `Bearer ${accessToken}` }
