@@ -467,6 +467,7 @@
         <label>Date et heure<input name="departureAt" type="datetime-local" required></label>
         <label>Code du véhicule<input name="vehicleCode" required maxlength="30"></label>
         <label>Capacité en places<input name="capacity" type="number" min="1" max="200" required></label>
+        <label>Tarif du trajet (FCFA)<input name="fareAmount" type="number" min="1" step="1" required></label>
         <button class="primary-button auth-submit" type="submit" id="departure-submit">Enregistrer le départ</button>
       </form>
     </dialog>
@@ -477,7 +478,7 @@
         <h2>Réserver une place</h2>
         <p class="auth-description" id="booking-trip-description"></p>
         <label>Nom du passager<input name="passengerName" required maxlength="160"></label>
-        <label>Prix du transport (FCFA)<input name="amountTransport" type="number" min="1" step="1" required></label>
+        <p class="auth-description" id="booking-fare">Tarif fixé par la compagnie pour ce départ.</p>
         <button class="primary-button auth-submit" type="submit" id="booking-submit"><span>Créer la réservation</span></button>
       </form>
     </dialog>
@@ -526,7 +527,7 @@
         <button class="dialog-close" id="scanner-dialog-close" type="button" aria-label="Fermer">×</button>
         <p class="eyebrow">CONTRÔLE DES BILLETS</p>
         <h2>Scanner un billet</h2>
-        <p class="auth-description">Scannez un QR code ou un code-barres avec la caméra ou un lecteur USB/Bluetooth. La vérification ne valide pas l'embarquement.</p>
+        <p class="auth-description">Scannez un QR code ou un code-barres avec la caméra ou un lecteur USB/Bluetooth. La vérification contrôle la compagnie, le paiement et l'état du billet. L'embarquement est enregistré séparément.</p>
         <video id="scanner-video" class="scanner-video" playsinline muted hidden></video>
         <p class="scanner-feedback" id="scanner-feedback" role="status" aria-live="polite">Connectez-vous pour vérifier un billet.</p>
         <form class="scanner-form" id="scanner-form">
@@ -554,7 +555,7 @@
           <figure><img id="ticket-barcode" alt="Code-barres du billet"><figcaption>CODE-BARRES</figcaption></figure>
         </div>
         <p class="ticket-id" id="ticket-id"></p>
-        <button class="primary-button auth-submit ticket-print" id="ticket-print" type="button">Imprimer le billet</button>
+        <button class="primary-button auth-submit ticket-print" id="ticket-print" type="button">Enregistrer / imprimer le billet (PDF)</button>
       </div>
     </dialog>
     <script src="/app.js" defer></script>
