@@ -15,3 +15,4 @@
 | D-011 | L'IA est assistive pour les décisions critiques | VALIDÉ |
 
 Toute nouvelle décision structurante doit être ajoutée ici avant ou avec son implémentation.
+| D-012 | Rate limiting partagé via Redis REST optionnel, incrément atomique Lua et échec fermé si Redis configuré indisponible | VALIDÉ |
