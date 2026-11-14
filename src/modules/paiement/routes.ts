@@ -31,7 +31,8 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await pool.query(
       `SELECT b.id AS "billetId", b.passenger_name AS "passager",
-              b.amount_transport AS "montantTransport", b.platform_fee AS "fraisTransora",
+              b.amount_transport AS "montantTransport", b.company_booking_fee AS "fraisCompagnie",
+              b.platform_fee AS "fraisTransora",
               b.status AS "statutRéservation", d.origin AS "origine",
               d.destination AS "destination", d.departure_at AS "départLe",
               p.id AS "transactionId", p.payment_method AS "moyenPaiement",
@@ -71,10 +72,11 @@ router.post(
       const { billetId, moyenPaiement } = req.body;
       const bookingResult = await pool.query<{
         amount_transport: number;
+        company_booking_fee: number;
         platform_fee: number;
         status: string;
       }>(
-        `SELECT amount_transport, platform_fee, status
+        `SELECT amount_transport, company_booking_fee, platform_fee, status
          FROM bookings WHERE id = $1 AND tenant_id = $2`,
         [billetId, tenantId]
       );
@@ -91,16 +93,17 @@ router.post(
 
       const payment = await pool.query(
         `INSERT INTO payments
-           (tenant_id, booking_id, amount_transport, platform_fee, payment_method)
-         VALUES ($1, $2, $3, $4, $5)
+           (tenant_id, booking_id, amount_transport, company_booking_fee, platform_fee, payment_method)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (booking_id) DO NOTHING
          RETURNING id, booking_id AS "billetId", amount_transport AS "montantTransport",
-                   platform_fee AS "fraisTransora", payment_method AS "moyenPaiement",
+                   company_booking_fee AS "fraisCompagnie", platform_fee AS "fraisTransora", payment_method AS "moyenPaiement",
                    status AS "statut", created_at AS "crééLe"`,
         [
           tenantId,
           billetId,
           booking.amount_transport,
+          booking.company_booking_fee,
           booking.platform_fee,
           moyenPaiement || "cash"
         ]
@@ -116,7 +119,7 @@ router.post(
         success: true,
         data: {
           ...transaction,
-          totalPayeur: Number(transaction.montantTransport) + Number(transaction.fraisTransora)
+          totalPayeur: Number(transaction.montantTransport) + Number(transaction.fraisCompagnie) + Number(transaction.fraisTransora)
         },
         message: "Paiement initialisé"
       });
@@ -239,10 +242,12 @@ router.get(
       const result = await pool.query<{
         bookings: string;
         revenue_transport: string;
+        company_booking_fees: string;
         transora_fees: string;
       }>(
         `SELECT COUNT(*) AS bookings,
                 COALESCE(SUM(amount_transport), 0) AS revenue_transport,
+                COALESCE(SUM(company_booking_fee), 0) AS company_booking_fees,
                 COALESCE(SUM(platform_fee), 0) AS transora_fees
          FROM payments
          WHERE tenant_id = $1 AND status = 'CONFIRMED'
@@ -258,6 +263,7 @@ router.get(
           résumés: {
             billetsTraités: Number(totals.bookings),
             revenusTransport: Number(totals.revenue_transport),
+            fraisCompagnie: Number(totals.company_booking_fees),
             fraisTransora: Number(totals.transora_fees)
           }
         }
