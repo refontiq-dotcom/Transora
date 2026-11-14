@@ -28,9 +28,10 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       id: string;
       name: string;
       siret: string | null;
+      public_code: string;
       created_at: Date;
     }>(
-      `SELECT id, name, siret, created_at
+      `SELECT id, name, siret, public_code, created_at
        FROM tenants
        WHERE id = $1`,
       [tenantId]
@@ -46,6 +47,8 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
         id: tenant.id,
         name: tenant.name,
         siret: tenant.siret,
+        publicCode: tenant.public_code,
+        publicBookingUrl: `/reservation.html?entreprise=${tenant.public_code}`,
         createdAt: tenant.created_at,
         status: "active"
       }
