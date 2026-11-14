@@ -662,6 +662,11 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   expect(createdBody.data.amountFcfa).toBe(2500);
   expect(createdBody.data.status).toBe("EN_ATTENTE_PAIEMENT");
 
+  const cashSession = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ openingAmount: 0 })
+  });
+  expect(cashSession.status).toBe(201);
+
   const payment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/paiement`, {
     method: "POST", headers: adminHeaders, body: JSON.stringify({ paymentMethod: "cash" })
   });
@@ -709,6 +714,16 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   expect(trackingBody.data.history.map((event) => event.eventType)).toEqual([
     "ENREGISTRE", "PAYE", "AFFECTE", "CONFIE_CHAUFFEUR", "EN_TRANSIT", "ARRIVE", "REMIS"
   ]);
+
+  const cashClose = await fetch(`${baseUrl}/api/v1/guichet/session/current`, { headers: adminHeaders });
+  expect(cashClose.status).toBe(200);
+  const cashCloseBody = await cashClose.json() as { data: { id: string } };
+  const close = await fetch(`${baseUrl}/api/v1/guichet/session/${cashCloseBody.data.id}/close`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ closingAmount: 2500 })
+  });
+  expect(close.status).toBe(200);
+  const closeBody = await close.json() as { data: { discrepancy: number } };
+  expect(closeBody.data.discrepancy).toBe(0);
 });
 
 
