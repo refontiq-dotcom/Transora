@@ -1,4 +1,5 @@
 -- Sessions révocables et rotation des jetons de renouvellement.
+CREATE UNIQUE INDEX IF NOT EXISTS users_id_tenant_unique ON users (id, tenant_id);
 CREATE TABLE IF NOT EXISTS user_sessions (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL,
