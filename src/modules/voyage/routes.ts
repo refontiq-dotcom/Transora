@@ -89,6 +89,58 @@ router.post(
   }
 );
 
+router.patch(
+  "/departures/:id/tarif",
+  authorize(["administrateur", "superviseur"]),
+  [param("id").isUUID()],
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const departure = await client.query(
+        `SELECT d.id, d.origin, d.destination, t.id AS tariff_id,
+                t.fare_amount, t.company_booking_fee
+         FROM departures d
+         JOIN company_route_tariffs t ON t.tenant_id = d.tenant_id AND t.is_active = TRUE
+           AND lower(regexp_replace(btrim(t.origin), '[[:space:]]+', ' ', 'g')) =
+               lower(regexp_replace(btrim(d.origin), '[[:space:]]+', ' ', 'g'))
+           AND lower(regexp_replace(btrim(t.destination), '[[:space:]]+', ' ', 'g')) =
+               lower(regexp_replace(btrim(d.destination), '[[:space:]]+', ' ', 'g'))
+         WHERE d.id = $1 AND d.tenant_id = $2
+         ORDER BY t.updated_at DESC
+         LIMIT 1
+         FOR UPDATE OF d`,
+        [req.params.id, req.tenantId]
+      );
+      if (!departure.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, message: "Aucun tarif actif ne correspond à ce trajet dans votre compagnie." });
+      }
+      const tariff = departure.rows[0];
+      const updated = await client.query(
+        `UPDATE departures
+         SET fare_amount = $3, company_booking_fee = $4, route_tariff_id = $5
+         WHERE id = $1 AND tenant_id = $2
+         RETURNING id, origin, destination, fare_amount AS "fareAmount",
+                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId"`,
+        [req.params.id, req.tenantId, tariff.fare_amount, tariff.company_booking_fee, tariff.tariff_id]
+      );
+      await client.query(
+        `INSERT INTO audit_events (tenant_id, actor_user_id, type, subject, action, details)
+         VALUES ($1, $2, 'modification', 'départ', 'Application du tarif compagnie', $3::jsonb)`,
+        [req.tenantId, req.user.id, JSON.stringify(updated.rows[0])]
+      );
+      await client.query("COMMIT");
+      return res.json({ success: true, data: updated.rows[0], message: "Tarif de la compagnie appliqué à ce départ" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally { client.release(); }
+  }
+);
+
 router.post(
   "/departures/:id/bookings",
   [
