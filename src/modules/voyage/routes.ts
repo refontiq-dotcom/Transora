@@ -26,6 +26,50 @@ const validate = (req: Request, res: Response, next: any) => {
   next();
 };
 
+// Tarifs par trajet : les prix sont définis par l'entreprise et calculés côté serveur.
+router.get(
+  "/fares",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    try {
+      const result = await pool.query(
+        `SELECT id, origin, destination, amount_fcfa AS "amountFcfa", active, updated_at AS "updatedAt"
+         FROM route_fares WHERE tenant_id = $1 ORDER BY origin_key, destination_key`,
+        [tenantId]
+      );
+      return res.json({ success: true, data: { fares: result.rows } });
+    } catch (error) { return next(error); }
+  }
+);
+
+router.put(
+  "/fares",
+  [
+    body("origin").isString().trim().isLength({ min: 2, max: 100 }),
+    body("destination").isString().trim().isLength({ min: 2, max: 100 }),
+    body("amountFcfa").isInt({ min: 1, max: 100000000 })
+  ],
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    if (req.user?.role !== "administrateur") return res.status(403).json({ success: false, message: "Seul un administrateur peut gérer les tarifs" });
+    try {
+      const { origin, destination, amountFcfa } = req.body;
+      const result = await pool.query(
+        `INSERT INTO route_fares (tenant_id, origin, destination, amount_fcfa, active)
+         VALUES ($1, $2, $3, $4, TRUE)
+         ON CONFLICT (tenant_id, origin_key, destination_key)
+         DO UPDATE SET origin = EXCLUDED.origin, destination = EXCLUDED.destination,
+                       amount_fcfa = EXCLUDED.amount_fcfa, active = TRUE, updated_at = NOW()
+         RETURNING id, origin, destination, amount_fcfa AS "amountFcfa", active, updated_at AS "updatedAt"` ,
+        [tenantId, origin.trim(), destination.trim(), Number(amountFcfa)]
+      );
+      return res.json({ success: true, data: { fare: result.rows[0] }, message: "Tarif enregistré" });
+    } catch (error) { return next(error); }
+  }
+);
 router.post(
   "/departures",
   [
@@ -72,8 +116,7 @@ router.post(
   "/departures/:id/bookings",
   [
     param("id").isUUID(),
-    body("passengerName").isString().trim().notEmpty(),
-    body("amountTransport").isInt({ min: 1 })
+    body("passengerName").isString().trim().notEmpty()
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -89,9 +132,9 @@ router.post(
       await client.query("BEGIN");
       transactionStarted = true;
       const { id } = req.params;
-      const { passengerName, amountTransport } = req.body;
-      const departure = await client.query<{ capacity: number }>(
-        `SELECT capacity FROM departures
+      const { passengerName } = req.body;
+      const departure = await client.query<{ capacity: number; origin: string; destination: string }>(
+        `SELECT capacity, origin, destination FROM departures
          WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED'
            AND departure_at > NOW()
          FOR UPDATE`,
@@ -106,6 +149,22 @@ router.post(
         });
       }
 
+      const fareResult = await client.query<{ amount_fcfa: number }>(
+        `SELECT amount_fcfa FROM route_fares
+         WHERE tenant_id = $1 AND origin_key = LOWER(BTRIM($2))
+           AND destination_key = LOWER(BTRIM($3)) AND active = TRUE
+         FOR SHARE`,
+        [tenantId, departure.rows[0].origin, departure.rows[0].destination]
+      );
+      const fare = fareResult.rows[0];
+      if (!fare) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({
+          success: false,
+          message: "Aucun tarif actif n'est configuré pour ce trajet. Enregistrez d'abord son tarif."
+        });
+      }
       const reservations = await client.query<{ count: number }>(
         `SELECT COUNT(*)::int AS count FROM bookings
          WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'`,
@@ -121,12 +180,13 @@ router.post(
       }
 
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO bookings
+           (tenant_id, departure_id, passenger_name, amount_transport, platform_fee)
+         VALUES ($1, $2, $3, $4, 100)
          RETURNING id, departure_id AS "departureId", passenger_name AS "passengerName",
                    amount_transport AS "amountTransport", platform_fee AS "platformFee",
-                   status, created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), Number(amountTransport)]
+                   status, created_at AS "createdAt"` ,
+        [tenantId, id, passengerName.trim(), Number(fare.amount_fcfa)]
       );
       await client.query("COMMIT");
       transactionStarted = false;
@@ -169,11 +229,15 @@ router.get(
         capacity: number;
         status: string;
         reserved_seats: string;
+        transport_fare: number | null;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.status,
+                d.capacity, d.status, f.amount_fcfa AS transport_fare,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
+         LEFT JOIN route_fares f ON f.tenant_id = d.tenant_id
+           AND f.origin_key = LOWER(BTRIM(d.origin))
+           AND f.destination_key = LOWER(BTRIM(d.destination)) AND f.active = TRUE
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE d.tenant_id = $1
            AND d.departure_at >= CURRENT_DATE
@@ -183,7 +247,7 @@ router.get(
              d.origin ILIKE '%' || $4 || '%' OR
              d.destination ILIKE '%' || $4 || '%' OR
              d.vehicle_code ILIKE '%' || $4 || '%')
-         GROUP BY d.id
+         GROUP BY d.id, f.amount_fcfa
          ORDER BY d.departure_at
          LIMIT 200`,
         [tenantId, date, status, search]
@@ -206,7 +270,8 @@ router.get(
               occupancyRate: departure.capacity === 0
                 ? 0
                 : Math.round((reservedSeats / departure.capacity) * 100),
-              status: departure.status
+              status: departure.status,
+              transportFare: departure.transport_fare === null ? null : Number(departure.transport_fare)
             };
           }),
           count: result.rowCount
@@ -246,11 +311,15 @@ router.get(
         capacity: number;
         status: string;
         reserved_seats: string;
+        transport_fare: number | null;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.status,
+                d.capacity, d.status, f.amount_fcfa AS transport_fare,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
+         LEFT JOIN route_fares f ON f.tenant_id = d.tenant_id
+           AND f.origin_key = LOWER(BTRIM(d.origin))
+           AND f.destination_key = LOWER(BTRIM(d.destination)) AND f.active = TRUE
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE d.tenant_id = $1
            AND d.status = 'SCHEDULED'
@@ -258,7 +327,7 @@ router.get(
            AND ($2::text IS NULL OR LOWER(d.origin) = LOWER($2))
            AND ($3::text IS NULL OR LOWER(d.destination) = LOWER($3))
            AND ($4::date IS NULL OR d.departure_at::date = $4::date)
-         GROUP BY d.id
+         GROUP BY d.id, f.amount_fcfa
          HAVING d.capacity - COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) >= $5
          ORDER BY d.departure_at
          LIMIT 100`,
@@ -283,6 +352,7 @@ router.get(
             capacité: departure.capacity,
             placesRéservées: Number(departure.reserved_seats),
             placesDisponibles: departure.capacity - Number(departure.reserved_seats),
+            tarifTransport: departure.transport_fare === null ? null : Number(departure.transport_fare),
             statut: departure.status
           })),
           filters: { origine, destination, date, passagers },

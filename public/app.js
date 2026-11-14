@@ -369,9 +369,10 @@ function renderVoyages() {
     bookingButton.className = "voyage-action";
     bookingButton.type = "button";
     bookingButton.dataset.departureId = departure.id;
-    bookingButton.textContent = "Réserver";
+    bookingButton.textContent = departure.transportFare === null ? "Tarif à définir" : "Réserver";
     bookingButton.disabled = departure.status !== "SCHEDULED"
       || departure.availableSeats < 1
+      || departure.transportFare === null
       || new Date(departure.departureAt) <= new Date();
     options.append(bookingButton);
     optionsCell.append(options);
@@ -1398,6 +1399,74 @@ document.querySelector("#voyages-add-departure").addEventListener("click", () =>
   departureDialog.showModal();
 });
 
+const fareDialog = document.querySelector("#fare-dialog");
+document.querySelector("#fare-dialog-close").addEventListener("click", () => fareDialog.close());
+document.querySelector("#voyages-manage-fares").addEventListener("click", async () => {
+  if (!localStorage.getItem("transora_token")) {
+    showToast("Connectez-vous pour gérer les tarifs.");
+    setAuthMode(false);
+    authDialog.showModal();
+    return;
+  }
+  const user = JSON.parse(localStorage.getItem("transora_user") || "null");
+  if (user?.role !== "administrateur") {
+    showToast("Seul un administrateur peut gérer les tarifs.");
+    return;
+  }
+  await loadRouteFares();
+  fareDialog.showModal();
+});
+
+async function loadRouteFares() {
+  const list = document.querySelector("#fare-list");
+  list.textContent = "Chargement des tarifs…";
+  try {
+    const response = await fetch("/api/v1/voyages/fares", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("transora_token")}` }
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les tarifs.");
+    list.replaceChildren();
+    if (result.data.fares.length === 0) {
+      list.textContent = "Aucun tarif enregistré pour le moment.";
+      return;
+    }
+    result.data.fares.forEach((fare) => {
+      const item = document.createElement("p");
+      item.textContent = `${fare.origin} → ${fare.destination} : ${formatFcfa(fare.amountFcfa)}${fare.active ? "" : " · Inactif"}`;
+      list.append(item);
+    });
+  } catch (error) {
+    list.textContent = error.message || "Impossible de charger les tarifs.";
+  }
+}
+
+document.querySelector("#fare-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#fare-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/voyages/fares", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("transora_token")}`
+      },
+      body: JSON.stringify({ ...values, amountFcfa: Number(values.amountFcfa) })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d’enregistrer le tarif.");
+    form.reset();
+    showToast("Tarif enregistré.");
+    await Promise.all([loadRouteFares(), loadVoyages()]);
+  } catch (error) {
+    showToast(error.message || "Connexion à l’API impossible.");
+  } finally {
+    submit.disabled = false;
+  }
+});
 document.querySelector("#voyage-refresh").addEventListener("click", loadVoyages);
 document.querySelector("#voyage-search").addEventListener("input", renderVoyages);
 document.querySelector("#voyage-date").addEventListener("change", renderVoyages);
@@ -1415,6 +1484,8 @@ document.querySelector("#voyage-rows").addEventListener("click", (event) => {
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
+  document.querySelector("#booking-price").textContent =
+    `Prix du transport fixé par l’entreprise : ${formatFcfa(selectedDeparture.transportFare)}. Frais TRANSORA : 100 FCFA.`;
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -1480,8 +1551,7 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
         Authorization: `Bearer ${localStorage.getItem("transora_token")}`
       },
       body: JSON.stringify({
-        passengerName: values.passengerName,
-        amountTransport: Number(values.amountTransport)
+        passengerName: values.passengerName
       })
     });
     const result = await response.json();

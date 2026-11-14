@@ -45,6 +45,8 @@ Exemple Abidjan → Bouaké → Katiola → Korhogo :
 Un siège occupé A→B peut être vendu B→C car les segments ne se chevauchent pas.
 
 ### C-05 Réservation et billetterie
+Le prix du transport est défini par l'entreprise pour chaque trajet (origine → destination). Le serveur récupère ce tarif et l'enregistre comme un instantané sur la réservation ; un montant envoyé par le navigateur n'est jamais une source de vérité. Les frais TRANSORA de 100 FCFA sont calculés côté serveur et ajoutés séparément.
+
 Recherche → départ → siège → passager → paiement → billet → QR.
 
 Statuts billet : RESERVED, PAID, ISSUED, BOARDED, USED, CANCELLED, REFUNDED, NO_SHOW.
