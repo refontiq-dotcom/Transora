@@ -1816,6 +1816,7 @@ authForm.addEventListener("submit", async (event) => {
     }
     localStorage.setItem("transora_token", result.data.token);
     localStorage.setItem("transora_user", JSON.stringify(result.data.user));
+    startSessionRefresh();
     authDialog.close();
     showToast("Connecté. Chargement des données de l'entreprise...");
     await loadDashboard();
@@ -1849,10 +1850,13 @@ async function refreshAccessToken() {
     return false;
   } finally { refreshInFlight = false; }
 }
-if (localStorage.getItem("transora_token")) {
-  window.setInterval(refreshAccessToken, 10 * 60 * 1000);
+let sessionRefreshTimer;
+function startSessionRefresh() {
+  if (sessionRefreshTimer) return;
+  sessionRefreshTimer = window.setInterval(refreshAccessToken, 10 * 60 * 1000);
   window.addEventListener("focus", refreshAccessToken);
 }
+if (localStorage.getItem("transora_token")) startSessionRefresh();
 setAuthenticatedState(Boolean(localStorage.getItem("transora_token")));
 const now = new Date();
 document.querySelector("#today-label").textContent =
