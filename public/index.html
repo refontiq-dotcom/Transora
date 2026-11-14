@@ -46,6 +46,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 5.4 9a2 2 0 0 1 2-1.6h9.2a2 2 0 0 1 2 1.6l1.4 7.5"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19M7 11h10M8 14h.01M16 14h.01"/></svg>
             <span>Voyages</span><span class="nav-count" id="voyage-count-badge" hidden>0</span>
           </a>
+          <a class="nav-link" href="#guichet" data-nav="Guichet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg>
+            <span>Guichet</span>
+          </a>
           <a class="nav-link" href="#flotte" data-nav="Flotte">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5-9 4.5-9-4.5Z"/><path d="M3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>
             <span>Flotte</span><span class="nav-count" id="fleet-count-badge" hidden>0</span>
@@ -432,6 +436,28 @@
           </section>
           <p class="report-disclaimer">Le bénéfice affiché est une estimation basée sur les opérations enregistrées; les frais TRANSORA sont présentés séparément.</p>
           <footer class="page-footer"><span>Les rapports sont générés à partir des données enregistrées.</span><span>Transora · Rapports</span></footer>
+        </div>
+        <div class="content" id="guichet-page" hidden>
+          <section class="page-heading"><div><p class="eyebrow">VENTE AU COMPTOIR</p><h1>Guichet</h1><p class="subheading">Ouvrez votre caisse, vendez un billet et clôturez votre session.</p></div></section>
+          <section class="panel" style="padding:24px;display:grid;gap:18px">
+            <div><h2>Session de caisse</h2><p id="guichet-session-state">Chargement de votre caisse…</p><p id="guichet-expected-cash"></p></div>
+            <form id="guichet-open-form" class="auth-form" style="max-width:420px">
+              <label>Fond de caisse initial (FCFA)<input name="openingAmount" type="number" min="0" step="1" value="0" required></label>
+              <button class="primary-button" type="submit" id="guichet-open-submit">Ouvrir la caisse</button>
+            </form>
+            <form id="guichet-sale-form" class="auth-form" style="max-width:520px" hidden>
+              <h3>Vendre un billet</h3>
+              <label>Départ<select name="departureId" id="guichet-departure" required></select></label>
+              <label>Nom du passager<input name="passengerName" minlength="2" maxlength="160" required></label>
+              <p class="auth-description" id="guichet-fare"></p>
+              <button class="primary-button" type="submit" id="guichet-sale-submit">Encaisser et générer le billet</button>
+            </form>
+            <form id="guichet-close-form" class="auth-form" style="max-width:420px" hidden>
+              <label>Montant compté à la clôture (FCFA)<input name="closingAmount" type="number" min="0" step="1" required></label>
+              <button class="secondary-button" type="submit" id="guichet-close-submit">Clôturer la caisse</button>
+            </form>
+          </section>
+          <footer class="page-footer"><span>Chaque vente est enregistrée dans la caisse de votre compagnie.</span><span>TRANSORA · Guichet</span></footer>
         </div>
       </main>
     </div>
