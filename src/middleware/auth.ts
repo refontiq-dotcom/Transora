@@ -1,12 +1,11 @@
 /**
- * Middleware: Authentification des requêtes
- *
- * Vérifie le JWT et attache les informations du tenant et de l'utilisateur
- * à la requête pour utilisation dans les autres middleware et routes.
+ * Middleware: authentification stricte des requêtes par JWT.
+ * Les tokens doivent être signés en HS256, avoir le bon issuer/audience,
+ * et contenir des dates iat/exp valides avec une durée maximale de 8 heures.
  */
-
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "../lib/jwt";
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const authorization = req.headers.authorization;
@@ -17,18 +16,9 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     });
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    return res.status(503).json({
-      success: false,
-      message: "Authentification indisponible - JWT_SECRET n'est pas configuré"
-    });
-  }
-
   try {
-    const payload = jwt.verify(authorization.slice("Bearer ".length).trim(), secret);
+    const payload = verifyAccessToken(authorization.slice("Bearer ".length).trim());
     if (
-      typeof payload === "string" ||
       typeof payload.sub !== "string" ||
       typeof payload.email !== "string" ||
       typeof payload.role !== "string" ||
@@ -47,24 +37,27 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       tenantId: payload.tenantId
     };
     req.tenantId = payload.tenantId;
-    next();
+    return next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof Error && error.message.includes("JWT_SECRET")) {
+      if (error.message.includes("JWT_SECRET")) {
+        return res.status(503).json({
+          success: false,
+          message: "Authentification indisponible - Configuration JWT invalide"
+        });
+      }
       return res.status(401).json({
         success: false,
         message: "Non authentifié - Token invalide ou expiré"
       });
     }
-    next(error);
+    return next(error);
   }
 };
 
 /**
- * Middleware: Autorisation par rôle
- *
- * Vérifie que l'utilisateur authentifié a le rôle requis pour accéder à la route.
+ * Middleware: autorisation historique par rôle.
  */
-
 export const authorize = (rolesAllowed: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || !rolesAllowed.includes(req.user.role)) {
@@ -73,6 +66,6 @@ export const authorize = (rolesAllowed: string[]) => {
         message: "Non autorisé - Vous n'avez pas les droits requis"
       });
     }
-    next();
+    return next();
   };
 };
