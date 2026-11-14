@@ -6,7 +6,6 @@ DO $$
 DECLARE
   table_record RECORD;
   role_name TEXT;
-  creator_name TEXT;
 BEGIN
   FOR table_record IN
     SELECT tablename
@@ -25,31 +24,25 @@ BEGIN
   END LOOP;
 
   -- Empêche les prochaines migrations de réintroduire automatiquement ces accès.
-  FOREACH creator_name IN ARRAY ARRAY['postgres', 'supabase_admin'] LOOP
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = creator_name) THEN
-      FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated'] LOOP
-        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
-          EXECUTE format(
-            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM %I',
-            creator_name, role_name
-          );
-          EXECUTE format(
-            'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON SEQUENCES FROM %I',
-            creator_name, role_name
-          );
-        END IF;
-      END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+    FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+        EXECUTE format(
+          'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM %I',
+          role_name
+        );
+        EXECUTE format(
+          'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM %I',
+          role_name
+        );
+      END IF;
+    END LOOP;
 
-      EXECUTE format(
-        'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC',
-        creator_name
-      );
-      EXECUTE format(
-        'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC',
-        creator_name
-      );
-    END IF;
-  END LOOP;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      REVOKE ALL ON TABLES FROM PUBLIC;
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      REVOKE ALL ON SEQUENCES FROM PUBLIC;
+  END IF;
 END
 $$;
 
