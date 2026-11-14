@@ -107,7 +107,7 @@ router.post("/vente", cashDeskRoles, [
       "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'",
       [trip.id, req.tenantId]
     );
-    if (taken.rowCount >= Number(trip.capacity)) {
+    if (Number(taken.rowCount ?? 0) >= Number(trip.capacity)) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Ce départ est complet" });
     }
