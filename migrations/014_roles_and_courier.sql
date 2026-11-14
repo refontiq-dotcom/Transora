@@ -19,7 +19,23 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (
   'agent_acceuil'
 ));
 
-DO $$
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE employees ALTER COLUMN role SET DEFAULT 'chauffeur';
+CREATE UNIQUE INDEX IF NOT EXISTS employees_user_id_unique
+  ON employees (user_id) WHERE user_id IS NOT NULL;
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'employees_user_tenant_fk' AND conrelid = 'employees'::regclass
+  ) THEN
+    ALTER TABLE employees ADD CONSTRAINT employees_user_tenant_fk
+      FOREIGN KEY (user_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE SET NULL;
+  END IF;
+END $;
+
+DO $
 DECLARE constraint_name text;
 BEGIN
   FOR constraint_name IN
