@@ -55,7 +55,8 @@ export class RedisRestRateLimitStore implements RateLimitStore {
     const response = await this.fetcher(this.url, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(["EVAL", REDIS_INCREMENT_SCRIPT, "1", key, String(windowMs)])
+      body: JSON.stringify(["EVAL", REDIS_INCREMENT_SCRIPT, "1", key, String(windowMs)]),
+      signal: AbortSignal.timeout(2_000)
     });
     if (!response.ok) throw new Error("Redis rate limit request failed");
     const payload = await response.json() as { result?: unknown; error?: string };
