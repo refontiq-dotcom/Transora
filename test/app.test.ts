@@ -717,6 +717,17 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   };
   expect(trackingBody.data.parcel.status).toBe("REMIS");
   expect(trackingBody.data.parcel.paymentStatus).toBe("PAID");
+
+  const publicTracking = await fetch(`${baseUrl}/api/public/courrier/${createdBody.data.trackingCode}`);
+  expect(publicTracking.status).toBe(200);
+  const publicTrackingBody = await publicTracking.json() as {
+    data: { parcel: { status: string; trackingCode: string; senderPhone?: string; recipientPhone?: string } };
+  };
+  expect(publicTrackingBody.data.parcel.status).toBe("REMIS");
+  expect(publicTrackingBody.data.parcel.trackingCode).toBe(createdBody.data.trackingCode);
+  expect(publicTrackingBody.data.parcel.senderPhone).toBeUndefined();
+  expect(publicTrackingBody.data.parcel.recipientPhone).toBeUndefined();
+
   expect(trackingBody.data.history.map((event) => event.eventType)).toEqual([
     "ENREGISTRE", "PAYE", "AFFECTE", "CONFIE_CHAUFFEUR", "EN_TRANSIT", "ARRIVE", "REMIS"
   ]);
