@@ -111,6 +111,56 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
   expect(departureStatusResponse.status).toBe(401);
 });
 
+test("staff roles cannot manage company administration, finance, or sensitive records", async () => {
+  const email = `app-test-driver-${Date.now()}@example.test`;
+  const user = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'Driver Test User', $2, 'test-hash', 'conducteur') RETURNING id`,
+    [tenantId, email]
+  );
+  const driverId = user.rows[0].id as string;
+  const driverSession = `app-test-driver-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [driverSession, driverId, tenantId, "f".repeat(64)]
+  );
+  const token = createAccessToken({
+    id: driverId, email, role: "conducteur", tenantId, sessionId: driverSession
+  });
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const id = "550e8400-e29b-41d4-a716-446655440000";
+
+  const [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate, seatAssign,
+    bookingCreate, fleetRead] = await Promise.all([
+    fetch(`${baseUrl}/api/v1/personnel`, { headers }),
+    fetch(`${baseUrl}/api/v1/personnel`, { method: "POST", headers, body: JSON.stringify({ nom: "Test", poste: "Conducteur" }) }),
+    fetch(`${baseUrl}/api/v1/flotte`, { method: "POST", headers, body: JSON.stringify({ immatriculation: "TEST-ROLE", modele: "Bus", capacite: 30 }) }),
+    fetch(`${baseUrl}/api/v1/flotte/${id}`, { method: "PUT", headers, body: JSON.stringify({ statut: "hors_service" }) }),
+    fetch(`${baseUrl}/api/v1/flotte/${id}`, { method: "DELETE", headers }),
+    fetch(`${baseUrl}/api/v1/finance`, { headers }),
+    fetch(`${baseUrl}/api/v1/finance/operation`, { method: "POST", headers, body: JSON.stringify({ type: "dépense", montant: 1000 }) }),
+    fetch(`${baseUrl}/api/v1/audit`, { headers }),
+    fetch(`${baseUrl}/api/v1/audit/anti-fraude`, { method: "POST", headers, body: JSON.stringify({ analyse: {} }) }),
+    fetch(`${baseUrl}/api/v1/incidents/${id}`, { method: "PUT", headers, body: JSON.stringify({ statut: "RESOLU" }) }),
+    fetch(`${baseUrl}/api/v1/sièges/réserver`, { method: "POST", headers, body: JSON.stringify({ billetId: id, "siègeNuméro": 1 }) }),
+    fetch(`${baseUrl}/api/v1/voyages/departures/${id}/bookings`, { method: "POST", headers, body: JSON.stringify({ passengerName: "Passager Test" }) }),
+    fetch(`${baseUrl}/api/v1/flotte`, { headers })
+  ]);
+
+  for (const response of [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate, seatAssign, bookingCreate]) {
+    expect(response.status).toBe(403);
+  }
+  expect(fleetRead.status).toBe(200);
+
+  const report = await fetch(`${baseUrl}/api/v1/incidents`, {
+    method: "POST", headers,
+    body: JSON.stringify({ type: "panne", description: "Signalement de test par un conducteur" })
+  });
+  expect(report.status).toBe(201);
+});
+
 test("registration and login endpoints enforce per-IP attempt limits", async () => {
   const registrationAttempts = await Promise.all(Array.from({ length: 6 }, () =>
     fetch(`${baseUrl}/api/v1/auth/register`, {
