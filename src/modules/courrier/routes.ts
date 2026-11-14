@@ -59,8 +59,8 @@ const parcelSelect = `
   SELECT id, tracking_code AS "trackingCode", origin, destination,
          sender_name AS "senderName", sender_phone AS "senderPhone",
          recipient_name AS "recipientName", recipient_phone AS "recipientPhone",
-         description, weight_kg AS "weightKg", declared_value AS "declaredValue",
-         amount_fcfa AS "amountFcfa", payment_status AS "paymentStatus",
+         description, weight_kg AS "weightKg", declared_value::float8 AS "declaredValue",
+         amount_fcfa::float8 AS "amountFcfa", payment_status AS "paymentStatus",
          payment_method AS "paymentMethod", status, departure_id AS "departureId",
          assigned_driver_user_id AS "driverUserId", receiver_name AS "receiverName",
          receiver_reference AS "receiverReference", paid_at AS "paidAt",
@@ -174,7 +174,7 @@ router.post("/colis", createParcel, [
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id, tracking_code AS "trackingCode", origin, destination,
                  sender_name AS "senderName", recipient_name AS "recipientName",
-                 amount_fcfa AS "amountFcfa", payment_status AS "paymentStatus", status, created_at AS "createdAt"`,
+                 amount_fcfa::float8 AS "amountFcfa", payment_status AS "paymentStatus", status, created_at AS "createdAt"`,
       [
         tenantId, trackingCode, String(req.body.origin).trim(), String(req.body.destination).trim(),
         String(req.body.senderName).trim(), String(req.body.senderPhone).trim(),
