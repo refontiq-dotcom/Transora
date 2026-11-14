@@ -435,6 +435,30 @@ router.patch("/colis/:id/remise", stationCourier, [
   finally { client.release(); }
 });
 
+router.get("/colis/:id/recu", authorize(["administrateur", "caissier", "responsable_courrier", "agent_courrier"]), [
+  param("id").isUUID()
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  const tenantId = tenant(req, res);
+  if (!tenantId) return;
+  try {
+    const result = await pool.query(
+      `SELECT t.name AS "companyName", p.tracking_code AS "trackingCode",
+              p.sender_name AS "senderName", p.sender_phone AS "senderPhone",
+              p.recipient_name AS "recipientName", p.recipient_phone AS "recipientPhone",
+              p.origin, p.destination, p.description, p.weight_kg AS "weightKg",
+              p.amount_fcfa::float8 AS "amountFcfa", p.payment_method AS "paymentMethod",
+              p.paid_at AS "paidAt", u.name AS "receivedBy"
+       FROM courier_parcels p
+       JOIN tenants t ON t.id = p.tenant_id
+       LEFT JOIN users u ON u.id = p.paid_by AND u.tenant_id = p.tenant_id
+       WHERE p.id = $1 AND p.tenant_id = $2 AND p.payment_status = 'PAID'`,
+      [req.params.id, tenantId]
+    );
+    if (!result.rowCount) return res.status(404).json({ success: false, message: "Reçu introuvable : courrier non payé ou inexistant" });
+    return res.json({ success: true, data: { type: "recu_courrier", ...result.rows[0] } });
+  } catch (error) { return next(error); }
+});
+
 router.get("/colis/:id", courierReaders, [param("id").isUUID()], validate,
   async (req: Request, res: Response, next: NextFunction) => {
     const tenantId = tenant(req, res);
