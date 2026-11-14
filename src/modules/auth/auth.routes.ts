@@ -5,6 +5,7 @@ import { NextFunction, Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
+import { Pool, PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { createAccessToken } from "../../lib/jwt";
 import { authenticate } from "../../middleware/auth";
@@ -45,7 +46,7 @@ const isUniqueViolation = (error: unknown): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 
 interface SessionUser { id: string; email: string; role: string; tenantId: string; }
-async function issueSession(user: SessionUser, res: Response, client = pool) {
+async function issueSession(user: SessionUser, res: Response, client: Pool | PoolClient = pool) {
   const sessionId = randomBytes(16).toString("hex");
   const refreshToken = newRefreshToken();
   await client.query(
