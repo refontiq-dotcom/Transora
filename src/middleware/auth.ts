@@ -14,11 +14,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   try {
     const payload = verifyAccessToken(authorization.slice("Bearer ".length).trim());
     if (typeof payload.sub !== "string" || typeof payload.email !== "string" ||
-        typeof payload.role !== "string" || typeof payload.tenantId !== "string") {
+        typeof payload.role !== "string" || typeof payload.tenantId !== "string" ||
+        typeof payload.sessionId !== "string" || payload.sessionId.length === 0) {
       return res.status(401).json({ success: false, message: "Non authentifié - Token invalide" });
     }
-    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : undefined;
-    if (sessionId) {
+    const sessionId = payload.sessionId;
       const active = await pool.query(
         `SELECT 1 FROM user_sessions
          WHERE id = $1 AND user_id = $2 AND tenant_id = $3
@@ -31,7 +31,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
     req.user = {
       id: payload.sub, email: payload.email, role: payload.role,
-      tenantId: payload.tenantId, ...(sessionId ? { sessionId } : {})
+      tenantId: payload.tenantId, sessionId
     };
     req.tenantId = payload.tenantId;
     return next();
