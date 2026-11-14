@@ -18,6 +18,7 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
         `SELECT t.name AS "companyName", d.id, d.origin, d.destination,
                 d.departure_at AS "departureAt", d.vehicle_code AS "vehicleCode",
                 d.capacity, d.fare_amount AS "fareAmount",
+                d.company_booking_fee AS "companyBookingFee",
                 COUNT(b.id) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
          FROM tenants t JOIN departures d ON d.tenant_id = t.id
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
@@ -48,7 +49,7 @@ router.post("/:publicCode/reservations", [
     await client.query("BEGIN");
     const departure = await client.query(
       `SELECT t.id AS tenant_id, t.name AS company_name, d.id, d.origin, d.destination,
-              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount
+              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount, d.company_booking_fee
        FROM tenants t JOIN departures d ON d.tenant_id = t.id
        WHERE t.public_code = $1 AND d.id = $2 AND d.status = 'SCHEDULED'
          AND d.departure_at > NOW() FOR UPDATE OF d`,
@@ -78,11 +79,11 @@ router.post("/:publicCode/reservations", [
       return res.status(409).json({ success: false, message: "Aucune place disponible" });
     }
     const bookingResult = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, seat_number)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, seat_number, status, created_at`,
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, company_booking_fee, seat_number, status, created_at`,
       [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(),
-        Number(trip.fare_amount), seatNumber]
+        Number(trip.fare_amount), Number(trip.company_booking_fee), seatNumber]
     );
     await client.query("COMMIT");
     const booking = bookingResult.rows[0];
@@ -95,7 +96,10 @@ router.post("/:publicCode/reservations", [
       companyName: trip.company_name, passengerName: booking.passenger_name,
       passengerPhone: booking.passenger_phone, origin: trip.origin, destination: trip.destination,
       departureAt: trip.departure_at, vehicleCode: trip.vehicle_code, seatNumber: booking.seat_number,
-      totalAmount: Number(booking.amount_transport) + Number(booking.platform_fee),
+      transportAmount: Number(booking.amount_transport),
+      companyBookingFee: Number(booking.company_booking_fee),
+      platformFee: Number(booking.platform_fee),
+      totalAmount: Number(booking.amount_transport) + Number(booking.company_booking_fee) + Number(booking.platform_fee),
       paymentStatus: "NOT_INITIATED", bookingStatus: booking.status, qrCode
     }, message: "Réservation enregistrée. Votre billet est prêt; le paiement reste à effectuer auprès de la compagnie." });
   } catch (error) {
@@ -111,7 +115,7 @@ router.get("/:publicCode/ticket/:ticketToken", [
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await pool.query(
-      `SELECT b.id, b.ticket_token, b.passenger_name, b.amount_transport, b.platform_fee,
+      `SELECT b.id, b.ticket_token, b.passenger_name, b.amount_transport, b.platform_fee, b.company_booking_fee,
               b.seat_number, b.status AS booking_status, d.origin, d.destination,
               d.departure_at, d.vehicle_code, d.status AS departure_status, t.name AS company_name,
               COALESCE(p.status, 'NOT_INITIATED') AS payment_status,
@@ -129,7 +133,10 @@ router.get("/:publicCode/ticket/:ticketToken", [
       bookingId: ticket.id, companyName: ticket.company_name, passengerName: ticket.passenger_name,
       origin: ticket.origin, destination: ticket.destination, departureAt: ticket.departure_at,
       vehicleCode: ticket.vehicle_code, seatNumber: ticket.seat_number,
-      totalAmount: Number(ticket.amount_transport) + Number(ticket.platform_fee),
+      transportAmount: Number(ticket.amount_transport),
+      companyBookingFee: Number(ticket.company_booking_fee),
+      platformFee: Number(ticket.platform_fee),
+      totalAmount: Number(ticket.amount_transport) + Number(ticket.company_booking_fee) + Number(ticket.platform_fee),
       paymentStatus: ticket.payment_status, bookingStatus: ticket.booking_status,
       boarded: ticket.boarded, qrCode
     } });
