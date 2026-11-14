@@ -28,6 +28,42 @@ let scannerDetector;
 let scannerLastFrameAt = 0;
 let scannerDetecting = false;
 
+localStorage.removeItem("transora_token");
+let accessToken = null;
+let refreshPromise = null;
+let sessionRefreshTimer;
+const nativeFetch = window.fetch.bind(window);
+
+// Les jetons d'accès ne quittent jamais la mémoire de cette page.
+window.fetch = async (input, init = {}) => {
+  const requestUrl = typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+  const url = new URL(requestUrl, window.location.origin);
+  const isAuthBootstrap = /^\/api\/v1\/auth\/(login|register|refresh)$/.test(url.pathname);
+  if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/v1/") || isAuthBootstrap) {
+    return nativeFetch(input, init);
+  }
+
+  let attemptedRefresh = false;
+  if (!accessToken) {
+    attemptedRefresh = true;
+    await refreshAccessToken();
+  }
+
+  const sendAuthorizedRequest = () => {
+    const sourceHeaders = init.headers || (input instanceof Request ? input.headers : undefined);
+    const headers = new Headers(sourceHeaders);
+    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+    else headers.delete("Authorization");
+    return nativeFetch(input, { ...init, headers, credentials: init.credentials || "same-origin" });
+  };
+
+  let response = await sendAuthorizedRequest();
+  if (response.status === 401 && !attemptedRefresh && await refreshAccessToken()) {
+    response = await sendAuthorizedRequest();
+  }
+  return response;
+};
+
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("visible");
@@ -235,7 +271,7 @@ function applyDashboard(data) {
 }
 
 async function loadDashboard() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   const refresh = document.querySelector("#dashboard-refresh");
   if (!token) {
     document.querySelector("#overview-data-status").textContent = "Connectez-vous pour charger vos données.";
@@ -268,7 +304,7 @@ async function loadDashboard() {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Impossible de charger le tableau de bord.");
@@ -388,7 +424,7 @@ function renderVoyages() {
   document.querySelector("#voyage-seats").textContent = new Intl.NumberFormat("fr-FR").format(
     voyageDepartures.reduce((total, departure) => total + departure.availableSeats, 0)
   );
-  const authenticated = Boolean(localStorage.getItem("transora_token"));
+  const authenticated = Boolean(accessToken);
   const countBadge = document.querySelector("#voyage-count-badge");
   countBadge.textContent = String(voyageDepartures.length);
   countBadge.hidden = !authenticated || voyageDepartures.length === 0;
@@ -405,7 +441,7 @@ function renderVoyages() {
 }
 
 async function loadVoyages() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     voyageDepartures = [];
     voyageLoadError = false;
@@ -423,7 +459,7 @@ async function loadVoyages() {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Impossible de charger les départs.");
@@ -519,7 +555,7 @@ function renderFleet() {
   document.querySelector("#fleet-available").textContent = String(countByStatus("disponible"));
   document.querySelector("#fleet-active").textContent = String(countByStatus("en_service"));
   document.querySelector("#fleet-maintenance").textContent = String(countByStatus("en_maintenance"));
-  const authenticated = Boolean(localStorage.getItem("transora_token"));
+  const authenticated = Boolean(accessToken);
   const badge = document.querySelector("#fleet-count-badge");
   if (badge) {
     badge.textContent = String(fleetVehicles.length);
@@ -539,7 +575,7 @@ function renderFleet() {
 }
 
 async function loadFleet() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     fleetVehicles = [];
     fleetLoadError = false;
@@ -557,7 +593,7 @@ async function loadFleet() {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Impossible de charger les véhicules.");
@@ -675,7 +711,7 @@ function renderPayments() {
     payment.statut === "NOT_INITIATED" || payment.statut === "PENDING"
   ).length;
   document.querySelector("#payment-pending-total").textContent = String(unpaidCount);
-  const authenticated = Boolean(localStorage.getItem("transora_token"));
+  const authenticated = Boolean(accessToken);
   document.querySelector("#payment-list-caption").textContent = !authenticated
     ? "Connectez-vous pour consulter les paiements."
     : paymentLoadError
@@ -728,7 +764,7 @@ function renderReportOperations() {
     body.append(row);
   });
 
-  const authenticated = Boolean(localStorage.getItem("transora_token"));
+  const authenticated = Boolean(accessToken);
   document.querySelector("#report-list-caption").textContent = !authenticated
     ? "Connectez-vous pour consulter les rapports."
     : reportLoadError
@@ -745,7 +781,7 @@ function renderReportOperations() {
 }
 
 async function loadReports() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     reportOperations = [];
     reportLoadError = false;
@@ -791,7 +827,7 @@ async function loadReports() {
       const failedResponse = !statsResponse.ok ? statsResponse : operationsResponse;
       const failedResult = !statsResponse.ok ? statsResult : operationsResult;
       if (failedResponse.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(failedResult.message || "Impossible de charger les rapports.");
@@ -828,7 +864,7 @@ async function loadReports() {
 }
 
 async function exportFinancialReport() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     showToast("Connectez-vous pour exporter le rapport.");
     return;
@@ -852,7 +888,7 @@ async function exportFinancialReport() {
     if (!response.ok) {
       const result = await response.json();
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Impossible d'exporter le rapport.");
@@ -873,7 +909,7 @@ async function exportFinancialReport() {
 }
 
 async function loadPayments() {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     payments = [];
     paymentLoadError = false;
@@ -895,7 +931,7 @@ async function loadPayments() {
     const [listResult, statsResult] = await Promise.all([listResponse.json(), statsResponse.json()]);
     if (!listResponse.ok) {
       if (listResponse.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(listResult.message || "Impossible de charger les paiements.");
@@ -1043,7 +1079,7 @@ async function searchDashboard(value) {
     return;
   }
 
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     showGlobalSearchMessage("Connectez-vous pour rechercher dans les billets, clients, paiements et opérations.");
     return;
@@ -1061,7 +1097,7 @@ async function searchDashboard(value) {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Recherche impossible.");
@@ -1121,7 +1157,7 @@ function renderTicketCheck(ticket) {
 
 async function lookupScannedTicket(rawValue) {
   const ticketId = extractTicketId(rawValue);
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   const submit = document.querySelector("#scanner-submit");
   document.querySelector("#scanner-result").hidden = true;
   if (!token) {
@@ -1142,7 +1178,7 @@ async function lookupScannedTicket(rawValue) {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Billet introuvable.");
@@ -1234,7 +1270,7 @@ async function startTicketScanner() {
 }
 
 async function openTicket(bookingId) {
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   if (!token) {
     setAuthMode(false);
     authDialog.showModal();
@@ -1251,7 +1287,7 @@ async function openTicket(bookingId) {
     const result = await response.json();
     if (!response.ok) {
       if (response.status === 401) {
-        localStorage.removeItem("transora_token");
+        accessToken = null;
         setAuthenticatedState(false);
       }
       throw new Error(result.message || "Impossible de charger le billet.");
@@ -1389,7 +1425,7 @@ window.addEventListener("hashchange", showCurrentView);
 showCurrentView();
 
 document.querySelector("#voyages-add-departure").addEventListener("click", () => {
-  if (!localStorage.getItem("transora_token")) {
+  if (!accessToken) {
     showToast("Connectez-vous pour enregistrer un départ.");
     setAuthMode(false);
     authDialog.showModal();
@@ -1419,7 +1455,7 @@ document.querySelector("#voyage-rows").addEventListener("click", (event) => {
 });
 
 document.querySelector("#fleet-add-vehicle").addEventListener("click", () => {
-  if (!localStorage.getItem("transora_token")) {
+  if (!accessToken) {
     showToast("Connectez-vous pour gérer la flotte.");
     setAuthMode(false);
     authDialog.showModal();
@@ -1449,7 +1485,7 @@ document.querySelector("#fleet-rows").addEventListener("click", async (event) =>
   try {
     const response = await fetch(`/api/v1/flotte/${encodeURIComponent(vehicle.id)}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${localStorage.getItem("transora_token")}` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible de retirer le véhicule.");
@@ -1477,7 +1513,7 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("transora_token")}`
+        Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
         passengerName: values.passengerName,
@@ -1506,7 +1542,7 @@ document.querySelector("#fleet-form").addEventListener("submit", async (event) =
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form).entries());
   const submit = document.querySelector("#fleet-submit");
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   submit.disabled = true;
   try {
     const response = await fetch(
@@ -1592,14 +1628,14 @@ document.querySelector(".notification-button").addEventListener("click", () => {
 });
 
 loginButton.addEventListener("click", async () => {
-  if (localStorage.getItem("transora_token")) {
-    const token = localStorage.getItem("transora_token");
+  if (accessToken) {
+    const token = accessToken;
     try {
       await fetch("/api/v1/auth/logout", {
         method: "POST", headers: { Authorization: `Bearer ${token}` }
       });
     } finally {
-      localStorage.removeItem("transora_token");
+      accessToken = null;
       localStorage.removeItem("transora_user");
       window.location.reload();
     }
@@ -1634,7 +1670,7 @@ document.querySelector("#payment-dialog-close").addEventListener("click", () => 
   document.querySelector("#payment-dialog").close();
 });
 function openScannerDialog() {
-  if (!localStorage.getItem("transora_token")) {
+  if (!accessToken) {
     setAuthMode(false);
     authDialog.showModal();
     return;
@@ -1672,7 +1708,7 @@ document.querySelector("#payment-form").addEventListener("submit", async (event)
   const form = event.currentTarget;
   const submit = document.querySelector("#payment-submit");
   const values = Object.fromEntries(new FormData(form).entries());
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   submit.disabled = true;
   try {
     let transactionId = selectedPayment.transactionId;
@@ -1745,7 +1781,7 @@ document.querySelector("#payment-export").addEventListener("click", () => {
 
 const departureDialog = document.querySelector("#departure-dialog");
 document.querySelector("#add-departure-button").addEventListener("click", () => {
-  if (!localStorage.getItem("transora_token")) {
+  if (!accessToken) {
     showToast("Connectez-vous pour enregistrer un départ.");
     setAuthMode(false);
     authDialog.showModal();
@@ -1760,7 +1796,7 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
   event.preventDefault();
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form).entries());
-  const token = localStorage.getItem("transora_token");
+  const token = accessToken;
   const submit = document.querySelector("#departure-submit");
   submit.disabled = true;
 
@@ -1814,7 +1850,7 @@ authForm.addEventListener("submit", async (event) => {
     if (!response.ok) {
       throw new Error(result.message || "Authentification impossible.");
     }
-    localStorage.setItem("transora_token", result.data.token);
+    accessToken = result.data.token;
     localStorage.setItem("transora_user", JSON.stringify(result.data.user));
     startSessionRefresh();
     authDialog.close();
@@ -1831,33 +1867,44 @@ authForm.addEventListener("submit", async (event) => {
 });
 
 
-// Keep the short-lived access token fresh while the HttpOnly refresh cookie is valid.
-let refreshInFlight = false;
+// Le cookie HttpOnly restaure la session au chargement et renouvelle les jetons en mémoire.
 async function refreshAccessToken() {
-  if (refreshInFlight || !localStorage.getItem("transora_token")) return false;
-  refreshInFlight = true;
-  try {
-    const response = await fetch("/api/v1/auth/refresh", { method: "POST" });
-    if (!response.ok) throw new Error("Session expirée");
-    const result = await response.json();
-    localStorage.setItem("transora_token", result.data.token);
-    if (result.data.user) localStorage.setItem("transora_user", JSON.stringify(result.data.user));
-    return true;
-  } catch {
-    localStorage.removeItem("transora_token");
-    localStorage.removeItem("transora_user");
-    setAuthenticatedState(false);
-    return false;
-  } finally { refreshInFlight = false; }
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const response = await nativeFetch("/api/v1/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      if (!response.ok) throw new Error("Session expirée");
+      const result = await response.json();
+      if (!result.data?.token) throw new Error("Réponse de renouvellement invalide");
+      accessToken = result.data.token;
+      if (result.data.user) localStorage.setItem("transora_user", JSON.stringify(result.data.user));
+      setAuthenticatedState(true);
+      return true;
+    } catch {
+      accessToken = null;
+      localStorage.removeItem("transora_user");
+      setAuthenticatedState(false);
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
 }
-let sessionRefreshTimer;
 function startSessionRefresh() {
   if (sessionRefreshTimer) return;
   sessionRefreshTimer = window.setInterval(refreshAccessToken, 10 * 60 * 1000);
   window.addEventListener("focus", refreshAccessToken);
 }
-if (localStorage.getItem("transora_token")) startSessionRefresh();
-setAuthenticatedState(Boolean(localStorage.getItem("transora_token")));
+setAuthenticatedState(false);
+refreshAccessToken().then((restored) => {
+  if (restored) startSessionRefresh();
+  setAuthenticatedState(restored);
+  loadDashboard();
+});
 const now = new Date();
 document.querySelector("#today-label").textContent =
   new Intl.DateTimeFormat("fr-FR", {
@@ -1866,4 +1913,3 @@ document.querySelector("#today-label").textContent =
     month: "long",
     year: "numeric"
   }).format(now).toLocaleUpperCase("fr");
-loadDashboard();

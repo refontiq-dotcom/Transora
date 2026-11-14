@@ -34,6 +34,10 @@ describe("Auth session lifecycle", () => {
     userId = payload.data.user.id;
     cookie = registration.headers.get("set-cookie")?.split(";")[0] || "";
     expect(cookie).toContain("transora_refresh=");
+    const cookieHeader = registration.headers.get("set-cookie") || "";
+    expect(cookieHeader).toMatch(/HttpOnly/i);
+    expect(cookieHeader).toMatch(/SameSite=Strict/i);
+    expect(cookieHeader).toContain("Path=/api/v1/auth/refresh");
   });
 
   afterAll(async () => {
