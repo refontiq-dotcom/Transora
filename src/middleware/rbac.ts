@@ -17,21 +17,21 @@ const ROLE_PERMISSIONS: Record<string, ReadonlySet<Permission> | "*"> = {
   superviseur: new Set<Permission>([
     "dashboard.read", "voyages.read", "voyages.manage", "bookings.create",
     "seats.read", "seats.manage", "payments.read", "payments.manage",
-    "finance.read", "fleet.read", "fleet.manage", "personnel.read",
-    "personnel.manage", "incidents.read", "incidents.manage",
-    "notifications.read", "notifications.manage", "audit.read", "search.read"
+    "fleet.read", "personnel.read",
+    "personnel.manage", "incidents.read",
+    "notifications.read", "notifications.manage", "search.read"
   ]),
   agent_acceuil: new Set<Permission>([
     "voyages.read", "bookings.create", "seats.read", "seats.manage", "search.read"
   ]),
   caissier: new Set<Permission>([
-    "payments.read", "payments.manage", "finance.read"
+    "payments.read", "payments.manage", 
   ]),
   conducteur: new Set<Permission>([
     "voyages.read", "seats.read", "incidents.read", "incidents.manage", "notifications.read"
   ]),
   mécanicien: new Set<Permission>([
-    "fleet.read", "fleet.manage", "incidents.read", "incidents.manage"
+    "fleet.read", "incidents.read"
   ])
 };
 
