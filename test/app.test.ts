@@ -64,7 +64,7 @@ test("global search rejects terms that are too short", async () => {
   const token = jwt.sign(
     { email: "agent@example.test", role: "administrateur", tenantId: "550e8400-e29b-41d4-a716-446655440001" },
     secret,
-    { subject: "550e8400-e29b-41d4-a716-446655440002" }
+    { subject: "550e8400-e29b-41d4-a716-446655440002", algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
   );
   try {
     const response = await fetch(`${baseUrl}/api/v1/recherche?q=a`, {
