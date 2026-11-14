@@ -304,6 +304,74 @@ test("company route tariffs control departures and preserve historical reservati
     expect(bookingBody.data.companyBookingFee).toBe(250);
     expect(bookingBody.data.platformFee).toBe(100);
 
+    const companyInfo = await pool.query("SELECT public_code FROM tenants WHERE id = $1", [tenantId]);
+    const publicReservation = await fetch(`${baseUrl}/api/public/${companyInfo.rows[0].public_code}/reservations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        departureId: departureBody.data.id,
+        passengerName: "Passager Web Tarif",
+        passengerPhone: "+2250700000000"
+      })
+    });
+    expect(publicReservation.status).toBe(201);
+    const publicReservationBody = await publicReservation.json() as {
+      data: { bookingId: string; transportAmount: number; companyBookingFee: number; platformFee: number; totalAmount: number }
+    };
+    expect(publicReservationBody.data.transportAmount).toBe(4500);
+    expect(publicReservationBody.data.companyBookingFee).toBe(250);
+    expect(publicReservationBody.data.platformFee).toBe(100);
+    expect(publicReservationBody.data.totalAmount).toBe(4850);
+
+    const cashDeskSession = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({ openingAmount: 50000 })
+    });
+    expect(cashDeskSession.status).toBe(201);
+
+    const cashDeskSale = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({ departureId: departureBody.data.id, passengerName: "Passager Guichet Tarif" })
+    });
+    expect(cashDeskSale.status).toBe(201);
+    const cashDeskSaleBody = await cashDeskSale.json() as {
+      data: { id: string; amountTransport: number; companyBookingFee: number; platformFee: number; totalPaid: number }
+    };
+    expect(cashDeskSaleBody.data.amountTransport).toBe(4500);
+    expect(cashDeskSaleBody.data.companyBookingFee).toBe(250);
+    expect(cashDeskSaleBody.data.platformFee).toBe(100);
+    expect(cashDeskSaleBody.data.totalPaid).toBe(4850);
+
+    const cashDeskPayment = await pool.query(
+      `SELECT amount_transport, company_booking_fee, platform_fee, status
+       FROM payments WHERE booking_id = $1 AND tenant_id = $2`,
+      [cashDeskSaleBody.data.id, tenantId]
+    );
+    expect(cashDeskPayment.rowCount).toBe(1);
+    expect(Number(cashDeskPayment.rows[0].amount_transport)).toBe(4500);
+    expect(Number(cashDeskPayment.rows[0].company_booking_fee)).toBe(250);
+    expect(Number(cashDeskPayment.rows[0].platform_fee)).toBe(100);
+    expect(cashDeskPayment.rows[0].status).toBe("CONFIRMED");
+
+    const cashDeskOperation = await pool.query(
+      "SELECT amount FROM guichet_operations WHERE booking_id = $1 AND tenant_id = $2 AND type = 'SALE'",
+      [cashDeskSaleBody.data.id, tenantId]
+    );
+    expect(cashDeskOperation.rowCount).toBe(1);
+    expect(Number(cashDeskOperation.rows[0].amount)).toBe(4850);
+
+    const cashDeskSessionBody = await cashDeskSession.json() as { data: { id: string } };
+    const closeCashDesk = await fetch(`${baseUrl}/api/v1/guichet/session/${cashDeskSessionBody.data.id}/close`, {
+      method: "POST",
+      headers: headersA,
+      body: JSON.stringify({ closingAmount: 54850 })
+    });
+    expect(closeCashDesk.status).toBe(200);
+    const closeCashDeskBody = await closeCashDesk.json() as { data: { discrepancy: number } };
+    expect(closeCashDeskBody.data.discrepancy).toBe(0);
+
     const updateResponse = await fetch(`${baseUrl}/api/v1/tarifs/${tariffBody.data.id}`, {
       method: "PATCH", headers: headersA,
       body: JSON.stringify({ fareAmount: 5200, companyBookingFee: 400 })
@@ -313,13 +381,16 @@ test("company route tariffs control departures and preserve historical reservati
     const snapshots = await pool.query(
       `SELECT d.fare_amount, d.company_booking_fee, b.amount_transport, b.company_booking_fee AS booking_company_fee
        FROM departures d JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
-       WHERE d.id = $1 AND b.id = $2 AND d.tenant_id = $3`,
-      [departureBody.data.id, bookingBody.data.id, tenantId]
+       WHERE d.id = $1 AND b.id = ANY($2::uuid[]) AND d.tenant_id = $3`,
+      [departureBody.data.id,
+        [bookingBody.data.id, publicReservationBody.data.bookingId, cashDeskSaleBody.data.id],
+        tenantId]
     );
+    expect(snapshots.rowCount).toBe(3);
     expect(Number(snapshots.rows[0].fare_amount)).toBe(4500);
     expect(Number(snapshots.rows[0].company_booking_fee)).toBe(250);
-    expect(Number(snapshots.rows[0].amount_transport)).toBe(4500);
-    expect(Number(snapshots.rows[0].booking_company_fee)).toBe(250);
+    expect(snapshots.rows.every(row => Number(row.amount_transport) === 4500)).toBe(true);
+    expect(snapshots.rows.every(row => Number(row.booking_company_fee) === 250)).toBe(true);
   } finally {
     await pool.query("DELETE FROM tenants WHERE id = $1", [tenantB]);
   }
