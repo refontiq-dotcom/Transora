@@ -278,7 +278,10 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     const saleBody = await saleResponse.json() as { data: { id: string; ticketToken: string; totalPaid: number; seatNumber: number } };
     expect(saleBody.data.seatNumber).toBe(2);
 
-    await pool.query("UPDATE departures SET status = 'BOARDING' WHERE id = $1 AND tenant_id = $2", [departureId, tenantId]);
+    const openBoarding = await fetch(`${baseUrl}/api/v1/voyages/departures/${departureId}/status`, {
+      method: "PATCH", headers: headersA, body: JSON.stringify({ status: "BOARDING" })
+    });
+    expect(openBoarding.status).toBe(200);
     const boardingResponse = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
       method: "POST", headers: headersA, body: JSON.stringify({ billetId: saleBody.data.ticketToken, scannerId: "test-scanner" })
     });
