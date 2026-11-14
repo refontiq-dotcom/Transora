@@ -1912,4 +1912,3 @@ document.querySelector("#today-label").textContent =
     month: "long",
     year: "numeric"
   }).format(now).toLocaleUpperCase("fr");
-loadDashboard();
