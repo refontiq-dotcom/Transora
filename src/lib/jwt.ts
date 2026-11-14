@@ -15,7 +15,7 @@ export interface AccessTokenClaims {
   email: string;
   role: string;
   tenantId: string;
-  sessionId?: string;
+  sessionId: string;
 }
 
 export const createAccessToken = (user: AccessTokenClaims): string => {
@@ -25,7 +25,7 @@ export const createAccessToken = (user: AccessTokenClaims): string => {
   };
   return jwt.sign({
     email: user.email, role: user.role, tenantId: user.tenantId,
-    ...(user.sessionId ? { sessionId: user.sessionId } : {})
+    sessionId: user.sessionId
   }, getJwtSecret(), options);
 };
 
@@ -35,7 +35,8 @@ export const verifyAccessToken = (token: string): JwtPayload => {
     maxAge: JWT_ACCESS_TOKEN_TTL, clockTolerance: 5
   });
   if (typeof payload === "string" || typeof payload.iat !== "number" ||
-      typeof payload.exp !== "number" || payload.exp <= payload.iat) {
+      typeof payload.exp !== "number" || payload.exp <= payload.iat ||
+      typeof payload.sessionId !== "string" || payload.sessionId.length === 0) {
     throw new jwt.JsonWebTokenError("Token JWT incomplet ou invalide");
   }
   return payload;
