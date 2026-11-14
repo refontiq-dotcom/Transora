@@ -7,8 +7,8 @@ import { NextFunction, Request, Response } from "express";
 export type Permission =
   | "dashboard.read" | "voyages.read" | "voyages.manage" | "bookings.create"
   | "seats.read" | "seats.manage" | "payments.read" | "payments.manage"
-  | "finance.read" | "fleet.read" | "fleet.manage" | "personnel.read"
-  | "personnel.manage" | "incidents.read" | "incidents.manage"
+  | "finance.read" | "finance.manage" | "fleet.read" | "fleet.update" | "fleet.manage" | "personnel.read"
+  | "personnel.manage" | "incidents.read" | "incidents.report" | "incidents.manage"
   | "notifications.read" | "notifications.manage" | "audit.read" | "search.read"
   | "tenant.manage";
 
@@ -17,15 +17,15 @@ const ROLE_PERMISSIONS: Record<string, ReadonlySet<Permission> | "*"> = {
   superviseur: new Set<Permission>([
     "dashboard.read", "voyages.read", "voyages.manage", "bookings.create",
     "seats.read", "seats.manage", "payments.read", "payments.manage",
-    "fleet.read", "personnel.read",
-    "personnel.manage", "incidents.read",
-    "notifications.read", "notifications.manage", "search.read"
+    "finance.read", "finance.manage", "fleet.read", "fleet.update", "fleet.manage", "personnel.read",
+    "personnel.manage", "incidents.read", "incidents.report", "incidents.manage",
+    "notifications.read", "notifications.manage", "audit.read", "search.read"
   ]),
   agent_acceuil: new Set<Permission>([
     "voyages.read", "bookings.create", "seats.read", "seats.manage", "search.read"
   ]),
   caissier: new Set<Permission>([
-    "payments.read", "payments.manage", 
+    "payments.read", "payments.manage"
   ]),
   conducteur: new Set<Permission>([
     "voyages.read", "seats.read", "incidents.read", "notifications.read"
