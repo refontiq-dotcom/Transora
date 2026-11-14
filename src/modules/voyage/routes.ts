@@ -36,7 +36,6 @@ router.post(
     body("departureAt").isISO8601(),
     body("vehicleCode").isString().trim().notEmpty(),
     body("capacity").isInt({ min: 1 }),
-    body("fareAmount").isInt({ min: 1 }),
     body("status").optional().isIn(["SCHEDULED", "BOARDING", "DEPARTED", "CANCELLED"])
   ],
   validate,
@@ -47,13 +46,29 @@ router.post(
     }
 
     try {
-      const { origin, destination, departureAt, vehicleCode, capacity, fareAmount, status } = req.body;
+      const { origin, destination, departureAt, vehicleCode, capacity, status } = req.body;
+      const tariff = await pool.query<{ id: string; fare_amount: number; company_booking_fee: number }>(
+        `SELECT id, fare_amount, company_booking_fee
+         FROM company_route_tariffs
+         WHERE tenant_id = $1 AND is_active = TRUE
+           AND lower(regexp_replace(btrim(origin), '\\s+', ' ', 'g')) =
+               lower(regexp_replace(btrim($2), '\\s+', ' ', 'g'))
+           AND lower(regexp_replace(btrim(destination), '\\s+', ' ', 'g')) =
+               lower(regexp_replace(btrim($3), '\\s+', ' ', 'g'))
+         LIMIT 1`,
+        [tenantId, origin.trim(), destination.trim()]
+      );
+      if (!tariff.rowCount) return res.status(409).json({
+        success: false,
+        message: "Aucun tarif actif n'est configuré pour ce trajet. Créez d'abord son tarif dans Gestion des tarifs."
+      });
       const result = await pool.query(
         `INSERT INTO departures
-           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, route_tariff_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, origin, destination, departure_at AS "departureAt",
-                   vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount", status`,
+                   vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount",
+                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId", status`,
         [
           tenantId,
           origin.trim(),
@@ -61,7 +76,9 @@ router.post(
           departureAt,
           vehicleCode.trim(),
           Number(capacity),
-          Number(fareAmount),
+          Number(tariff.rows[0].fare_amount),
+          Number(tariff.rows[0].company_booking_fee),
+          tariff.rows[0].id,
           status || "SCHEDULED"
         ]
       );
@@ -93,8 +110,8 @@ router.post(
       transactionStarted = true;
       const { id } = req.params;
       const { passengerName } = req.body;
-      const departure = await client.query<{ capacity: number; fare_amount: number }>(
-        `SELECT capacity, fare_amount FROM departures
+      const departure = await client.query<{ capacity: number; fare_amount: number; company_booking_fee: number }>(
+        `SELECT capacity, fare_amount, company_booking_fee FROM departures
          WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED'
            AND departure_at > NOW()
          FOR UPDATE`,
@@ -142,12 +159,12 @@ router.post(
         return res.status(409).json({ success: false, message: "Aucune place disponible" });
       }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId",
                    passenger_name AS "passengerName", amount_transport AS "amountTransport",
-                   platform_fee AS "platformFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), Number(departure.rows[0].fare_amount), seatNumber]
+                   platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
+        [tenantId, id, passengerName.trim(), Number(departure.rows[0].fare_amount), Number(departure.rows[0].company_booking_fee), seatNumber]
       );
       await client.query("COMMIT");
       transactionStarted = false;
@@ -286,6 +303,7 @@ router.get(
               vehicleCode: departure.vehicle_code,
               capacity: departure.capacity,
               fareAmount: Number(departure.fare_amount),
+              companyBookingFee: Number(departure.company_booking_fee),
               reservedSeats,
               availableSeats: Math.max(0, departure.capacity - reservedSeats),
               occupancyRate: departure.capacity === 0
