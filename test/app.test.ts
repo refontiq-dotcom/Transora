@@ -791,3 +791,48 @@ test("administrator provisions a role-specific staff account and deactivation re
   const blockedSession = await fetch(`${baseUrl}/api/v1/courrier/colis`, { headers: agentHeaders });
   expect(blockedSession.status).toBe(401);
 });
+
+
+test("booking seats are protected by overlapping segment ranges and reusable on disjoint segments", async () => {
+  const departure = await pool.query(
+    `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount)
+     VALUES ($1, 'Abidjan', 'Bouaké', NOW() + INTERVAL '4 hours', 'SEGMENT-TEST', 2, 3000)
+     RETURNING id`,
+    [tenantId]
+  );
+  const departureId = departure.rows[0].id as string;
+
+  try {
+    const first = await pool.query(
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number, segment_range)
+       VALUES ($1, $2, 'Passager Segment A', 1000, 1, '[1,2)'::int4range)
+       RETURNING id, segment_range::text AS "segmentRange"`,
+      [tenantId, departureId]
+    );
+    expect(first.rows[0].segmentRange).toBe("[1,2)");
+
+    const adjacent = await pool.query(
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number, segment_range)
+       VALUES ($1, $2, 'Passager Segment B', 1000, 1, '[2,3)'::int4range)
+       RETURNING id, segment_range::text AS "segmentRange"`,
+      [tenantId, departureId]
+    );
+    expect(adjacent.rows[0].segmentRange).toBe("[2,3)");
+
+    await expect(pool.query(
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number, segment_range)
+       VALUES ($1, $2, 'Passager Chevauchant', 1000, 1, '[1,3)'::int4range)`,
+      [tenantId, departureId]
+    )).rejects.toMatchObject({ code: "23P01" });
+
+    const defaultRange = await pool.query(
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number)
+       VALUES ($1, $2, 'Passager Trajet Complet', 3000, 2)
+       RETURNING segment_range::text AS "segmentRange"`,
+      [tenantId, departureId]
+    );
+    expect(defaultRange.rows[0].segmentRange).toBe("[0,)");
+  } finally {
+    await pool.query("DELETE FROM departures WHERE id = $1 AND tenant_id = $2", [departureId, tenantId]);
+  }
+});
