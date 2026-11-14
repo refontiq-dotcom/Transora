@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { body, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const reviewAudit = authorize(["administrateur", "superviseur"]);
 
 const eventTypes = [
   "création",
@@ -84,6 +86,7 @@ router.post(
 // GET /api/v1/audit
 router.get(
   "/",
+  reviewAudit,
   dateFilters,
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -122,6 +125,7 @@ router.get(
 // GET /api/v1/audit/rapport
 router.get(
   "/rapport",
+  reviewAudit,
   [
     query("dateDébut").optional().isISO8601().withMessage("Date de début invalide"),
     query("dateFin").optional().isISO8601().withMessage("Date de fin invalide")
@@ -175,6 +179,7 @@ router.get(
 // POST /api/v1/audit/anti-fraude
 router.post(
   "/anti-fraude",
+  reviewAudit,
   [
     body("analyse").isObject().withMessage("L'analyse doit être un objet"),
     body("analyse.suspiciousActivities").optional().isArray(),
