@@ -4,8 +4,8 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const manageFleet = authorize(["administrateur", "superviseur"]);
-const readFleet = authorize(["administrateur", "superviseur", "conducteur", "mécanicien"]);
+const manageFleet = authorize(["administrateur", "responsable_logistique"]);
+const readFleet = authorize(["administrateur", "responsable_logistique", "responsable_exploitation", "chauffeur", "mécanicien"]);
 const statuses = ["disponible", "en_service", "en_maintenance", "hors_service"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
