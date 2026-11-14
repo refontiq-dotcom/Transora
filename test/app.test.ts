@@ -1,10 +1,16 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import jwt from "jsonwebtoken";
 import app from "../src/app";
+import { pool } from "../src/db/pool";
+import { createAccessToken } from "../src/lib/jwt";
 import type { AddressInfo } from "node:net";
 
 let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
+let tenantId: string;
+let userId: string;
+let sessionId: string;
+let accessToken: string;
+const previousJwtSecret = process.env.JWT_SECRET;
 
 beforeAll(async () => {
   server = app.listen(0);
@@ -14,9 +20,30 @@ beforeAll(async () => {
   });
   const address = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${address.port}`;
+
+  process.env.JWT_SECRET = "test-app-session-bound-token-secret-32";
+  const tenant = await pool.query("INSERT INTO tenants (name) VALUES ('App Test Tenant') RETURNING id");
+  tenantId = tenant.rows[0].id;
+  const user = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'App Test User', $2, 'test-hash', 'administrateur') RETURNING id`,
+    [tenantId, `app-test-${Date.now()}@example.test`]
+  );
+  userId = user.rows[0].id;
+  sessionId = `app-test-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [sessionId, userId, tenantId, "a".repeat(64)]
+  );
+  accessToken = createAccessToken({
+    id: userId, email: `app-test-${Date.now()}@example.test`, role: "administrateur", tenantId, sessionId
+  });
 });
 
 afterAll(async () => {
+  if (tenantId) await pool.query("DELETE FROM tenants WHERE id = $1", [tenantId]);
+  if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
+  else process.env.JWT_SECRET = previousJwtSecret;
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
   });
@@ -75,25 +102,12 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
 });
 
 test("global search rejects terms that are too short", async () => {
-  const previousSecret = process.env.JWT_SECRET;
-  const secret = "test-search-route-signing-secret";
-  process.env.JWT_SECRET = secret;
-  const token = jwt.sign(
-    { email: "agent@example.test", role: "administrateur", tenantId: "550e8400-e29b-41d4-a716-446655440001" },
-    secret,
-    { subject: "550e8400-e29b-41d4-a716-446655440002", algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
-  );
-  try {
-    const response = await fetch(`${baseUrl}/api/v1/recherche?q=a`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    expect(response.status).toBe(400);
-    const body = await response.json() as { success?: boolean };
-    expect(body.success).toBe(false);
-  } finally {
-    if (previousSecret === undefined) delete process.env.JWT_SECRET;
-    else process.env.JWT_SECRET = previousSecret;
-  }
+  const response = await fetch(`${baseUrl}/api/v1/recherche?q=a`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  expect(response.status).toBe(400);
+  const body = await response.json() as { success?: boolean };
+  expect(body.success).toBe(false);
 });
 
 test("dashboard assets are served from the web root", async () => {
