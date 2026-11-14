@@ -222,9 +222,12 @@
               <h1>Voyages</h1>
               <p class="subheading">Programmez les départs, suivez le remplissage et gérez les réservations.</p>
             </div>
-            <button class="primary-button" id="voyages-add-departure" type="button">
-              <span>+ Nouveau départ</span>
-            </button>
+            <div class="heading-actions">
+              <button class="secondary-button" id="voyages-manage-fares" type="button">Gérer les tarifs</button>
+              <button class="primary-button" id="voyages-add-departure" type="button">
+                <span>+ Nouveau départ</span>
+              </button>
+            </div>
           </section>
 
           <section class="voyage-summary" aria-label="Résumé des départs">
@@ -477,8 +480,21 @@
         <h2>Réserver une place</h2>
         <p class="auth-description" id="booking-trip-description"></p>
         <label>Nom du passager<input name="passengerName" required maxlength="160"></label>
-        <label>Prix du transport (FCFA)<input name="amountTransport" type="number" min="1" step="1" required></label>
+        <p class="auth-description" id="booking-price"></p>
         <button class="primary-button auth-submit" type="submit" id="booking-submit"><span>Créer la réservation</span></button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="fare-dialog">
+      <form class="auth-form" id="fare-form">
+        <button class="dialog-close" id="fare-dialog-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">TARIFICATION</p>
+        <h2>Tarifs des trajets</h2>
+        <p class="auth-description">Définissez le prix du transport pour chaque trajet. Le montant sera appliqué automatiquement à chaque réservation.</p>
+        <label>Ville de départ<input name="origin" required minlength="2" maxlength="100"></label>
+        <label>Destination<input name="destination" required minlength="2" maxlength="100"></label>
+        <label>Prix du transport (FCFA)<input name="amountFcfa" type="number" min="1" max="100000000" step="1" required></label>
+        <button class="primary-button auth-submit" type="submit" id="fare-submit">Enregistrer le tarif</button>
+        <div class="fare-list" id="fare-list" aria-live="polite"></div>
       </form>
     </dialog>
     <dialog class="auth-dialog" id="fleet-dialog">
