@@ -53,7 +53,7 @@ test("operational employee roles cannot access financial data or write operation
     request("/api/v1/flotte", "gestionnaire_flotte", { method: "POST" }),
     request("/api/v1/voyages/departures", "agent_acceuil", { method: "POST" }),
     request("/api/v1/paiements", "guichetier"),
-    request("/api/v1/audit", "superviseur")
+    request("/api/v1/audit", "superviseur", { method: "POST", body: JSON.stringify({}) })
   ]);
 
   for (const response of [finance, fleetWrite, departureWrite, paymentRead, auditRead]) {
@@ -83,8 +83,10 @@ test("the provisioned role matrix grants only the intended operational permissio
   expect(hasPermission("caissier", "payments.manage")).toBe(true);
   expect(hasPermission("caissier", "voyages.manage")).toBe(false);
   expect(hasPermission("conducteur", "incidents.read")).toBe(true);
+  expect(hasPermission("conducteur", "incidents.report")).toBe(true);
   expect(hasPermission("conducteur", "finance.read")).toBe(false);
-  expect(hasPermission("mécanicien", "fleet.read")).toBe(false);
+  expect(hasPermission("mécanicien", "fleet.read")).toBe(true);
+  expect(hasPermission("mécanicien", "fleet.update")).toBe(true);
   expect(hasPermission("mécanicien", "personnel.manage")).toBe(false);
   expect(hasPermission("rh", "personnel.manage")).toBe(false);
   expect(hasPermission("unknown", "dashboard.read")).toBe(false);
