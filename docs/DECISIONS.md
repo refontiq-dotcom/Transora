@@ -13,5 +13,6 @@
 | D-009 | Correspondance jamais proposée sur simple proximité horaire | VALIDÉ |
 | D-010 | Première mission agent = audit sans code fonctionnel | VALIDÉ |
 | D-011 | L'IA est assistive pour les décisions critiques | VALIDÉ |
+| D-012 | Les tarifs transport sont gérés par entreprise et calculés côté serveur ; les réservations conservent un instantané du tarif et des frais TRANSORA | VALIDÉ |
 
 Toute nouvelle décision structurante doit être ajoutée ici avant ou avec son implémentation.
