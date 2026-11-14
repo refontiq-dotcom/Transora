@@ -678,6 +678,13 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   });
   expect(payment.status).toBe(200);
 
+  const receipt = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/recu`, { headers: adminHeaders });
+  expect(receipt.status).toBe(200);
+  const receiptBody = await receipt.json() as { data: { type: string; trackingCode: string; amountFcfa: number } };
+  expect(receiptBody.data.type).toBe("recu_courrier");
+  expect(receiptBody.data.trackingCode).toBe(createdBody.data.trackingCode);
+  expect(receiptBody.data.amountFcfa).toBe(2500);
+
   const assignment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/affectation`, {
     method: "PATCH", headers: adminHeaders,
     body: JSON.stringify({ departureId: departureBody.data.id, driverUserId: driverId })
