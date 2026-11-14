@@ -7,7 +7,14 @@ ALTER TABLE departures
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS seat_number INTEGER
   CHECK (seat_number IS NULL OR seat_number > 0),
-  ADD COLUMN IF NOT EXISTS ticket_token UUID NOT NULL DEFAULT gen_random_uuid();
+  ADD COLUMN IF NOT EXISTS ticket_token UUID NOT NULL DEFAULT gen_random_uuid(),
+  ADD COLUMN IF NOT EXISTS passenger_phone TEXT;
+
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS public_code TEXT NOT NULL DEFAULT replace(gen_random_uuid()::text, '-', '');
+
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_public_code_unique
+  ON tenants (public_code);
 
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_ticket_token_unique
   ON bookings (ticket_token);
