@@ -9,6 +9,7 @@ import { Router, Request, Response } from "express";
 import { body, param, query, validationResult } from "express-validator";
 import { NextFunction } from "express";
 import { PoolClient } from "pg";
+import { authorize } from "../../middleware/auth";
 import { pool } from "../../db/pool";
 
 const router = Router();
@@ -28,6 +29,7 @@ const validate = (req: Request, res: Response, next: any) => {
 
 router.post(
   "/departures",
+  authorize(["administrateur"]),
   [
     body("origin").isString().trim().notEmpty(),
     body("destination").isString().trim().notEmpty(),
@@ -70,6 +72,7 @@ router.post(
 
 router.post(
   "/departures/:id/bookings",
+  authorize(["administrateur"]),
   [
     param("id").isUUID(),
     body("passengerName").isString().trim().notEmpty(),
