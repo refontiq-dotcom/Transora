@@ -144,7 +144,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     const tenantId = req.tenantId;
-    if (!tenantId) {
+    if (!tenantId || !req.user) {
       return res.status(401).json({ success: false, message: "Tenant non identifié" });
     }
 
