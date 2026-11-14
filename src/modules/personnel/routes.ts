@@ -178,9 +178,11 @@ router.put(
           "UPDATE users SET role = $3, is_active = $4 WHERE id = $1 AND tenant_id = $2",
           [employee.compteId, req.tenantId, employee.role, employee.statut === "actif"]
         );
-        if (employee.statut !== "actif") {
-          await pool.query("UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL", [employee.compteId, req.tenantId]);
-        }
+        // Toute modification de rôle ou de statut invalide les anciens jetons d'accès.
+        await pool.query(
+          "UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+          [employee.compteId, req.tenantId]
+        );
       }
       return res.json({ success: true, data: result.rows[0] });
     } catch (error) {
