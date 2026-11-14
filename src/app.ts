@@ -3,7 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import { resolve } from "path";
 import { pinoHttpMiddleware } from "./lib/logger";
-import { authenticate } from "./middleware/auth";
+import { authenticate, authorize } from "./middleware/auth";
 import { errorHandler } from "./middleware/error";
 import authRoutes from "./modules/auth/auth.routes";
 import tenantRoutes from "./modules/tenant/routes";
@@ -21,8 +21,27 @@ import searchRoutes from "./modules/recherche/routes";
 
 const app = express();
 
+const getAllowedOrigins = (): string[] =>
+  (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Les appels serveur-à-serveur et les clients sans Origin restent autorisés.
+    // Les navigateurs ne reçoivent des en-têtes CORS que pour les origines explicites.
+    if (!origin || getAllowedOrigins().includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type"],
+  credentials: false,
+  maxAge: 600
+}));
 app.use(pinoHttpMiddleware);
 app.use(express.json({ limit: "10kb" }));
 app.use(express.static(resolve(process.cwd(), "public")));
@@ -31,7 +50,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "transora-api", timestamp: new Date().toISOString() });
 });
 
-app.get("/metrics", (_req, res) => {
+app.get("/metrics", authenticate, authorize(["administrateur"]), (_req, res) => {
   res.json({
     service: "transora-api",
     uptime: process.uptime(),
