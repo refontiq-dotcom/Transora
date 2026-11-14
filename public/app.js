@@ -28,6 +28,7 @@ let scannerDetector;
 let scannerLastFrameAt = 0;
 let scannerDetecting = false;
 
+localStorage.removeItem("transora_token");
 let accessToken = null;
 let refreshPromise = null;
 let sessionRefreshTimer;
