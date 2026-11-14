@@ -1,9 +1,10 @@
 import express from "express";
+import type { Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createRateLimiter } from "../src/middleware/rate-limit";
 
-let server: ReturnType<typeof express.application.listen>;
+let server: Server;
 let baseUrl: string;
 
 beforeAll(async () => {
