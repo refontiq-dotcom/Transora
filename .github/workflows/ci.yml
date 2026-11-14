@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, fix/server-side-rbac]
+    branches: [main, fix/server-side-rbac, fix/auth-abuse-protection]
 
 jobs:
   test:
