@@ -16,6 +16,16 @@ ALTER TABLE tenants
 CREATE UNIQUE INDEX IF NOT EXISTS tenants_public_code_unique
   ON tenants (public_code);
 
+WITH ranked_bookings AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY departure_id ORDER BY created_at, id)::INTEGER AS seat_number
+  FROM bookings
+  WHERE status <> 'CANCELLED' AND seat_number IS NULL
+)
+UPDATE bookings b
+SET seat_number = ranked_bookings.seat_number
+FROM ranked_bookings
+WHERE b.id = ranked_bookings.id;
+
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_ticket_token_unique
   ON bookings (ticket_token);
 
