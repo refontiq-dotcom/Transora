@@ -1,8 +1,12 @@
 import { NextFunction, Request, Response, Router } from "express";
+import { authorize } from "../../middleware/auth";
 import { body, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
 
 const router = Router();
+
+// Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
+router.use(authorize(["administrateur"]));
 
 const eventTypes = [
   "création",
