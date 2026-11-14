@@ -231,6 +231,7 @@ function setAuthenticatedState(authenticated) {
     : " Mode démonstration · Connexion";
   loginButton.querySelector("span").style.background = authenticated ? "#55b968" : "#e6ad58";
   if (authenticated && window.location.hash === "#courrier") loadCourier();
+  if (authenticated && window.location.hash === "#personnel") loadPersonnel();
 }
 
 function applyDashboard(data) {
@@ -2298,7 +2299,8 @@ function showCurrentView() {
   const isReports = hash === "#reports";
   const isGuichet = hash === "#guichet";
   const isCourier = hash === "#courrier";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier;
+  const isPersonnel = hash === "#personnel";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
@@ -2306,8 +2308,9 @@ function showCurrentView() {
   document.querySelector("#reports-page").hidden = !isReports;
   document.querySelector("#guichet-page").hidden = !isGuichet;
   document.querySelector("#courier-page").hidden = !isCourier;
+  document.querySelector("#personnel-page").hidden = !isPersonnel;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -2318,6 +2321,7 @@ function showCurrentView() {
   if (isReports) loadReports();
   if (isGuichet) loadGuichet();
   if (isCourier) loadCourier();
+  if (isPersonnel) loadPersonnel();
 }
 
 window.addEventListener("hashchange", showCurrentView);
