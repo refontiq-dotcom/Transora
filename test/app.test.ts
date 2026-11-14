@@ -233,6 +233,13 @@ test("company route tariffs control departures and preserve historical reservati
     const headersA = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
     const headersB = { Authorization: `Bearer ${tokenB}`, "Content-Type": "application/json" };
 
+    const legacyDeparture = await pool.query(
+      `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount)
+       VALUES ($1, 'Ville Tarif A', 'Ville Tarif B', NOW() + INTERVAL '6 hours', 'TARIF-LEGACY', 2, 0)
+       RETURNING id`,
+      [tenantId]
+    );
+
     const tariffResponse = await fetch(`${baseUrl}/api/v1/tarifs`, {
       method: "POST", headers: headersA,
       body: JSON.stringify({
@@ -247,6 +254,14 @@ test("company route tariffs control departures and preserve historical reservati
     const tariffBody = await tariffResponse.json() as { data: { id: string; fareAmount: number; companyBookingFee: number } };
     expect(tariffBody.data.fareAmount).toBe(4500);
     expect(tariffBody.data.companyBookingFee).toBe(250);
+
+    const applyTariff = await fetch(`${baseUrl}/api/v1/voyages/departures/${legacyDeparture.rows[0].id}/tarif`, {
+      method: "PATCH", headers: headersA
+    });
+    expect(applyTariff.status).toBe(200);
+    const appliedBody = await applyTariff.json() as { data: { fareAmount: number; companyBookingFee: number } };
+    expect(appliedBody.data.fareAmount).toBe(4500);
+    expect(appliedBody.data.companyBookingFee).toBe(250);
 
     const ownTariffs = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersA });
     const ownBody = await ownTariffs.json() as { data: { tariffs: Array<{ id: string }> } };
