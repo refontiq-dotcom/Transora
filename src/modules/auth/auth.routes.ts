@@ -141,7 +141,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     }>(
       `SELECT s.id, s.user_id, s.tenant_id, u.email, u.role, u.name
        FROM user_sessions s JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
-       WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+       WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND u.is_active = TRUE
        FOR UPDATE OF s`,
       [hashToken(oldToken)]
     );
