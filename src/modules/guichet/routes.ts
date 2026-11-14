@@ -123,7 +123,7 @@ router.post("/vente", cashDeskRoles, [
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
                  amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
                  seat_number AS "seatNumber", created_at AS "createdAt"`,
-      [req.tenantId, trip.id, String(req.body.passengerName).trim(), Number(trip.fare_amount), seat]
+      [req.tenantId, trip.id, String(req.body.passengerName).trim(), Number(trip.fare_amount), Number(trip.company_booking_fee), seat]
     );
     const booking = inserted.rows[0];
     const total = Number(booking.amountTransport) + Number(booking.companyBookingFee) + Number(booking.platformFee);
