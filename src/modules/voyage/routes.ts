@@ -29,7 +29,6 @@ const validate = (req: Request, res: Response, next: any) => {
 
 router.post(
   "/departures",
-  authorizePermission("voyages.manage"),
   [
     body("origin").isString().trim().notEmpty(),
     body("destination").isString().trim().notEmpty(),
@@ -72,7 +71,6 @@ router.post(
 
 router.post(
   "/departures/:id/bookings",
-  authorizePermission("bookings.create"),
   [
     param("id").isUUID(),
     body("passengerName").isString().trim().notEmpty(),
