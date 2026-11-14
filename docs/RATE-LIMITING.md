@@ -8,7 +8,7 @@ Les routes d'inscription et de connexion utilisent un compteur par adresse IP et
 
 Quand Redis REST est configuré, chaque compteur est stocké dans Redis. Une opération Lua atomique incrémente le compteur et pose son expiration à la première requête. Toutes les instances de l'API consultent donc le même compteur.
 
-La clé Redis contient un hash SHA-256 de l'adresse IP plutôt que l'adresse IP en clair. Les espaces de noms séparent les limites d'inscription et de connexion.
+La clé Redis contient un hash SHA-256 de l'adresse IP plutôt que l'adresse IP en clair. Les espaces de noms séparent les limites d'inscription et de connexion. Le proxy inverse doit être configuré explicitement dans Express pour que req.ip représente la véritable IP cliente ; ne jamais faire confiance sans restriction à tous les en-têtes X-Forwarded-For.
 
 ## Configuration
 
