@@ -12,8 +12,13 @@
 
 import { Router, Request, Response } from "express";
 import { body, param, query, validationResult } from "express-validator";
+import { authorizePermission } from "../../middleware/rbac";
 
 const router = Router();
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "seats.read" : "seats.manage";
+  return authorizePermission(permission)(req, res, next);
+});
 
 const validate = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);

@@ -1,8 +1,15 @@
 import { NextFunction, Request, Response, Router } from "express";
+import { authorizePermission } from "../../middleware/rbac";
 import { body, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
 
 const router = Router();
+
+// Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "audit.read" : "audit.manage";
+  return authorizePermission(permission)(req, res, next);
+});
 
 const eventTypes = [
   "création",

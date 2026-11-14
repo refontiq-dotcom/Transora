@@ -23,6 +23,9 @@ Les transitions de départ et de billet doivent être contrôlées par des règl
 
 ## Sécurité
 - autorisation côté serveur
+- contrôle de rôle sur chaque module sensible ; par défaut, refus si le rôle ne figure pas explicitement dans la règle de la route
+- les rôles d'employés stockés dans le module Personnel ne constituent pas automatiquement des comptes applicatifs ni des permissions API
+- tant que l'administration des comptes et la matrice métier des rôles ne sont pas implémentées, les modules sensibles restent réservés au rôle `administrateur`
 - isolation par tenant
 - RBAC least privilege
 - secrets hors dépôt

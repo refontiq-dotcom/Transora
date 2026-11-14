@@ -1,8 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
+import { authorizePermission } from "../../middleware/rbac";
 import { query as queryValidator, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
 
 const router = Router();
+
+// Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
+router.use(authorizePermission("dashboard.read"));
 
 router.get(
   "/",
