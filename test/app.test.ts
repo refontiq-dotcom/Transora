@@ -268,8 +268,41 @@ test("company route tariffs control departures and preserve historical reservati
     expect(ownBody.data.tariffs.some(item => item.id === tariffBody.data.id)).toBe(true);
 
     const foreignTariffs = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersB });
-    const foreignBody = await foreignTariffs.json() as { data: { tariffs: unknown[] } };
+    const foreignBody = await foreignTariffs.json() as { data: { tariffs: Array<{ id: string }> } };
     expect(foreignBody.data.tariffs).toHaveLength(0);
+
+    const foreignTariffUpdate = await fetch(`${baseUrl}/api/v1/tarifs/${tariffBody.data.id}`, {
+      method: "PATCH", headers: headersB,
+      body: JSON.stringify({ fareAmount: 1, companyBookingFee: 0 })
+    });
+    expect(foreignTariffUpdate.status).toBe(404);
+
+    const foreignDepartureTariffApply = await fetch(`${baseUrl}/api/v1/voyages/departures/${legacyDeparture.rows[0].id}/tarif`, {
+      method: "PATCH", headers: headersB
+    });
+    expect(foreignDepartureTariffApply.status).toBe(409);
+
+    const spoofedTenantTariff = await fetch(`${baseUrl}/api/v1/tarifs`, {
+      method: "POST", headers: headersB,
+      body: JSON.stringify({
+        tenantId,
+        origin: "Ville Tarif A",
+        destination: "Ville Tarif B",
+        fareAmount: 9900,
+        companyBookingFee: 0
+      })
+    });
+    expect(spoofedTenantTariff.status).toBe(201);
+    const spoofedTenantTariffBody = await spoofedTenantTariff.json() as { data: { id: string } };
+
+    const companyATariffsAfterSpoof = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersA });
+    const companyATariffsAfterSpoofBody = await companyATariffsAfterSpoof.json() as { data: { tariffs: Array<{ id: string }> } };
+    expect(companyATariffsAfterSpoofBody.data.tariffs.some(item => item.id === spoofedTenantTariffBody.data.id)).toBe(false);
+
+    const companyBTariffsAfterSpoof = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersB });
+    const companyBTariffsAfterSpoofBody = await companyBTariffsAfterSpoof.json() as { data: { tariffs: Array<{ id: string }> } };
+    expect(companyBTariffsAfterSpoofBody.data.tariffs.some(item => item.id === tariffBody.data.id)).toBe(false);
+    expect(companyBTariffsAfterSpoofBody.data.tariffs.some(item => item.id === spoofedTenantTariffBody.data.id)).toBe(true);
 
     const missingTariffDeparture = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
       method: "POST", headers: headersA,
