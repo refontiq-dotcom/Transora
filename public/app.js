@@ -71,6 +71,13 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3200);
 }
 
+function setTicketImage(selector, source) {
+  if (typeof source !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(source)) {
+    throw new Error("Format d'image du billet invalide.");
+  }
+  document.querySelector(selector).src = source;
+}
+
 function updateActivity(activity) {
   const groups = Array.from(document.querySelectorAll(".bar-group"));
   const period = Number(document.querySelector("#period-select").value);
@@ -1048,7 +1055,6 @@ function renderGlobalSearchResults(results) {
     option.type = "button";
     option.setAttribute("role", "option");
     option.dataset.searchType = result.type;
-    option.dataset.searchHref = result.href;
     option.dataset.searchTitle = result.title;
     const heading = document.createElement("span");
     heading.className = "search-result-heading";
@@ -1299,8 +1305,8 @@ async function openTicket(bookingId) {
     document.querySelector("#ticket-title").textContent = `${ticket.origine} → ${ticket.destination}`;
     document.querySelector("#ticket-description").textContent =
       `${ticket.passager} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)}`;
-    document.querySelector("#ticket-qr").src = ticket.qrCode;
-    document.querySelector("#ticket-barcode").src = ticket.codeBarres;
+    setTicketImage("#ticket-qr", ticket.qrCode);
+    setTicketImage("#ticket-barcode", ticket.codeBarres);
     document.querySelector("#ticket-id").textContent = `Référence billet : ${ticket.billetId}`;
     dialog.showModal();
   } catch (error) {
@@ -1327,11 +1333,18 @@ globalSearch.addEventListener("keydown", (event) => {
   }
 });
 globalSearchResults.addEventListener("click", (event) => {
-  const option = event.target.closest("button[data-search-href]");
-  if (!option) return;
+  const option = event.target.closest("button[role='option']");
+  if (!option || !globalSearchResults.contains(option)) return;
   const type = option.dataset.searchType;
   const title = option.dataset.searchTitle;
-  const href = option.dataset.searchHref;
+  const destinations = {
+    billet: "#payments",
+    "départ": "#voyages",
+    "véhicule": "#flotte",
+    opération: "#reports"
+  };
+  const href = destinations[type];
+  if (!href) return;
   closeGlobalSearch();
   window.location.hash = href;
   window.setTimeout(() => {
