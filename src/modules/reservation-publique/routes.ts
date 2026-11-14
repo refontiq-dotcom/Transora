@@ -26,12 +26,10 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
          GROUP BY t.id, d.id ORDER BY d.departure_at LIMIT 100`,
         [req.params.publicCode]
       );
-      if (!result.rowCount) {
-        const tenant = await pool.query("SELECT 1 FROM tenants WHERE public_code = $1", [req.params.publicCode]);
-        if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
-      }
+      const tenant = await pool.query("SELECT name FROM tenants WHERE public_code = $1", [req.params.publicCode]);
+      if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
       return res.json({ success: true, data: {
-        companyName: result.rows[0]?.companyName || null,
+        companyName: tenant.rows[0].name,
         departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats))
           .map(row => ({ ...row, availableSeats: Number(row.capacity) - Number(row.reservedSeats) }))
       } });
