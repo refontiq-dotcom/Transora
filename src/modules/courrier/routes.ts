@@ -16,7 +16,7 @@ const courierReaders = authorize([
 ]);
 const manageTariffs = authorize(["administrateur", "responsable_courrier"]);
 const createParcel = authorize(["administrateur", "responsable_courrier", "agent_courrier"]);
-const receivePayment = authorize(["administrateur", "caissier", "responsable_courrier", "agent_courrier"]);
+const receivePayment = authorize(["administrateur", "caissier"]);
 const assignParcel = authorize(["administrateur", "responsable_exploitation", "responsable_courrier"]);
 const driverOnly = authorize(["chauffeur"]);
 const stationCourier = authorize(["administrateur", "responsable_courrier", "agent_courrier"]);
@@ -258,11 +258,19 @@ router.post("/colis/:id/paiement", receivePayment, [
     );
     if (!parcel.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Courrier introuvable" }); }
     if (parcel.rows[0].payment_status === "PAID") { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ce courrier est déjà payé" }); }
+    const cashSession = await client.query("SELECT id FROM guichet_sessions WHERE tenant_id = $1 AND opened_by = $2 AND status = 'OPEN' FOR UPDATE", [tenantId, req.user.id]);
+    if (!cashSession.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ouvrez votre session de caisse avant d’encaisser ce courrier" }); }
+    const sessionId = cashSession.rows[0].id as string;
     const amount = Number(parcel.rows[0].amount_fcfa);
     await client.query(
-      `INSERT INTO courier_payments (tenant_id, parcel_id, amount_fcfa, payment_method, received_by)
-       VALUES ($1, $2, $3, 'cash', $4)`,
-      [tenantId, req.params.id, amount, req.user.id]
+      `INSERT INTO courier_payments (tenant_id, parcel_id, session_id, amount_fcfa, payment_method, received_by)
+       VALUES ($1, $2, $3, $4, 'cash', $5)`,
+      [tenantId, req.params.id, sessionId, amount, req.user.id]
+    );
+    await client.query(
+      `INSERT INTO guichet_operations (tenant_id, session_id, type, amount, payment_method, description, recorded_by)
+       VALUES ($1, $2, 'SALE', $3, 'cash', $4, $5)`,
+      [tenantId, sessionId, amount, `Courrier ${parcel.rows[0].tracking_code}`, req.user.id]
     );
     await client.query(
       `UPDATE courier_parcels SET payment_status = 'PAID', payment_method = 'cash',
