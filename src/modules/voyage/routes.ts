@@ -14,6 +14,12 @@ import { pool } from "../../db/pool";
 
 const router = Router();
 
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "voyages.read"
+    : req.path.includes("/bookings") ? "bookings.create" : "voyages.manage";
+  return authorizePermission(permission)(req, res, next);
+});
+
 // Validation helpers
 const validate = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
