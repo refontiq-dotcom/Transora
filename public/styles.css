@@ -566,6 +566,7 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
 
 /* Service courrier */
 .courier-page { display: grid; gap: 18px; }
+.courier-page[hidden], .courier-form[hidden], #courier-login-message[hidden], #courier-empty[hidden], #courier-tariff-empty[hidden], #courier-tracking-result[hidden] { display: none; }
 .courier-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
 .courier-form label { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 650; }
 .courier-form input, .courier-form select, .courier-tracking-form input {
