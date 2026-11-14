@@ -58,7 +58,7 @@ router.get("/", paymentReaders, async (req: Request, res: Response, next: NextFu
 
 router.post(
   "/init",
-  paymentStaff,
+  paymentOperators,
   [
     body("billetId").isUUID().withMessage("L'ID billet est invalide"),
     body("moyenPaiement")
@@ -136,6 +136,7 @@ router.post(
 
 router.post(
   "/confirm",
+  paymentConfirmer,
   [
     body("transactionId").isUUID().withMessage("L'ID transaction est invalide"),
     body("preuvePaiement").isString().trim().notEmpty().withMessage("La preuve de paiement est requise")
@@ -150,12 +151,6 @@ router.post(
     let client: PoolClient | undefined;
     let transactionStarted = false;
     try {
-      if (req.user?.role !== "administrateur") {
-        return res.status(403).json({
-          success: false,
-          message: "Seul un administrateur peut confirmer un paiement"
-        });
-      }
 
       client = await pool.connect();
       const { transactionId, preuvePaiement } = req.body;
