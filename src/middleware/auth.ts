@@ -20,9 +20,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
     const sessionId = payload.sessionId;
     const active = await pool.query(
-      `SELECT 1 FROM user_sessions
-       WHERE id = $1 AND user_id = $2 AND tenant_id = $3
-         AND revoked_at IS NULL AND expires_at > NOW()`,
+      `SELECT 1 FROM user_sessions s
+       JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+       WHERE s.id = $1 AND s.user_id = $2 AND s.tenant_id = $3
+         AND s.revoked_at IS NULL AND s.expires_at > NOW() AND u.is_active = TRUE`,
       [sessionId, payload.sub, payload.tenantId]
     );
     if (!active.rowCount) return res.status(401).json({
