@@ -11,7 +11,7 @@ import { authorize, hasRole } from "../../middleware/auth";
 
 const router = Router();
 const courierReaders = authorize([
-  "administrateur", "responsable_exploitation",
+  "administrateur", "responsable_exploitation", "caissier",
   "responsable_courrier", "agent_courrier"
 ]);
 const manageTariffs = authorize(["administrateur", "responsable_courrier"]);
@@ -190,6 +190,21 @@ router.post("/colis", createParcel, [
     await client.query("ROLLBACK");
     return next(error);
   } finally { client.release(); }
+});
+
+router.get("/chauffeurs", assignParcel, async (req: Request, res: Response, next: NextFunction) => {
+  const tenantId = tenant(req, res);
+  if (!tenantId) return;
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role
+       FROM users
+       WHERE tenant_id = $1 AND is_active = TRUE AND role IN ('chauffeur', 'conducteur')
+       ORDER BY name`,
+      [tenantId]
+    );
+    return res.json({ success: true, data: result.rows });
+  } catch (error) { return next(error); }
 });
 
 router.get("/chauffeur/affectations", driverOnly, async (req: Request, res: Response, next: NextFunction) => {
