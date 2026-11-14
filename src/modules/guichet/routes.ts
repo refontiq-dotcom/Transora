@@ -104,7 +104,7 @@ router.post("/vente", cashDeskRoles, [
     const trip = departure.rows[0];
     if (Number(trip.fare_amount) <= 0) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Définissez le tarif de ce départ avant la vente" }); }
     const taken = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'",
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
       [trip.id, req.tenantId]
     );
     if (Number(taken.rowCount ?? 0) >= Number(trip.capacity)) {
@@ -118,8 +118,8 @@ router.post("/vente", cashDeskRoles, [
       await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Place indisponible" });
     }
     const inserted = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number)
-       VALUES ($1, $2, $3, $4, $5, 'PAID', $6)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range)
+       VALUES ($1, $2, $3, $4, $5, 'PAID', $6, '[0,)'::int4range)
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
                  amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
                  seat_number AS "seatNumber", created_at AS "createdAt"`,

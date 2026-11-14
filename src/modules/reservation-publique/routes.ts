@@ -65,7 +65,7 @@ router.post("/:publicCode/reservations", [
       return res.status(409).json({ success: false, message: "Ce départ n'a pas encore de tarif défini" });
     }
     const reservations = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'",
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
       [trip.id, trip.tenant_id]
     );
     const occupied = new Set(reservations.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
@@ -79,8 +79,8 @@ router.post("/:publicCode/reservations", [
       return res.status(409).json({ success: false, message: "Aucune place disponible" });
     }
     const bookingResult = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, '[0,)'::int4range)
        RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, company_booking_fee, seat_number, status, created_at`,
       [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(),
         Number(trip.fare_amount), Number(trip.company_booking_fee), seatNumber]
