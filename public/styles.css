@@ -545,3 +545,20 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
   .panel-heading h2 { font-size: 12px; }
   .activity-panel { padding-right: 12px; padding-left: 12px; }
 }
+
+
+/* Company route tariff management */
+.tariff-editor-panel, .tariff-list-panel { margin-bottom: 18px; }
+.tariff-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.tariff-form label { display: grid; gap: 7px; color: var(--ink); font-size: 13px; font-weight: 650; }
+.tariff-form input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: #fff; color: var(--ink); }
+.tariff-form-actions { display: flex; align-items: center; gap: 9px; grid-column: 1 / -1; }
+.tariff-note { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tariff-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.tariff-actions .secondary-button { min-height: 32px; padding: 6px 9px; font-size: 11px; }
+.tariff-table td { vertical-align: middle; }
+@media (max-width: 680px) {
+  .tariff-form { grid-template-columns: 1fr; }
+  .tariff-form-actions { grid-column: auto; flex-wrap: wrap; }
+  .tariff-actions { min-width: 132px; }
+}

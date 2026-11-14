@@ -42,6 +42,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
             <span>Vue d'ensemble</span>
           </a>
+          <a class="nav-link" href="#tarifs" data-nav="Gestion des tarifs">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18M5 7l2 13h10l2-13M9 7V5a3 3 0 0 1 6 0v2M9 12h6"/></svg>
+            <span>Tarifs</span>
+          </a>
           <a class="nav-link" href="#voyages" data-nav="Voyages">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 5.4 9a2 2 0 0 1 2-1.6h9.2a2 2 0 0 1 2 1.6l1.4 7.5"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19M7 11h10M8 14h.01M16 14h.01"/></svg>
             <span>Voyages</span><span class="nav-count" id="voyage-count-badge" hidden>0</span>
@@ -219,6 +223,44 @@
           </section>
           <footer class="page-footer"><span>© 2026 Transora</span><span>Votre réseau, en mouvement.</span></footer>
         </div>
+        <div class="content tariffs-page" id="tariffs-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">CONFIGURATION COMMERCIALE</p>
+              <h1>Gestion des tarifs</h1>
+              <p class="subheading">Définissez le prix de chaque trajet et les frais de réservation de votre compagnie.</p>
+            </div>
+          </section>
+          <section class="panel tariff-editor-panel">
+            <div class="panel-heading">
+              <div><h2 id="tariff-form-title">Ajouter un tarif</h2><p>Un tarif actif est requis pour programmer un nouveau départ.</p></div>
+            </div>
+            <form id="tariff-form" class="tariff-form">
+              <input type="hidden" name="tariffId" id="tariff-id">
+              <label>Ville de départ<input name="origin" required minlength="2" maxlength="100" placeholder="Ex. Abidjan"></label>
+              <label>Ville d'arrivée<input name="destination" required minlength="2" maxlength="100" placeholder="Ex. Bouaké"></label>
+              <label>Prix du transport (FCFA)<input name="fareAmount" type="number" min="1" step="1" required></label>
+              <label>Frais de réservation compagnie (FCFA)<input name="companyBookingFee" type="number" min="0" step="1" value="0" required></label>
+              <div class="tariff-form-actions">
+                <button class="primary-button" type="submit" id="tariff-submit">Enregistrer le tarif</button>
+                <button class="secondary-button" type="button" id="tariff-cancel-edit" hidden>Annuler</button>
+              </div>
+            </form>
+            <p class="tariff-note">Les frais TRANSORA de 100 FCFA par billet restent distincts et ne sont pas modifiables par la compagnie.</p>
+          </section>
+          <section class="panel tariff-list-panel">
+            <div class="panel-heading"><div><h2>Tarifs de votre compagnie</h2><p id="tariff-list-caption">Chargement des tarifs…</p></div><button class="secondary-button" id="tariff-refresh" type="button">Actualiser</button></div>
+            <div class="table-wrap">
+              <table class="voyage-table tariff-table">
+                <thead><tr><th>TRAJET</th><th>TRANSPORT</th><th>FRAIS COMPAGNIE</th><th>ÉTAT</th><th>OPTIONS</th></tr></thead>
+                <tbody id="tariff-rows"></tbody>
+              </table>
+              <p class="empty-state" id="tariff-empty" hidden>Aucun tarif n'est encore configuré.</p>
+              <p class="voyage-login-message" id="tariff-login-message" hidden>Connectez-vous pour gérer les tarifs de votre compagnie.</p>
+            </div>
+          </section>
+          <footer class="page-footer"><span>Les tarifs sont isolés par compagnie.</span><span>TRANSORA · Tarification</span></footer>
+        </div>
         <div class="content voyages-page" id="voyages-page" hidden>
           <section class="page-heading">
             <div>
@@ -337,6 +379,7 @@
           <section class="payment-summary" aria-label="Résumé des paiements">
             <article class="payment-summary-card"><span>À traiter</span><strong id="payment-pending-total">—</strong><small>réservations non réglées</small></article>
             <article class="payment-summary-card"><span>Transport encaissé</span><strong id="payment-revenue-total">—</strong><small>FCFA confirmés</small></article>
+            <article class="payment-summary-card"><span>Frais compagnie</span><strong id="payment-company-fees-total">—</strong><small>FCFA confirmés</small></article>
             <article class="payment-summary-card"><span>Frais TRANSORA</span><strong id="payment-fees-total">—</strong><small>FCFA confirmés</small></article>
           </section>
 
@@ -363,7 +406,7 @@
             <div class="table-wrap">
               <table class="payment-table">
                 <thead>
-                  <tr><th>PASSAGER / TRAJET</th><th>DÉPART</th><th>TRANSPORT</th><th>FRAIS</th><th>TOTAL</th><th>MOYEN</th><th>ÉTAT</th><th>OPTION</th></tr>
+                  <tr><th>PASSAGER / TRAJET</th><th>DÉPART</th><th>TRANSPORT</th><th>FRAIS COMPAGNIE</th><th>FRAIS TRANSORA</th><th>TOTAL</th><th>MOYEN</th><th>ÉTAT</th><th>OPTION</th></tr>
                 </thead>
                 <tbody id="payment-rows"></tbody>
               </table>
@@ -372,7 +415,7 @@
             </div>
           </section>
           <p class="payment-disclaimer">Les espèces et virements sont confirmés manuellement avec une preuve de règlement. Aucun opérateur mobile ou bancaire n'est encore connecté.</p>
-          <footer class="page-footer"><span>Les frais TRANSORA sont ajoutés au prix du transport.</span><span>Transora · Paiements</span></footer>
+          <footer class="page-footer"><span>Les frais compagnie et les frais TRANSORA sont affichés séparément du prix du transport.</span><span>Transora · Paiements</span></footer>
         </div>
         <div class="content reports-page" id="reports-page" hidden>
           <section class="page-heading">
@@ -405,6 +448,7 @@
           <section class="report-summary" aria-label="Résumé financier">
             <article class="report-summary-card"><span>Billets réglés</span><strong id="report-tickets">—</strong><small>paiements confirmés</small></article>
             <article class="report-summary-card"><span>Revenus transport</span><strong id="report-revenue">—</strong><small>FCFA sur la période</small></article>
+            <article class="report-summary-card"><span>Frais compagnie</span><strong id="report-company-fees">—</strong><small>FCFA sur la période</small></article>
             <article class="report-summary-card"><span>Frais TRANSORA</span><strong id="report-fees">—</strong><small>FCFA sur la période</small></article>
             <article class="report-summary-card"><span>Dépenses</span><strong id="report-expenses">—</strong><small>FCFA enregistrés</small></article>
             <article class="report-summary-card"><span>Remboursements</span><strong id="report-refunds">—</strong><small>FCFA enregistrés</small></article>
@@ -435,7 +479,7 @@
               <p class="report-message" id="report-message">Connectez-vous pour consulter les rapports de votre entreprise.</p>
             </div>
           </section>
-          <p class="report-disclaimer">Le bénéfice affiché est une estimation basée sur les opérations enregistrées; les frais TRANSORA sont présentés séparément.</p>
+          <p class="report-disclaimer">Le bénéfice estimé inclut les frais de réservation de votre compagnie; les frais TRANSORA sont présentés séparément.</p>
           <footer class="page-footer"><span>Les rapports sont générés à partir des données enregistrées.</span><span>Transora · Rapports</span></footer>
         </div>
         <div class="content" id="guichet-page" hidden>
@@ -494,7 +538,7 @@
         <label>Date et heure<input name="departureAt" type="datetime-local" required></label>
         <label>Code du véhicule<input name="vehicleCode" required maxlength="30"></label>
         <label>Capacité en places<input name="capacity" type="number" min="1" max="200" required></label>
-        <label>Tarif du trajet (FCFA)<input name="fareAmount" type="number" min="1" step="1" required></label>
+        <p class="auth-description">Le tarif et les frais seront automatiquement appliqués selon le trajet configuré dans Gestion des tarifs.</p>
         <button class="primary-button auth-submit" type="submit" id="departure-submit">Enregistrer le départ</button>
       </form>
     </dialog>

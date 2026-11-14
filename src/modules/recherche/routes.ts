@@ -62,8 +62,8 @@ router.get(
            WHERE b.tenant_id = $1 AND b.status <> 'CANCELLED'
              AND strpos(translate(lower(concat_ws(' ', b.id::text, p.id::text, b.passenger_name,
                  d.origin, d.destination, p.payment_method, p.status, p.proof,
-                 b.amount_transport::text, b.platform_fee::text,
-                 (b.amount_transport + b.platform_fee)::text,
+                 b.amount_transport::text, b.company_booking_fee::text, b.platform_fee::text,
+                 (b.amount_transport + b.company_booking_fee + b.platform_fee)::text,
                  to_char(d.departure_at, 'DD/MM/YYYY HH24:MI'), 'Mobile Money',
                  'Paiement confirmé', 'Paiement à confirmer', 'Espèces', 'Virement')),
                  'àâäéèêëîïôöùûüç', 'aaaeeeeiioouuuc'), $3) > 0
@@ -137,6 +137,7 @@ router.get(
         id: string;
         passenger_name: string;
         amount_transport: number;
+        company_booking_fee: number;
         platform_fee: number;
         booking_status: string;
         origin: string;
@@ -152,7 +153,7 @@ router.get(
         boarded_at: Date | null;
       }>(
         `SELECT b.id, b.ticket_token, b.seat_number, b.passenger_name,
-                b.amount_transport, b.platform_fee, b.status AS booking_status,
+                b.amount_transport, b.company_booking_fee, b.platform_fee, b.status AS booking_status,
                 d.origin, d.destination, d.departure_at, d.vehicle_code,
                 d.status AS departure_status, t.name AS company_name,
                 p.status AS payment_status, p.payment_method, be.boarded_at
@@ -225,7 +226,7 @@ router.get(
           destination: booking.destination,
           départLe: booking.departure_at,
           véhicule: booking.vehicle_code,
-          montantTotal: Number(booking.amount_transport) + Number(booking.platform_fee),
+          montantTotal: Number(booking.amount_transport) + Number(booking.company_booking_fee) + Number(booking.platform_fee),
           moyenPaiement: booking.payment_method,
           statutPaiement: booking.payment_status || "NOT_INITIATED",
           valide: valid,

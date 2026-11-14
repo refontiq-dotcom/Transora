@@ -53,7 +53,7 @@ router.get(
              JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
              WHERE b.tenant_id = $1 AND d.departure_at::date = $2::date
                AND b.status = 'PAID') AS passengers_today,
-           (SELECT COALESCE(SUM(amount_transport + platform_fee), 0) FROM payments
+           (SELECT COALESCE(SUM(amount_transport + company_booking_fee + platform_fee), 0) FROM payments
              WHERE tenant_id = $1 AND confirmed_at::date = $2::date
                AND status = 'CONFIRMED') AS revenue_today,
            (SELECT COALESCE(SUM(capacity), 0) FROM departures

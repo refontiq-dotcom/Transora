@@ -96,7 +96,7 @@ router.post("/vente", cashDeskRoles, [
     );
     if (!session.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ouvrez votre caisse avant de vendre un billet" }); }
     const departure = await client.query(
-      `SELECT id, fare_amount, capacity, origin, destination, departure_at, vehicle_code
+      `SELECT id, fare_amount, company_booking_fee, capacity, origin, destination, departure_at, vehicle_code
        FROM departures WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED' AND departure_at > NOW() FOR UPDATE`,
       [req.body.departureId, req.tenantId]
     );
@@ -118,19 +118,19 @@ router.post("/vente", cashDeskRoles, [
       await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Place indisponible" });
     }
     const inserted = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, status, seat_number)
-       VALUES ($1, $2, $3, $4, 'PAID', $5)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number)
+       VALUES ($1, $2, $3, $4, $5, 'PAID', $6)
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
-                 amount_transport AS "amountTransport", platform_fee AS "platformFee",
+                 amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
                  seat_number AS "seatNumber", created_at AS "createdAt"`,
-      [req.tenantId, trip.id, String(req.body.passengerName).trim(), Number(trip.fare_amount), seat]
+      [req.tenantId, trip.id, String(req.body.passengerName).trim(), Number(trip.fare_amount), Number(trip.company_booking_fee), seat]
     );
     const booking = inserted.rows[0];
-    const total = Number(booking.amountTransport) + Number(booking.platformFee);
+    const total = Number(booking.amountTransport) + Number(booking.companyBookingFee) + Number(booking.platformFee);
     await client.query(
-      `INSERT INTO payments (tenant_id, booking_id, amount_transport, platform_fee, payment_method, status, confirmed_by, confirmed_at)
-       VALUES ($1, $2, $3, $4, 'cash', 'CONFIRMED', $5, NOW())`,
-      [req.tenantId, booking.id, booking.amountTransport, booking.platformFee, req.user.id]
+      `INSERT INTO payments (tenant_id, booking_id, amount_transport, company_booking_fee, platform_fee, payment_method, status, confirmed_by, confirmed_at)
+       VALUES ($1, $2, $3, $4, $5, 'cash', 'CONFIRMED', $6, NOW())`,
+      [req.tenantId, booking.id, booking.amountTransport, booking.companyBookingFee, booking.platformFee, req.user.id]
     );
     await client.query(
       `INSERT INTO guichet_operations (tenant_id, session_id, booking_id, type, amount, payment_method, description, recorded_by)

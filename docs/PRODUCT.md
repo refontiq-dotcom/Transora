@@ -27,6 +27,9 @@ Choisir départ → scanner → résultat immédiat → statut → synchronisati
 ### Direction
 Vue synthétique → anomalies → détails par gare/ligne/départ → décision.
 
+## Tarification entreprise
+Chaque compagnie configure ses prix de transport par trajet et, si elle le souhaite, ses frais de réservation. Les départs et billets conservent les montants applicables au moment de leur création. Les frais TRANSORA de 100 FCFA par billet restent séparés et fixes.
+
 ## Valeur pour l'entreprise
 - centralisation
 - réduction des erreurs de réservation

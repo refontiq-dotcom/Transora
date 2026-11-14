@@ -10,6 +10,7 @@ import { createRateLimitStoreFromEnv, createRateLimiter } from "./middleware/rat
 import authRoutes from "./modules/auth/auth.routes";
 import tenantRoutes from "./modules/tenant/routes";
 import voyageRoutes from "./modules/voyage/routes";
+import tariffRoutes from "./modules/tarification/routes";
 import siègeRoutes from "./modules/siège/routes";
 import paiementRoutes from "./modules/paiement/routes";
 import dashboardRoutes from "./modules/dashboard/routes";
@@ -113,6 +114,7 @@ app.use("/api/v1", authenticate);
 app.use("/api/v1/tenant", tenantRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/voyages", voyageRoutes);
+app.use("/api/v1/tarifs", tariffRoutes);
 app.use("/api/v1/sièges", siègeRoutes);
 app.use("/api/v1/paiements", paiementRoutes);
 app.use("/api/v1/flotte", flotteRoutes);

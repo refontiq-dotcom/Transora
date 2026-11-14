@@ -23,7 +23,7 @@ function displayTicket(ticket) {
     new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.departureAt));
   document.querySelector("#public-ticket-passenger").textContent = "Passager : " + ticket.passengerName;
   document.querySelector("#public-ticket-seat").textContent = "Siège : " + (ticket.seatNumber || "À attribuer");
-  document.querySelector("#public-ticket-amount").textContent = "Montant : " + money(ticket.totalAmount);
+  document.querySelector("#public-ticket-amount").textContent = "Transport : " + money(ticket.transportAmount) + " · Frais compagnie : " + money(ticket.companyBookingFee) + " · Frais TRANSORA : " + money(ticket.platformFee) + " · Total : " + money(ticket.totalAmount);
   document.querySelector("#public-ticket-payment").textContent = ticket.paymentStatus === "CONFIRMED"
     ? "Paiement confirmé" : "Paiement en attente — embarquement non autorisé";
   document.querySelector("#public-ticket-qr").src = ticket.qrCode;
@@ -52,7 +52,7 @@ async function loadDepartures() {
     option.value = departure.id;
     option.textContent = departure.origin + " → " + departure.destination + " · " +
       new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(departure.departureAt)) +
-      " · " + money(departure.fareAmount);
+      " · Transport " + money(departure.fareAmount) + " + frais compagnie " + money(departure.companyBookingFee) + " + TRANSORA 100 FCFA";
     select.append(option);
   }
   if (!result.data.departures.length) showMessage("Aucun départ ouvert à la réservation pour le moment.");

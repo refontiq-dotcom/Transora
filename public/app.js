@@ -9,6 +9,7 @@ const authToggle = document.querySelector("#auth-toggle");
 let isRegistration = false;
 let toastTimer;
 let voyageDepartures = [];
+let companyTariffs = [];
 let selectedDeparture;
 let voyageLoadError = false;
 let fleetVehicles = [];
@@ -416,6 +417,13 @@ function renderVoyages() {
     bookingButton.disabled = departure.status !== "SCHEDULED"
       || departure.availableSeats < 1
       || new Date(departure.departureAt) <= new Date();
+    const tariffButton = document.createElement("button");
+    tariffButton.className = "voyage-action";
+    tariffButton.type = "button";
+    tariffButton.dataset.departureId = departure.id;
+    tariffButton.dataset.action = "tariff";
+    tariffButton.textContent = "Appliquer tarif";
+    tariffButton.hidden = Boolean(departure.routeTariffId);
     const statusButton = document.createElement("button");
     statusButton.className = "voyage-action";
     statusButton.type = "button";
@@ -424,7 +432,7 @@ function renderVoyages() {
     statusButton.dataset.nextStatus = departure.status === "SCHEDULED" ? "BOARDING" : "DEPARTED";
     statusButton.textContent = departure.status === "SCHEDULED" ? "Ouvrir embarquement" : "Clôturer départ";
     statusButton.hidden = !["SCHEDULED", "BOARDING"].includes(departure.status);
-    options.append(bookingButton, statusButton);
+    options.append(bookingButton, tariffButton, statusButton);
     optionsCell.append(options);
 
     row.append(routeCell, departureCell, vehicleCell, seatsCell, occupancyCell, statusCell, optionsCell);
@@ -684,10 +692,12 @@ function renderPayments() {
 
     const transportCell = document.createElement("td");
     transportCell.textContent = formatFcfa(payment.montantTransport);
-    const feesCell = document.createElement("td");
-    feesCell.textContent = formatFcfa(payment.fraisTransora);
+    const companyFeesCell = document.createElement("td");
+    companyFeesCell.textContent = formatFcfa(payment.fraisCompagnie || 0);
+    const platformFeesCell = document.createElement("td");
+    platformFeesCell.textContent = formatFcfa(payment.fraisTransora);
     const totalCell = document.createElement("td");
-    totalCell.textContent = formatFcfa(Number(payment.montantTransport) + Number(payment.fraisTransora));
+    totalCell.textContent = formatFcfa(Number(payment.montantTransport) + Number(payment.fraisCompagnie || 0) + Number(payment.fraisTransora));
     const methodCell = document.createElement("td");
     methodCell.textContent = methodLabels[payment.moyenPaiement] || "—";
 
@@ -718,7 +728,7 @@ function renderPayments() {
       actionCell.append(ticketButton);
     }
 
-    row.append(passengerCell, departureCell, transportCell, feesCell, totalCell, methodCell, statusCell, actionCell);
+    row.append(passengerCell, departureCell, transportCell, companyFeesCell, platformFeesCell, totalCell, methodCell, statusCell, actionCell);
     body.append(row);
   });
 
@@ -976,12 +986,12 @@ function openPaymentForm(payment) {
   selectedPayment = payment;
   const form = document.querySelector("#payment-form");
   const isPending = payment.statut === "PENDING";
-  const total = Number(payment.montantTransport) + Number(payment.fraisTransora);
+  const total = Number(payment.montantTransport) + Number(payment.fraisCompagnie || 0) + Number(payment.fraisTransora);
   document.querySelector("#payment-dialog-title").textContent = isPending
     ? "Confirmer le règlement"
     : "Encaisser la réservation";
   document.querySelector("#payment-dialog-description").textContent =
-    `${payment.passager} · ${payment.origine} → ${payment.destination} · Total : ${formatFcfa(total)} (dont ${formatFcfa(payment.fraisTransora)} de frais).`;
+    `${payment.passager} · ${payment.origine} → ${payment.destination} · Total : ${formatFcfa(total)} (dont ${formatFcfa(payment.fraisCompagnie || 0)} de frais compagnie et ${formatFcfa(payment.fraisTransora)} de frais TRANSORA).`;
   form.elements.moyenPaiement.value = payment.moyenPaiement || "cash";
   form.elements.moyenPaiement.disabled = isPending;
   form.elements.preuvePaiement.value = payment.preuve || "";
@@ -1450,6 +1460,137 @@ document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => window.setTimeout(showCurrentView, 0));
 });
 
+function resetTariffForm() {
+  const form = document.querySelector("#tariff-form");
+  form.reset();
+  document.querySelector("#tariff-id").value = "";
+  document.querySelector("#tariff-form-title").textContent = "Ajouter un tarif";
+  document.querySelector("#tariff-submit").textContent = "Enregistrer le tarif";
+  document.querySelector("#tariff-cancel-edit").hidden = true;
+}
+
+function renderTariffs() {
+  const rows = document.querySelector("#tariff-rows");
+  rows.replaceChildren();
+  companyTariffs.forEach((tariff) => {
+    const row = document.createElement("tr");
+    const route = document.createElement("td");
+    route.textContent = `${tariff.origin} → ${tariff.destination}`;
+    const fare = document.createElement("td");
+    fare.textContent = formatFcfa(tariff.fareAmount);
+    const fee = document.createElement("td");
+    fee.textContent = formatFcfa(tariff.companyBookingFee);
+    const state = document.createElement("td");
+    state.textContent = tariff.active ? "Actif" : "Désactivé";
+    const actions = document.createElement("td");
+    actions.className = "tariff-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary-button";
+    edit.dataset.tariffAction = "edit";
+    edit.dataset.tariffId = tariff.id;
+    edit.textContent = "Modifier";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "secondary-button";
+    toggle.dataset.tariffAction = "toggle";
+    toggle.dataset.tariffId = tariff.id;
+    toggle.textContent = tariff.active ? "Désactiver" : "Activer";
+    actions.append(edit, toggle);
+    row.append(route, fare, fee, state, actions);
+    rows.append(row);
+  });
+  document.querySelector("#tariff-empty").hidden = companyTariffs.length > 0;
+  document.querySelector("#tariff-list-caption").textContent =
+    `${companyTariffs.length} tarif${companyTariffs.length === 1 ? "" : "s"} configuré${companyTariffs.length === 1 ? "" : "s"}`;
+}
+
+async function loadTariffs() {
+  const loginMessage = document.querySelector("#tariff-login-message");
+  const form = document.querySelector("#tariff-form");
+  if (!accessToken) {
+    companyTariffs = [];
+    renderTariffs();
+    form.hidden = true;
+    loginMessage.hidden = false;
+    return;
+  }
+  form.hidden = false;
+  loginMessage.hidden = true;
+  try {
+    const response = await fetch("/api/v1/tarifs", { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les tarifs.");
+    companyTariffs = result.data.tariffs || [];
+    renderTariffs();
+  } catch (error) {
+    document.querySelector("#tariff-list-caption").textContent = error.message || "Erreur de chargement des tarifs.";
+  }
+}
+
+document.querySelector("#tariff-refresh").addEventListener("click", loadTariffs);
+document.querySelector("#tariff-cancel-edit").addEventListener("click", resetTariffForm);
+document.querySelector("#tariff-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const id = String(values.tariffId || "");
+  const submit = document.querySelector("#tariff-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch(id ? `/api/v1/tarifs/${encodeURIComponent(id)}` : "/api/v1/tarifs", {
+      method: id ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        origin: values.origin,
+        destination: values.destination,
+        fareAmount: Number(values.fareAmount),
+        companyBookingFee: Number(values.companyBookingFee)
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer ce tarif.");
+    resetTariffForm();
+    showToast(result.message || "Tarif enregistré.");
+    await loadTariffs();
+  } catch (error) {
+    showToast(error.message || "Connexion à l'API impossible.");
+  } finally { submit.disabled = false; }
+});
+
+document.querySelector("#tariff-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-tariff-action]");
+  if (!button || button.disabled) return;
+  const tariff = companyTariffs.find(item => item.id === button.dataset.tariffId);
+  if (!tariff) return;
+  if (button.dataset.tariffAction === "edit") {
+    document.querySelector("#tariff-id").value = tariff.id;
+    document.querySelector("#tariff-form").elements.origin.value = tariff.origin;
+    document.querySelector("#tariff-form").elements.destination.value = tariff.destination;
+    document.querySelector("#tariff-form").elements.fareAmount.value = tariff.fareAmount;
+    document.querySelector("#tariff-form").elements.companyBookingFee.value = tariff.companyBookingFee;
+    document.querySelector("#tariff-form-title").textContent = "Modifier le tarif";
+    document.querySelector("#tariff-submit").textContent = "Enregistrer les modifications";
+    document.querySelector("#tariff-cancel-edit").hidden = false;
+    document.querySelector("#tariff-form").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/v1/tarifs/${encodeURIComponent(tariff.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ active: !tariff.active })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de modifier ce tarif.");
+    showToast(result.message || "Statut du tarif mis à jour.");
+    await loadTariffs();
+  } catch (error) {
+    showToast(error.message || "Connexion à l'API impossible.");
+  } finally { button.disabled = false; }
+});
+
 async function loadGuichet() {
   const token = accessToken;
   if (!token) {
@@ -1494,11 +1635,12 @@ async function loadGuichet() {
       const option = document.createElement("option");
       option.value = item.id;
       option.dataset.fare = String(item.fareAmount || 0);
-      option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount)}`;
+      option.dataset.companyFee = String(item.companyBookingFee || 0);
+      option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount + (item.companyBookingFee || 0) + 100)}`;
       select.append(option);
     });
     document.querySelector("#guichet-fare").textContent = select.selectedOptions[0]
-      ? `Tarif défini par la compagnie : ${formatFcfa(select.selectedOptions[0].dataset.fare)}`
+      ? `Transport : ${formatFcfa(select.selectedOptions[0].dataset.fare)} · Frais compagnie : ${formatFcfa(select.selectedOptions[0].dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
       : "Aucun départ disponible pour la vente.";
   } catch (error) {
     document.querySelector("#guichet-session-state").textContent = error.message || "Erreur de chargement du guichet.";
@@ -1508,7 +1650,7 @@ async function loadGuichet() {
 document.querySelector("#guichet-departure").addEventListener("change", () => {
   const selected = document.querySelector("#guichet-departure").selectedOptions[0];
   document.querySelector("#guichet-fare").textContent = selected
-    ? `Tarif défini par la compagnie : ${formatFcfa(selected.dataset.fare)}`
+    ? `Transport : ${formatFcfa(selected.dataset.fare)} · Frais compagnie : ${formatFcfa(selected.dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
     : "Aucun départ disponible pour la vente.";
 });
 
@@ -1578,22 +1720,25 @@ document.querySelector("#guichet-close-form").addEventListener("submit", async (
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
+  const isTariffs = hash === "#tarifs";
   const isFleet = hash === "#flotte";
   const isPayments = hash === "#payments";
   const isReports = hash === "#reports";
   const isGuichet = hash === "#guichet";
-  document.querySelector("#overview-page").hidden = isVoyages || isFleet || isPayments || isReports || isGuichet;
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet;
   document.querySelector("#voyages-page").hidden = !isVoyages;
+  document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
   document.querySelector("#payments-page").hidden = !isPayments;
   document.querySelector("#reports-page").hidden = !isReports;
   document.querySelector("#guichet-page").hidden = !isGuichet;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
   if (isVoyages) loadVoyages();
+  if (isTariffs) loadTariffs();
   if (isFleet) loadFleet();
   if (isPayments) loadPayments();
   if (isReports) loadReports();
@@ -1650,6 +1795,21 @@ async function updateDepartureStatus(departureId, nextStatus) {
 document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
+  if (button.dataset.action === "tariff") {
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/v1/voyages/departures/${encodeURIComponent(button.dataset.departureId)}/tarif`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible d'appliquer le tarif.");
+      showToast(result.message || "Tarif appliqué.");
+      await loadVoyages();
+    } catch (error) {
+      showToast(error.message || "Aucun tarif actif ne correspond à ce trajet.");
+    } finally { button.disabled = false; }
+    return;
+  }
   if (button.dataset.action === "status") {
     await updateDepartureStatus(button.dataset.departureId, button.dataset.nextStatus);
     return;
@@ -1664,7 +1824,7 @@ document.querySelector("#voyage-rows").addEventListener("click", async (event) =
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
-  document.querySelector("#booking-fare").textContent = `Tarif du trajet : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Siège attribué automatiquement`;
+  document.querySelector("#booking-fare").textContent = `Transport : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Frais compagnie : ${formatFcfa(selectedDeparture.companyBookingFee || 0)} · Frais TRANSORA : 100 FCFA · Siège attribué automatiquement`;
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -1970,7 +2130,7 @@ document.querySelector("#payment-form").addEventListener("submit", async (event)
   }
 });
 document.querySelector("#payment-export").addEventListener("click", () => {
-  const headers = ["Passager", "Trajet", "Départ", "Transport FCFA", "Frais TRANSORA FCFA", "Total FCFA", "Moyen", "Statut"];
+  const headers = ["Passager", "Trajet", "Départ", "Transport FCFA", "Frais compagnie FCFA", "Frais TRANSORA FCFA", "Total FCFA", "Moyen", "Statut"];
   const rows = payments.map((payment) => [
     payment.passager,
     `${payment.origine} → ${payment.destination}`,
@@ -2025,7 +2185,6 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
         ...values,
         departureAt: new Date(values.departureAt).toISOString(),
         capacity: Number(values.capacity),
-        fareAmount: Number(values.fareAmount)
       })
     });
     const result = await response.json();

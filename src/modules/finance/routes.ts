@@ -43,6 +43,13 @@ const financialRowsQuery = `
       AND ($2::date IS NULL OR confirmed_at >= $2::date)
       AND ($3::date IS NULL OR confirmed_at < $3::date + INTERVAL '1 day')
     UNION ALL
+    SELECT id, 'revenu'::text, company_booking_fee::numeric, 'frais compagnie'::text,
+           'Frais de réservation compagnie'::text, booking_id::text, confirmed_at, 'paiement'::text
+    FROM payments
+    WHERE tenant_id = $1 AND status = 'CONFIRMED' AND company_booking_fee > 0
+      AND ($2::date IS NULL OR confirmed_at >= $2::date)
+      AND ($3::date IS NULL OR confirmed_at < $3::date + INTERVAL '1 day')
+    UNION ALL
     SELECT id, 'frais_transora'::text, platform_fee::numeric, 'commission'::text,
            'Frais TRANSORA sur paiement confirmé'::text, booking_id::text,
            confirmed_at, 'paiement'::text
@@ -128,10 +135,12 @@ router.get(
         pool.query<{
           tickets: string;
           transport_revenue: string;
+          company_booking_fees: string;
           transora_fees: string;
         }>(
           `SELECT COUNT(*) AS tickets,
                   COALESCE(SUM(amount_transport), 0) AS transport_revenue,
+                  COALESCE(SUM(company_booking_fee), 0) AS company_booking_fees,
                   COALESCE(SUM(platform_fee), 0) AS transora_fees
            FROM payments
            WHERE tenant_id = $1 AND status = 'CONFIRMED'
@@ -158,6 +167,7 @@ router.get(
       const paid = payments.rows[0];
       const manualTotals = manual.rows[0];
       const transportRevenue = Number(paid.transport_revenue) + Number(manualTotals.manual_revenue);
+      const companyBookingFees = Number(paid.company_booking_fees);
       const expenses = Number(manualTotals.expenses);
       const refunds = Number(manualTotals.refunds);
       return res.json({
@@ -167,10 +177,11 @@ router.get(
           résumé: {
             billetsTraités: Number(paid.tickets),
             revenusTransport: transportRevenue,
+            fraisCompagnie: companyBookingFees,
             fraisTransora: Number(paid.transora_fees),
             dépensesTotales: expenses,
             remboursements: refunds,
-            bénéficeNetEntreprise: transportRevenue - expenses - refunds
+            bénéficeNetEntreprise: transportRevenue + companyBookingFees - expenses - refunds
           }
         }
       });

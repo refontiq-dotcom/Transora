@@ -14,5 +14,6 @@
 | D-010 | Première mission agent = audit sans code fonctionnel | VALIDÉ |
 | D-011 | L'IA est assistive pour les décisions critiques | VALIDÉ |
 | D-012 | Rate limiting partagé via Redis REST optionnel, incrément atomique Lua et échec fermé si Redis configuré indisponible | VALIDÉ |
+| D-013 | Chaque compagnie configure ses prix par trajet et ses frais de réservation propres; chaque départ et billet conserve un instantané, distinct des 100 FCFA de frais TRANSORA | VALIDÉ |
 
 Toute nouvelle décision structurante doit être ajoutée ici avant ou avec son implémentation.
