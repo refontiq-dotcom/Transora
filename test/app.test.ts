@@ -97,3 +97,57 @@ test("dashboard assets are served from the web root", async () => {
   expect(html).toMatch(/id="scanner-dialog"/);
   expect(html).toMatch(/id="ticket-dialog"/);
 });
+
+
+test("metrics endpoint requires authentication", async () => {
+  const response = await fetch(`${baseUrl}/metrics`);
+  expect(response.status).toBe(401);
+});
+
+test("metrics endpoint is restricted to administrators", async () => {
+  const previousSecret = process.env.JWT_SECRET;
+  const secret = "transora-metrics-test-secret-at-least-32-characters";
+  process.env.JWT_SECRET = secret;
+  const makeToken = (role: string) => jwt.sign(
+    { email: "metrics@example.test", role, tenantId: "550e8400-e29b-41d4-a716-446655440001" },
+    secret,
+    { subject: "550e8400-e29b-41d4-a716-446655440002" }
+  );
+
+  try {
+    const forbidden = await fetch(`${baseUrl}/metrics`, {
+      headers: { Authorization: `Bearer ${makeToken("superviseur")}` }
+    });
+    expect(forbidden.status).toBe(403);
+
+    const allowed = await fetch(`${baseUrl}/metrics`, {
+      headers: { Authorization: `Bearer ${makeToken("administrateur")}` }
+    });
+    expect(allowed.status).toBe(200);
+    const body = await allowed.json() as { service?: string; memoryUsage?: unknown };
+    expect(body.service).toBe("transora-api");
+    expect(body.memoryUsage).toBeDefined();
+  } finally {
+    if (previousSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previousSecret;
+  }
+});
+
+test("CORS only exposes responses to explicitly configured origins", async () => {
+  const previousOrigins = process.env.CORS_ORIGINS;
+  process.env.CORS_ORIGINS = "https://app.transora.example, https://admin.transora.example";
+  try {
+    const allowed = await fetch(`${baseUrl}/health`, {
+      headers: { Origin: "https://app.transora.example" }
+    });
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://app.transora.example");
+
+    const denied = await fetch(`${baseUrl}/health`, {
+      headers: { Origin: "https://untrusted.example" }
+    });
+    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+  } finally {
+    if (previousOrigins === undefined) delete process.env.CORS_ORIGINS;
+    else process.env.CORS_ORIGINS = previousOrigins;
+  }
+});
