@@ -38,6 +38,7 @@ describe("JWT access token security", () => {
     expect(payload.sub).toBe(user.id);
     expect(payload.iss).toBe("transora-api");
     expect(payload.aud).toBe("transora-clients");
+    expect(payload.sessionId).toBe(user.sessionId);
     expect(payload.exp).toBeTypeOf("number");
     expect(payload.iat).toBeTypeOf("number");
     expect((payload.exp as number) - (payload.iat as number)).toBe(15 * 60);
