@@ -212,6 +212,104 @@ test("dashboard assets are served from the web root", async () => {
 });
 
 
+test("company route tariffs control departures and preserve historical reservation amounts", async () => {
+  const tenantBResult = await pool.query("INSERT INTO tenants (name) VALUES ('Tariff Isolation Tenant') RETURNING id");
+  const tenantB = tenantBResult.rows[0].id as string;
+  let userB: string | undefined;
+  try {
+    const emailB = `tariff-isolation-${Date.now()}@example.test`;
+    const userResult = await pool.query(
+      `INSERT INTO users (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'Tariff Isolation User', $2, 'test-hash', 'administrateur') RETURNING id`,
+      [tenantB, emailB]
+    );
+    userB = userResult.rows[0].id as string;
+    const sessionB = `tariff-isolation-session-${Date.now()}`;
+    await pool.query(
+      "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+      [sessionB, userB, tenantB, "e".repeat(64)]
+    );
+    const tokenB = createAccessToken({ id: userB, email: emailB, role: "administrateur", tenantId: tenantB, sessionId: sessionB });
+    const headersA = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    const headersB = { Authorization: `Bearer ${tokenB}`, "Content-Type": "application/json" };
+
+    const tariffResponse = await fetch(`${baseUrl}/api/v1/tarifs`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({
+        tenantId: tenantB,
+        origin: "Ville Tarif A",
+        destination: "Ville Tarif B",
+        fareAmount: 4500,
+        companyBookingFee: 250
+      })
+    });
+    expect(tariffResponse.status).toBe(201);
+    const tariffBody = await tariffResponse.json() as { data: { id: string; fareAmount: number; companyBookingFee: number } };
+    expect(tariffBody.data.fareAmount).toBe(4500);
+    expect(tariffBody.data.companyBookingFee).toBe(250);
+
+    const ownTariffs = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersA });
+    const ownBody = await ownTariffs.json() as { data: { tariffs: Array<{ id: string }> } };
+    expect(ownBody.data.tariffs.some(item => item.id === tariffBody.data.id)).toBe(true);
+
+    const foreignTariffs = await fetch(`${baseUrl}/api/v1/tarifs`, { headers: headersB });
+    const foreignBody = await foreignTariffs.json() as { data: { tariffs: unknown[] } };
+    expect(foreignBody.data.tariffs).toHaveLength(0);
+
+    const missingTariffDeparture = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({
+        origin: "Ville Sans Tarif A", destination: "Ville Sans Tarif B",
+        departureAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+        vehicleCode: "TARIF-MISSING", capacity: 3, fareAmount: 999
+      })
+    });
+    expect(missingTariffDeparture.status).toBe(409);
+
+    const departureResponse = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({
+        origin: "Ville Tarif A", destination: "Ville Tarif B",
+        departureAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+        vehicleCode: "TARIF-TEST", capacity: 3, fareAmount: 1
+      })
+    });
+    expect(departureResponse.status).toBe(201);
+    const departureBody = await departureResponse.json() as { data: { id: string; fareAmount: number; companyBookingFee: number } };
+    expect(departureBody.data.fareAmount).toBe(4500);
+    expect(departureBody.data.companyBookingFee).toBe(250);
+
+    const bookingResponse = await fetch(`${baseUrl}/api/v1/voyages/departures/${departureBody.data.id}/bookings`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({ passengerName: "Passager Tarif" })
+    });
+    expect(bookingResponse.status).toBe(201);
+    const bookingBody = await bookingResponse.json() as { data: { id: string; amountTransport: number; companyBookingFee: number; platformFee: number } };
+    expect(bookingBody.data.amountTransport).toBe(4500);
+    expect(bookingBody.data.companyBookingFee).toBe(250);
+    expect(bookingBody.data.platformFee).toBe(100);
+
+    const updateResponse = await fetch(`${baseUrl}/api/v1/tarifs/${tariffBody.data.id}`, {
+      method: "PATCH", headers: headersA,
+      body: JSON.stringify({ fareAmount: 5200, companyBookingFee: 400 })
+    });
+    expect(updateResponse.status).toBe(200);
+
+    const snapshots = await pool.query(
+      `SELECT d.fare_amount, d.company_booking_fee, b.amount_transport, b.company_booking_fee AS booking_company_fee
+       FROM departures d JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
+       WHERE d.id = $1 AND b.id = $2 AND d.tenant_id = $3`,
+      [departureBody.data.id, bookingBody.data.id, tenantId]
+    );
+    expect(Number(snapshots.rows[0].fare_amount)).toBe(4500);
+    expect(Number(snapshots.rows[0].company_booking_fee)).toBe(250);
+    expect(Number(snapshots.rows[0].amount_transport)).toBe(4500);
+    expect(Number(snapshots.rows[0].booking_company_fee)).toBe(250);
+  } finally {
+    await pool.query("DELETE FROM tenants WHERE id = $1", [tenantB]);
+  }
+});
+
 test("booking tickets, public reservations, cash desk and boarding stay isolated by tenant", async () => {
   const tenantBResult = await pool.query("INSERT INTO tenants (name) VALUES ('App Test Tenant B') RETURNING id, public_code");
   const tenantB = tenantBResult.rows[0].id as string;
