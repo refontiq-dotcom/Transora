@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS courier_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   parcel_id UUID NOT NULL,
+  session_id UUID NOT NULL,
   amount_fcfa BIGINT NOT NULL CHECK (amount_fcfa > 0),
   payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'mobile_money', 'card', 'bank_transfer')),
   received_by UUID NOT NULL,
@@ -160,6 +161,8 @@ CREATE TABLE IF NOT EXISTS courier_payments (
     FOREIGN KEY (parcel_id, tenant_id) REFERENCES courier_parcels(id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT courier_payments_receiver_tenant_fk
     FOREIGN KEY (received_by, tenant_id) REFERENCES users(id, tenant_id),
+  CONSTRAINT courier_payments_session_tenant_fk
+    FOREIGN KEY (session_id, tenant_id) REFERENCES guichet_sessions(id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT courier_payments_one_per_parcel UNIQUE (parcel_id)
 );
 
