@@ -1,4 +1,5 @@
 /**
+import { authorize } from "../../middleware/auth";
  * Module: Réservation et billetterie avec paiement
  * Les montants sont lus depuis la réservation en base, jamais depuis le tenant fourni par le client.
  */
@@ -9,6 +10,9 @@ import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 
 const router = Router();
+
+// Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
+router.use(authorize(["administrateur"]));
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
