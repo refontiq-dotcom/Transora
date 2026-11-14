@@ -9,7 +9,7 @@ export type Permission =
   | "seats.read" | "seats.manage" | "payments.read" | "payments.manage"
   | "finance.read" | "finance.manage" | "fleet.read" | "fleet.update" | "fleet.manage" | "personnel.read"
   | "personnel.manage" | "incidents.read" | "incidents.report" | "incidents.manage"
-  | "notifications.read" | "notifications.manage" | "audit.read" | "search.read"
+  | "notifications.read" | "notifications.manage" | "audit.read" | "audit.manage" | "search.read"
   | "tenant.manage";
 
 const ROLE_PERMISSIONS: Record<string, ReadonlySet<Permission> | "*"> = {
