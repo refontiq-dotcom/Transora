@@ -608,3 +608,105 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     await pool.query("DELETE FROM tenants WHERE id = $1", [tenantB]);
   }
 });
+
+
+test("courier workflow enforces company tariffs, driver handoff, transit and recipient delivery", async () => {
+  const driverEmail = `app-test-courier-driver-${Date.now()}@example.test`;
+  const driver = await pool.query(
+    `INSERT INTO users (tenant_id, name, email, password_hash, role)
+     VALUES ($1, 'Courier Driver', $2, 'test-hash', 'chauffeur') RETURNING id`,
+    [tenantId, driverEmail]
+  );
+  const driverId = driver.rows[0].id as string;
+  const driverSession = `app-test-courier-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [driverSession, driverId, tenantId, "d".repeat(64)]
+  );
+  const driverToken = createAccessToken({
+    id: driverId, email: driverEmail, role: "chauffeur", tenantId, sessionId: driverSession
+  });
+  const driverHeaders = { Authorization: `Bearer ${driverToken}`, "Content-Type": "application/json" };
+  const adminHeaders = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+  const tariff = await fetch(`${baseUrl}/api/v1/courrier/tarifs`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({ origin: "Abidjan", destination: "Yamoussoukro", amountFcfa: 2500 })
+  });
+  expect(tariff.status).toBe(201);
+
+  const departure = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({
+      origin: "Abidjan", destination: "Yamoussoukro",
+      departureAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      vehicleCode: "COURRIER-TEST", capacity: 30
+    })
+  });
+  expect(departure.status).toBe(201);
+  const departureBody = await departure.json() as { data: { id: string } };
+
+  const created = await fetch(`${baseUrl}/api/v1/courrier/colis`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({
+      origin: "Abidjan", destination: "Yamoussoukro",
+      senderName: "Expéditeur Test", senderPhone: "+2250700000001",
+      recipientName: "Destinataire Test", recipientPhone: "+2250700000002",
+      description: "Documents administratifs", weightKg: 1.5, declaredValue: 10000
+    })
+  });
+  expect(created.status).toBe(201);
+  const createdBody = await created.json() as {
+    data: { id: string; trackingCode: string; amountFcfa: number; status: string };
+  };
+  expect(createdBody.data.amountFcfa).toBe(2500);
+  expect(createdBody.data.status).toBe("EN_ATTENTE_PAIEMENT");
+
+  const payment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/paiement`, {
+    method: "POST", headers: adminHeaders, body: JSON.stringify({ paymentMethod: "cash" })
+  });
+  expect(payment.status).toBe(200);
+
+  const assignment = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/affectation`, {
+    method: "PATCH", headers: adminHeaders,
+    body: JSON.stringify({ departureId: departureBody.data.id, driverUserId: driverId })
+  });
+  expect(assignment.status).toBe(200);
+
+  const driverAssignments = await fetch(`${baseUrl}/api/v1/courrier/chauffeur/affectations`, { headers: driverHeaders });
+  expect(driverAssignments.status).toBe(200);
+  const assignmentsBody = await driverAssignments.json() as { data: Array<{ id: string }> };
+  expect(assignmentsBody.data.some((item) => item.id === createdBody.data.id)).toBe(true);
+
+  const handoff = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/prise-en-charge`, {
+    method: "PATCH", headers: driverHeaders, body: JSON.stringify({})
+  });
+  expect(handoff.status).toBe(200);
+  const transit = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/en-transit`, {
+    method: "PATCH", headers: driverHeaders, body: JSON.stringify({})
+  });
+  expect(transit.status).toBe(200);
+
+  const arrival = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/arrivee`, {
+    method: "PATCH", headers: adminHeaders, body: JSON.stringify({})
+  });
+  expect(arrival.status).toBe(200);
+  const delivery = await fetch(`${baseUrl}/api/v1/courrier/colis/${createdBody.data.id}/remise`, {
+    method: "PATCH", headers: adminHeaders,
+    body: JSON.stringify({ receiverName: "Destinataire Test", receiverReference: "CNI-TEST" })
+  });
+  expect(delivery.status).toBe(200);
+
+  const tracking = await fetch(`${baseUrl}/api/v1/courrier/suivi/${createdBody.data.trackingCode}`, {
+    headers: adminHeaders
+  });
+  expect(tracking.status).toBe(200);
+  const trackingBody = await tracking.json() as {
+    data: { parcel: { status: string; paymentStatus: string }; history: Array<{ eventType: string }> };
+  };
+  expect(trackingBody.data.parcel.status).toBe("REMIS");
+  expect(trackingBody.data.parcel.paymentStatus).toBe("PAID");
+  expect(trackingBody.data.history.map((event) => event.eventType)).toEqual([
+    "ENREGISTRE", "PAYE", "AFFECTE", "CONFIE_CHAUFFEUR", "EN_TRANSIT", "ARRIVE", "REMIS"
+  ]);
+});
