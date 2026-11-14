@@ -229,6 +229,7 @@ function setAuthenticatedState(authenticated) {
     ? " Données en direct · Déconnexion"
     : " Mode démonstration · Connexion";
   loginButton.querySelector("span").style.background = authenticated ? "#55b968" : "#e6ad58";
+  if (authenticated && window.location.hash === "#courrier") loadCourier();
 }
 
 function applyDashboard(data) {
@@ -1803,7 +1804,6 @@ function renderCourier() {
     status.textContent = courierStatusLabels[parcel.status] || parcel.status;
     const actions = document.createElement("td");
     actions.className = "courier-actions";
-    const role = courierCurrentRole();
     if (parcel.status === "EN_ATTENTE_PAIEMENT" && courierHasRole("administrateur", "caissier")) {
       actions.append(courierButton("Encaisser", "pay", parcel.id));
     }
@@ -1873,6 +1873,9 @@ async function loadCourier() {
   const loginMessage = document.querySelector("#courier-login-message");
   if (!token) {
     loginMessage.hidden = false;
+    document.querySelector("#courier-tariff-panel").hidden = true;
+    document.querySelector("#courier-register-panel").hidden = true;
+    document.querySelector("#courier-assign-panel").hidden = true;
     document.querySelector("#courier-list-caption").textContent = "Connectez-vous pour consulter les courriers.";
     return;
   }
@@ -2117,15 +2120,17 @@ function showCurrentView() {
   const isPayments = hash === "#payments";
   const isReports = hash === "#reports";
   const isGuichet = hash === "#guichet";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet;
+  const isCourier = hash === "#courrier";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
   document.querySelector("#payments-page").hidden = !isPayments;
   document.querySelector("#reports-page").hidden = !isReports;
   document.querySelector("#guichet-page").hidden = !isGuichet;
+  document.querySelector("#courier-page").hidden = !isCourier;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -2135,6 +2140,7 @@ function showCurrentView() {
   if (isPayments) loadPayments();
   if (isReports) loadReports();
   if (isGuichet) loadGuichet();
+  if (isCourier) loadCourier();
 }
 
 window.addEventListener("hashchange", showCurrentView);
