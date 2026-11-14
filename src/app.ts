@@ -6,7 +6,7 @@ import { resolve } from "path";
 import { pinoHttpMiddleware } from "./lib/logger";
 import { authenticate } from "./middleware/auth";
 import { errorHandler } from "./middleware/error";
-import { createRateLimiter } from "./middleware/rate-limit";
+import { createRateLimitStoreFromEnv, createRateLimiter } from "./middleware/rate-limit";
 import authRoutes from "./modules/auth/auth.routes";
 import tenantRoutes from "./modules/tenant/routes";
 import voyageRoutes from "./modules/voyage/routes";
@@ -22,6 +22,7 @@ import auditRoutes from "./modules/audit/routes";
 import searchRoutes from "./modules/recherche/routes";
 
 const app = express();
+const rateLimitStore = createRateLimitStoreFromEnv();
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -83,14 +84,18 @@ app.get("/metrics", (req, res) => {
 });
 
 app.use("/api/v1/auth/register", createRateLimiter({
+  namespace: "auth-register",
   windowMs: 60 * 60 * 1000,
   maxRequests: 5,
-  message: "Trop de tentatives de création de compte. Réessayez plus tard."
+  message: "Trop de tentatives de création de compte. Réessayez plus tard.",
+  store: rateLimitStore
 }));
 app.use("/api/v1/auth/login", createRateLimiter({
+  namespace: "auth-login",
   windowMs: 15 * 60 * 1000,
   maxRequests: 10,
-  message: "Trop de tentatives de connexion. Réessayez dans quelques minutes."
+  message: "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
+  store: rateLimitStore
 }));
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1", authenticate);
