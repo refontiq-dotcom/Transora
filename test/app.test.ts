@@ -197,3 +197,126 @@ test("dashboard assets are served from the web root", async () => {
   expect(html).toMatch(/id="scanner-dialog"/);
   expect(html).toMatch(/id="ticket-dialog"/);
 });
+
+
+test("booking tickets, public reservations, cash desk and boarding stay isolated by tenant", async () => {
+  const tenantBResult = await pool.query("INSERT INTO tenants (name) VALUES ('App Test Tenant B') RETURNING id, public_code");
+  const tenantB = tenantBResult.rows[0].id as string;
+  let userB: string | undefined;
+  try {
+    const emailB = `app-test-b-${Date.now()}@example.test`;
+    const userResult = await pool.query(
+      `INSERT INTO users (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'App Test User B', $2, 'test-hash', 'administrateur') RETURNING id`,
+      [tenantB, emailB]
+    );
+    userB = userResult.rows[0].id;
+    const sessionB = `app-test-b-session-${Date.now()}`;
+    await pool.query(
+      "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+      [sessionB, userB, tenantB, "d".repeat(64)]
+    );
+    const tokenB = createAccessToken({ id: userB, email: emailB, role: "administrateur", tenantId: tenantB, sessionId: sessionB });
+    const headersA = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    const headersB = { Authorization: `Bearer ${tokenB}`, "Content-Type": "application/json" };
+
+    const departureResult = await pool.query(
+      `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount)
+       VALUES ($1, 'Abidjan', 'Bouaké', NOW() + INTERVAL '3 hours', 'TEST-A', 3, 1500) RETURNING id`,
+      [tenantId]
+    );
+    const departureId = departureResult.rows[0].id as string;
+    const publicDepartureResult = await pool.query(
+      `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount)
+       VALUES ($1, 'Abidjan', 'Yamoussoukro', NOW() + INTERVAL '5 hours', 'TEST-PUBLIC', 2, 2500) RETURNING id`,
+      [tenantId]
+    );
+    const publicDepartureId = publicDepartureResult.rows[0].id as string;
+
+    const bookingResponse = await fetch(`${baseUrl}/api/v1/voyages/departures/${departureId}/bookings`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ passengerName: "Passager Réservé" })
+    });
+    expect(bookingResponse.status).toBe(201);
+    const bookingBody = await bookingResponse.json() as { data: { id: string; ticketToken: string; status: string; seatNumber: number } };
+    expect(bookingBody.data.status).toBe("RESERVED");
+    expect(bookingBody.data.seatNumber).toBe(1);
+
+    const ticketResponse = await fetch(`${baseUrl}/api/v1/recherche/billet/${bookingBody.data.ticketToken}?images=true`, { headers: headersA });
+    expect(ticketResponse.status).toBe(200);
+    const ticketBody = await ticketResponse.json() as { data: { qrCode?: string; codeBarres?: string; valide: boolean } };
+    expect(ticketBody.data.qrCode).toMatch(/^data:image\/png;base64,/);
+    expect(ticketBody.data.codeBarres).toMatch(/^data:image\/png;base64,/);
+    expect(ticketBody.data.valide).toBe(false);
+
+    const foreignTicket = await fetch(`${baseUrl}/api/v1/recherche/billet/${bookingBody.data.ticketToken}`, { headers: headersB });
+    expect(foreignTicket.status).toBe(404);
+    const unpaidBoarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ billetId: bookingBody.data.ticketToken })
+    });
+    expect(unpaidBoarding.status).toBe(409);
+
+    const sessionResponse = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ openingAmount: 50000 })
+    });
+    expect(sessionResponse.status).toBe(201);
+    const sessionBody = await sessionResponse.json() as { data: { id: string } };
+
+    const saleResponse = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({ departureId, passengerName: "Passager Guichet" })
+    });
+    expect(saleResponse.status).toBe(201);
+    const saleBody = await saleResponse.json() as { data: { id: string; ticketToken: string; totalPaid: number; seatNumber: number } };
+    expect(saleBody.data.seatNumber).toBe(2);
+
+    await pool.query("UPDATE departures SET status = 'BOARDING' WHERE id = $1 AND tenant_id = $2", [departureId, tenantId]);
+    const boardingResponse = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ billetId: saleBody.data.ticketToken, scannerId: "test-scanner" })
+    });
+    expect(boardingResponse.status).toBe(200);
+    const duplicateBoarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ billetId: saleBody.data.ticketToken })
+    });
+    expect(duplicateBoarding.status).toBe(409);
+    const foreignBoarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+      method: "POST", headers: headersB, body: JSON.stringify({ billetId: saleBody.data.ticketToken })
+    });
+    expect(foreignBoarding.status).toBe(404);
+
+    const foreignSession = await fetch(`${baseUrl}/api/v1/guichet/session/${sessionBody.data.id}`, { headers: headersB });
+    expect(foreignSession.status).toBe(404);
+    const closeResponse = await fetch(`${baseUrl}/api/v1/guichet/session/${sessionBody.data.id}/close`, {
+      method: "POST", headers: headersA,
+      body: JSON.stringify({ closingAmount: 50000 + saleBody.data.totalPaid })
+    });
+    expect(closeResponse.status).toBe(200);
+    const closeBody = await closeResponse.json() as { data: { discrepancy: number } };
+    expect(closeBody.data.discrepancy).toBe(0);
+
+    const tenantAInfo = await pool.query("SELECT public_code FROM tenants WHERE id = $1", [tenantId]);
+    const publicCodeA = tenantAInfo.rows[0].public_code as string;
+    const publicList = await fetch(`${baseUrl}/api/public/${publicCodeA}/departs`);
+    expect(publicList.status).toBe(200);
+    const publicBooking = await fetch(`${baseUrl}/api/public/${publicCodeA}/reservations`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Client Web", passengerPhone: "+2250700000000" })
+    });
+    expect(publicBooking.status).toBe(201);
+    const publicBody = await publicBooking.json() as { data: { ticketToken: string; qrCode: string; paymentStatus: string } };
+    expect(publicBody.data.qrCode).toMatch(/^data:image\/png;base64,/);
+    expect(publicBody.data.paymentStatus).toBe("NOT_INITIATED");
+
+    const publicTicket = await fetch(`${baseUrl}/api/public/${publicCodeA}/ticket/${publicBody.data.ticketToken}`);
+    expect(publicTicket.status).toBe(200);
+    const publicCodeB = tenantBResult.rows[0].public_code as string;
+    const crossCompanyPublicTicket = await fetch(`${baseUrl}/api/public/${publicCodeB}/ticket/${publicBody.data.ticketToken}`);
+    expect(crossCompanyPublicTicket.status).toBe(404);
+    const crossCompanyPublicBooking = await fetch(`${baseUrl}/api/public/${publicCodeB}/reservations`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Intrus", passengerPhone: "+2250700000000" })
+    });
+    expect(crossCompanyPublicBooking.status).toBe(404);
+  } finally {
+    await pool.query("DELETE FROM tenants WHERE id = $1", [tenantB]);
+  }
+});
