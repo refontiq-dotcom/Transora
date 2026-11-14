@@ -1,4 +1,5 @@
 -- Migration 009: verrouille l'accès direct aux tables du schéma public.
+-- Les accès applicatifs passent exclusivement par le backend Express.
 -- TRANSORA utilise son API Express (JWT applicatif) et une connexion PostgreSQL
 -- serveur côté backend. Les rôles Data API anon/authenticated ne doivent pas
 -- accéder directement aux tables métier.
