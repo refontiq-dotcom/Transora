@@ -104,10 +104,14 @@ router.post("/vente", cashDeskRoles, [
     const trip = departure.rows[0];
     if (Number(trip.fare_amount) <= 0) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Définissez le tarif de ce départ avant la vente" }); }
     const taken = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL",
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'",
       [trip.id, req.tenantId]
     );
-    const occupied = new Set(taken.rows.map((row: { seat_number: number }) => Number(row.seat_number)));
+    if (taken.rowCount >= Number(trip.capacity)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Ce départ est complet" });
+    }
+    const occupied = new Set(taken.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
     const requested = req.body.seatNumber === undefined ? null : Number(req.body.seatNumber);
     const seat = requested ?? Array.from({ length: Number(trip.capacity) }, (_, i) => i + 1).find(n => !occupied.has(n));
     if (!seat || seat > Number(trip.capacity) || occupied.has(seat)) {
