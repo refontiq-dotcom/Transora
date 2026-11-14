@@ -6,7 +6,10 @@ import { pool } from "../../db/pool";
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorizePermission("audit.read"));
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "audit.read" : "audit.manage";
+  return authorizePermission(permission)(req, res, next);
+});
 
 const eventTypes = [
   "création",
