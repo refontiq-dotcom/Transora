@@ -34,6 +34,7 @@ router.post(
     body("departureAt").isISO8601(),
     body("vehicleCode").isString().trim().notEmpty(),
     body("capacity").isInt({ min: 1 }),
+    body("fareAmount").isInt({ min: 1 }),
     body("status").optional().isIn(["SCHEDULED", "BOARDING", "DEPARTED", "CANCELLED"])
   ],
   validate,
@@ -44,13 +45,13 @@ router.post(
     }
 
     try {
-      const { origin, destination, departureAt, vehicleCode, capacity, status } = req.body;
+      const { origin, destination, departureAt, vehicleCode, capacity, fareAmount, status } = req.body;
       const result = await pool.query(
         `INSERT INTO departures
-           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, origin, destination, departure_at AS "departureAt",
-                   vehicle_code AS "vehicleCode", capacity, status`,
+                   vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount", status`,
         [
           tenantId,
           origin.trim(),
@@ -58,6 +59,7 @@ router.post(
           departureAt,
           vehicleCode.trim(),
           Number(capacity),
+          Number(fareAmount),
           status || "SCHEDULED"
         ]
       );
@@ -72,8 +74,7 @@ router.post(
   "/departures/:id/bookings",
   [
     param("id").isUUID(),
-    body("passengerName").isString().trim().notEmpty(),
-    body("amountTransport").isInt({ min: 1 })
+    body("passengerName").isString().trim().isLength({ min: 2, max: 160 })
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -89,9 +90,9 @@ router.post(
       await client.query("BEGIN");
       transactionStarted = true;
       const { id } = req.params;
-      const { passengerName, amountTransport } = req.body;
-      const departure = await client.query<{ capacity: number }>(
-        `SELECT capacity FROM departures
+      const { passengerName } = req.body;
+      const departure = await client.query<{ capacity: number; fare_amount: number }>(
+        `SELECT capacity, fare_amount FROM departures
          WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED'
            AND departure_at > NOW()
          FOR UPDATE`,
@@ -104,6 +105,12 @@ router.post(
           success: false,
           message: "Départ introuvable ou non disponible"
         });
+      }
+
+      if (Number(departure.rows[0].fare_amount) <= 0) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({ success: false, message: "Le tarif de ce départ doit être configuré avant la réservation" });
       }
 
       const reservations = await client.query<{ count: number }>(
@@ -120,13 +127,25 @@ router.post(
         });
       }
 
+      const taken = await client.query<{ seat_number: number }>(
+        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL",
+        [id, tenantId]
+      );
+      const occupied = new Set(taken.rows.map((row) => Number(row.seat_number)));
+      const seatNumber = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => index + 1)
+        .find((seat) => !occupied.has(seat));
+      if (!seatNumber) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({ success: false, message: "Aucune place disponible" });
+      }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, departure_id AS "departureId", passenger_name AS "passengerName",
-                   amount_transport AS "amountTransport", platform_fee AS "platformFee",
-                   status, created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), Number(amountTransport)]
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId",
+                   passenger_name AS "passengerName", amount_transport AS "amountTransport",
+                   platform_fee AS "platformFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
+        [tenantId, id, passengerName.trim(), Number(departure.rows[0].fare_amount), seatNumber]
       );
       await client.query("COMMIT");
       transactionStarted = false;
