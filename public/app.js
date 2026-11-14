@@ -1226,10 +1226,10 @@ async function lookupScannedTicket(rawValue) {
     }
     renderTicketCheck(result.data, ticketId);
     setScannerFeedback(
-      result.data.valide
-        ? "Billet vérifié. Cette vérification ne marque pas le passager comme embarqué."
+      result.data.peutEmbarquer
+        ? "Billet authentique. Confirmez l'embarquement pour l'enregistrer."
         : result.data.motif || "Billet non valide.",
-      result.data.valide ? "success" : "error"
+      result.data.peutEmbarquer ? "success" : "error"
     );
     if (scannerStream) stopTicketScanner();
   } catch (error) {
