@@ -6,7 +6,11 @@ import { pool } from "../../db/pool";
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorizePermission("fleet.manage"));
+router.use((req, res, next) => {
+  const permission = req.method === "GET" ? "fleet.read"
+    : req.method === "PUT" ? "fleet.update" : "fleet.manage";
+  return authorizePermission(permission)(req, res, next);
+});
 const statuses = ["disponible", "en_service", "en_maintenance", "hors_service"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
