@@ -2,8 +2,10 @@ import { NextFunction, Request, Response, Router } from "express";
 import { body, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const assignSeat = authorize(["administrateur", "superviseur", "caissier", "agent_acceuil"]);
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ success: false, message: "Données invalides", errors: errors.array() });
@@ -35,7 +37,7 @@ router.get("/availability", [
   } catch (error) { return next(error); }
 });
 
-router.post("/réserver", [
+router.post("/réserver", assignSeat, [
   body("billetId").isUUID(),
   body("siègeNuméro").isInt({ min: 1 })
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
