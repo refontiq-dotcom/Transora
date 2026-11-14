@@ -165,7 +165,7 @@ router.post("/colis", createParcel, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Aucun tarif courrier actif n'est configuré pour ce trajet" });
     }
-    const trackingCode = `TRC-${randomBytes(5).toString("hex").toUpperCase()}`;
+    const trackingCode = `TRC-${randomBytes(16).toString("hex").toUpperCase()}`;
     const inserted = await client.query(
       `INSERT INTO courier_parcels
          (tenant_id, tracking_code, origin, destination, sender_name, sender_phone,
