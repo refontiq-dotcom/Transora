@@ -1,7 +1,7 @@
 import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
 
-export const JWT_ISSUER = process.env.JWT_ISSUER || "transora-api";
-export const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "transora-clients";
+const getJwtIssuer = (): string => process.env.JWT_ISSUER || "transora-api";
+const getJwtAudience = (): string => process.env.JWT_AUDIENCE || "transora-clients";
 export const JWT_ACCESS_TOKEN_TTL = "8h";
 
 const getJwtSecret = (): string => {
@@ -23,8 +23,8 @@ export const createAccessToken = (user: AccessTokenClaims): string => {
   const options: SignOptions = {
     algorithm: "HS256",
     subject: user.id,
-    issuer: JWT_ISSUER,
-    audience: JWT_AUDIENCE,
+    issuer: getJwtIssuer(),
+    audience: getJwtAudience(),
     expiresIn: JWT_ACCESS_TOKEN_TTL
   };
 
@@ -38,8 +38,8 @@ export const createAccessToken = (user: AccessTokenClaims): string => {
 export const verifyAccessToken = (token: string): JwtPayload => {
   const payload = jwt.verify(token, getJwtSecret(), {
     algorithms: ["HS256"],
-    issuer: JWT_ISSUER,
-    audience: JWT_AUDIENCE,
+    issuer: getJwtIssuer(),
+    audience: getJwtAudience(),
     maxAge: JWT_ACCESS_TOKEN_TTL,
     clockTolerance: 5
   });
