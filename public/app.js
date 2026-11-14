@@ -986,12 +986,12 @@ function openPaymentForm(payment) {
   selectedPayment = payment;
   const form = document.querySelector("#payment-form");
   const isPending = payment.statut === "PENDING";
-  const total = Number(payment.montantTransport) + Number(payment.fraisTransora);
+  const total = Number(payment.montantTransport) + Number(payment.fraisCompagnie || 0) + Number(payment.fraisTransora);
   document.querySelector("#payment-dialog-title").textContent = isPending
     ? "Confirmer le règlement"
     : "Encaisser la réservation";
   document.querySelector("#payment-dialog-description").textContent =
-    `${payment.passager} · ${payment.origine} → ${payment.destination} · Total : ${formatFcfa(total)} (dont ${formatFcfa(payment.fraisTransora)} de frais).`;
+    `${payment.passager} · ${payment.origine} → ${payment.destination} · Total : ${formatFcfa(total)} (dont ${formatFcfa(payment.fraisCompagnie || 0)} de frais compagnie et ${formatFcfa(payment.fraisTransora)} de frais TRANSORA).`;
   form.elements.moyenPaiement.value = payment.moyenPaiement || "cash";
   form.elements.moyenPaiement.disabled = isPending;
   form.elements.preuvePaiement.value = payment.preuve || "";
@@ -2130,7 +2130,7 @@ document.querySelector("#payment-form").addEventListener("submit", async (event)
   }
 });
 document.querySelector("#payment-export").addEventListener("click", () => {
-  const headers = ["Passager", "Trajet", "Départ", "Transport FCFA", "Frais TRANSORA FCFA", "Total FCFA", "Moyen", "Statut"];
+  const headers = ["Passager", "Trajet", "Départ", "Transport FCFA", "Frais compagnie FCFA", "Frais TRANSORA FCFA", "Total FCFA", "Moyen", "Statut"];
   const rows = payments.map((payment) => [
     payment.passager,
     `${payment.origine} → ${payment.destination}`,
