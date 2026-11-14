@@ -83,7 +83,7 @@ test("dashboard is protected when no bearer token is supplied", async () => {
 });
 
 test("tenant, trip, fleet, payment, search, and finance APIs are protected when no bearer token is supplied", async () => {
-  const [tenantResponse, tripResponse, departureListResponse, fleetResponse, paymentResponse, searchResponse, ticketResponse, financeResponse, guichetResponse, boardingResponse] = await Promise.all([
+  const [tenantResponse, tripResponse, departureListResponse, fleetResponse, paymentResponse, searchResponse, ticketResponse, financeResponse, guichetResponse, boardingResponse, departureStatusResponse] = await Promise.all([
     fetch(`${baseUrl}/api/v1/tenant`),
     fetch(`${baseUrl}/api/v1/voyages`),
     fetch(`${baseUrl}/api/v1/voyages/departures`),
@@ -93,7 +93,10 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
     fetch(`${baseUrl}/api/v1/recherche/billet/550e8400-e29b-41d4-a716-446655440000`),
     fetch(`${baseUrl}/api/v1/finance/`),
     fetch(`${baseUrl}/api/v1/guichet/session/current`),
-    fetch(`${baseUrl}/api/v1/embarquement/stats`)
+    fetch(`${baseUrl}/api/v1/embarquement/stats`),
+    fetch(`${baseUrl}/api/v1/voyages/departures/550e8400-e29b-41d4-a716-446655440000/status`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "BOARDING" })
+    })
   ]);
   expect(tenantResponse.status).toBe(401);
   expect(tripResponse.status).toBe(401);
@@ -105,6 +108,7 @@ test("tenant, trip, fleet, payment, search, and finance APIs are protected when 
   expect(financeResponse.status).toBe(401);
   expect(guichetResponse.status).toBe(401);
   expect(boardingResponse.status).toBe(401);
+  expect(departureStatusResponse.status).toBe(401);
 });
 
 test("registration and login endpoints enforce per-IP attempt limits", async () => {
@@ -277,6 +281,11 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     expect(saleResponse.status).toBe(201);
     const saleBody = await saleResponse.json() as { data: { id: string; ticketToken: string; totalPaid: number; seatNumber: number } };
     expect(saleBody.data.seatNumber).toBe(2);
+
+    const earlyBoarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+      method: "POST", headers: headersA, body: JSON.stringify({ billetId: saleBody.data.ticketToken })
+    });
+    expect(earlyBoarding.status).toBe(409);
 
     const openBoarding = await fetch(`${baseUrl}/api/v1/voyages/departures/${departureId}/status`, {
       method: "PATCH", headers: headersA, body: JSON.stringify({ status: "BOARDING" })
