@@ -31,7 +31,7 @@ BEGIN
     WHERE conname = 'employees_user_tenant_fk' AND conrelid = 'employees'::regclass
   ) THEN
     ALTER TABLE employees ADD CONSTRAINT employees_user_tenant_fk
-      FOREIGN KEY (user_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE SET NULL;
+      FOREIGN KEY (user_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE RESTRICT;
   END IF;
 END $;
 
