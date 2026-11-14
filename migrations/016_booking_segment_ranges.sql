@@ -1,3 +1,9 @@
+-- Add the range column for fresh installs whose baseline predates segment-aware bookings.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS segment_range int4range;
+
+-- Ensure GiST can compare departure and seat keys alongside range overlap.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 -- Ensure every ticket occupies an explicit route range.
 -- This makes the GiST exclusion constraint effective and allows a seat to be reused
 -- only for non-overlapping route segments in a later segment-aware booking flow.
