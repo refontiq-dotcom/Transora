@@ -635,6 +635,12 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   });
   expect(tariff.status).toBe(201);
 
+  const transportTariff = await fetch(`${baseUrl}/api/v1/tarifs`, {
+    method: "POST", headers: adminHeaders,
+    body: JSON.stringify({ origin: "Abidjan", destination: "Yamoussoukro", fareAmount: 5000, companyBookingFee: 0 })
+  });
+  expect(transportTariff.status).toBe(201);
+
   const departure = await fetch(`${baseUrl}/api/v1/voyages/departures`, {
     method: "POST", headers: adminHeaders,
     body: JSON.stringify({
