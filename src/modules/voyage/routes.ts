@@ -10,6 +10,7 @@ import { body, param, query, validationResult } from "express-validator";
 import { NextFunction } from "express";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
 
@@ -28,6 +29,7 @@ const validate = (req: Request, res: Response, next: any) => {
 
 router.post(
   "/departures",
+  authorize(["administrateur", "superviseur"]),
   [
     body("origin").isString().trim().notEmpty(),
     body("destination").isString().trim().notEmpty(),
@@ -158,6 +160,68 @@ router.post(
     } finally {
       client?.release();
     }
+  }
+);
+
+router.patch(
+  "/departures/:id/status",
+  authorize(["administrateur", "superviseur"]),
+  [
+    param("id").isUUID(),
+    body("status").isIn(["BOARDING", "DEPARTED", "CANCELLED"])
+  ],
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        "SELECT id, status FROM departures WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+        [req.params.id, req.tenantId]
+      );
+      if (!current.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ success: false, message: "Départ introuvable dans cette compagnie" });
+      }
+      const previous = current.rows[0].status as string;
+      const nextStatus = String(req.body.status);
+      const allowed = (previous === "SCHEDULED" && ["BOARDING", "CANCELLED"].includes(nextStatus))
+        || (previous === "BOARDING" && ["DEPARTED", "CANCELLED"].includes(nextStatus));
+      if (!allowed) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, message: "Transition de statut non autorisée" });
+      }
+      if (nextStatus === "CANCELLED") {
+        const boarded = await client.query(
+          "SELECT 1 FROM boarding_events WHERE departure_id = $1 AND tenant_id = $2 LIMIT 1",
+          [req.params.id, req.tenantId]
+        );
+        if (boarded.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ success: false, message: "Un départ avec des passagers déjà embarqués ne peut pas être annulé" });
+        }
+        await client.query(
+          "UPDATE bookings SET status = 'CANCELLED' WHERE departure_id = $1 AND tenant_id = $2 AND status = 'RESERVED'",
+          [req.params.id, req.tenantId]
+        );
+      }
+      const updated = await client.query(
+        "UPDATE departures SET status = $3 WHERE id = $1 AND tenant_id = $2 RETURNING id, status",
+        [req.params.id, req.tenantId, nextStatus]
+      );
+      await client.query(
+        `INSERT INTO audit_events (tenant_id, actor_user_id, type, subject, action, details)
+         VALUES ($1, $2, 'modification', 'départ', $3, $4::jsonb)`,
+        [req.tenantId, req.user.id, `Statut du départ ${req.params.id}`,
+          JSON.stringify({ previousStatus: previous, nextStatus })]
+      );
+      await client.query("COMMIT");
+      return res.json({ success: true, data: updated.rows[0], message: "Statut du départ mis à jour" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally { client.release(); }
   }
 );
 
