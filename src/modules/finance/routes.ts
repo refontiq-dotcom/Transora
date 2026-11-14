@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { body, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+router.use(authorize(["administrateur", "superviseur"]));
 const operationTypes = ["revenu", "dépense", "remboursement", "commission", "frais_transora"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
