@@ -1439,19 +1439,146 @@ document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => window.setTimeout(showCurrentView, 0));
 });
 
+async function loadGuichet() {
+  const token = accessToken;
+  if (!token) {
+    document.querySelector("#guichet-session-state").textContent = "Connectez-vous pour accéder au guichet.";
+    document.querySelector("#guichet-open-form").hidden = true;
+    document.querySelector("#guichet-sale-form").hidden = true;
+    document.querySelector("#guichet-close-form").hidden = true;
+    return;
+  }
+  try {
+    const headers = { Authorization: `Bearer ${token}` };
+    const [sessionResponse, departuresResponse] = await Promise.all([
+      fetch("/api/v1/guichet/session/current", { headers }),
+      fetch("/api/v1/voyages/departures", { headers })
+    ]);
+    const [sessionResult, departuresResult] = await Promise.all([sessionResponse.json(), departuresResponse.json()]);
+    if (!sessionResponse.ok) throw new Error(sessionResult.message || "Impossible de charger la caisse.");
+    if (!departuresResponse.ok) throw new Error(departuresResult.message || "Impossible de charger les départs.");
+    const session = sessionResult.data;
+    const openForm = document.querySelector("#guichet-open-form");
+    const saleForm = document.querySelector("#guichet-sale-form");
+    const closeForm = document.querySelector("#guichet-close-form");
+    const state = document.querySelector("#guichet-session-state");
+    const expected = document.querySelector("#guichet-expected-cash");
+    if (!session) {
+      state.textContent = "Aucune session ouverte. Saisissez le fond de caisse pour commencer.";
+      expected.textContent = "";
+      openForm.hidden = false;
+      saleForm.hidden = true;
+      closeForm.hidden = true;
+      return;
+    }
+    state.textContent = `Caisse ouverte depuis le ${new Date(session.openedAt).toLocaleString("fr-FR")}`;
+    expected.textContent = `Solde théorique : ${formatFcfa(session.expectedCash)}`;
+    openForm.hidden = true;
+    saleForm.hidden = false;
+    closeForm.hidden = false;
+    const select = document.querySelector("#guichet-departure");
+    const departures = departuresResult.data.departures || [];
+    select.replaceChildren();
+    departures.filter(item => item.status === "SCHEDULED" && item.availableSeats > 0).forEach(item => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.dataset.fare = String(item.fareAmount || 0);
+      option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount)}`;
+      select.append(option);
+    });
+    document.querySelector("#guichet-fare").textContent = select.selectedOptions[0]
+      ? `Tarif défini par la compagnie : ${formatFcfa(select.selectedOptions[0].dataset.fare)}`
+      : "Aucun départ disponible pour la vente.";
+  } catch (error) {
+    document.querySelector("#guichet-session-state").textContent = error.message || "Erreur de chargement du guichet.";
+  }
+}
+
+document.querySelector("#guichet-departure").addEventListener("change", () => {
+  const selected = document.querySelector("#guichet-departure").selectedOptions[0];
+  document.querySelector("#guichet-fare").textContent = selected
+    ? `Tarif défini par la compagnie : ${formatFcfa(selected.dataset.fare)}`
+    : "Aucun départ disponible pour la vente.";
+});
+
+document.querySelector("#guichet-open-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = document.querySelector("#guichet-open-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/guichet/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ openingAmount: Number(new FormData(form).get("openingAmount")) })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'ouvrir la caisse.");
+    form.reset();
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur d'ouverture de caisse."); }
+  finally { submit.disabled = false; }
+});
+
+document.querySelector("#guichet-sale-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#guichet-sale-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/guichet/vente", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ departureId: values.departureId, passengerName: values.passengerName })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer la vente.");
+    form.reset();
+    await openTicket(result.data.id);
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur pendant la vente."); }
+  finally { submit.disabled = false; }
+});
+
+document.querySelector("#guichet-close-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const amount = Number(new FormData(event.currentTarget).get("closingAmount"));
+  const sessionResponse = await fetch("/api/v1/guichet/session/current", { headers: { Authorization: `Bearer ${accessToken}` } });
+  const sessionResult = await sessionResponse.json();
+  if (!sessionResponse.ok || !sessionResult.data) { showToast(sessionResult.message || "Aucune caisse ouverte."); return; }
+  const submit = document.querySelector("#guichet-close-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch(`/api/v1/guichet/session/${encodeURIComponent(sessionResult.data.id)}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ closingAmount: amount })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de clôturer la caisse.");
+    document.querySelector("#guichet-session-state").textContent =
+      `Caisse clôturée. Écart constaté : ${formatFcfa(result.data.discrepancy)}`;
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur de clôture."); }
+  finally { submit.disabled = false; }
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
   const isFleet = hash === "#flotte";
   const isPayments = hash === "#payments";
   const isReports = hash === "#reports";
-  document.querySelector("#overview-page").hidden = isVoyages || isFleet || isPayments || isReports;
+  const isGuichet = hash === "#guichet";
+  document.querySelector("#overview-page").hidden = isVoyages || isFleet || isPayments || isReports || isGuichet;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#fleet-page").hidden = !isFleet;
   document.querySelector("#payments-page").hidden = !isPayments;
   document.querySelector("#reports-page").hidden = !isReports;
+  document.querySelector("#guichet-page").hidden = !isGuichet;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -1459,6 +1586,7 @@ function showCurrentView() {
   if (isFleet) loadFleet();
   if (isPayments) loadPayments();
   if (isReports) loadReports();
+  if (isGuichet) loadGuichet();
 }
 
 window.addEventListener("hashchange", showCurrentView);
