@@ -5,7 +5,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const controllerRoles = authorize(["administrateur", "superviseur", "conducteur", "agent_acceuil"]);
+const controllerRoles = authorize(["administrateur", "controleur", "chauffeur"]);
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ success: false, message: "Données invalides", errors: errors.array() });
