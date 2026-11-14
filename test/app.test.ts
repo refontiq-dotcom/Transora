@@ -733,9 +733,9 @@ test("administrator provisions a role-specific staff account and deactivation re
     body: JSON.stringify({ email, password: "MotDePasseTest!2026" })
   });
   expect(login.status).toBe(200);
-  const loginBody = await login.json() as { data: { user: { role: string; token: string } } };
+  const loginBody = await login.json() as { data: { token: string; user: { role: string } } };
   expect(loginBody.data.user.role).toBe("agent_courrier");
-  const agentHeaders = { Authorization: `Bearer ${loginBody.data.user.token}`, "Content-Type": "application/json" };
+  const agentHeaders = { Authorization: `Bearer ${loginBody.data.token}`, "Content-Type": "application/json" };
 
   const finance = await fetch(`${baseUrl}/api/v1/finance/`, { headers: agentHeaders });
   expect(finance.status).toBe(403);
