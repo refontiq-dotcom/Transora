@@ -13,6 +13,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
+const bookingStaff = authorize(["administrateur", "superviseur", "caissier", "agent_acceuil"]);
 
 // Validation helpers
 const validate = (req: Request, res: Response, next: any) => {
@@ -143,6 +144,7 @@ router.patch(
 
 router.post(
   "/departures/:id/bookings",
+  bookingStaff,
   [
     param("id").isUUID(),
     body("passengerName").isString().trim().isLength({ min: 2, max: 160 })
