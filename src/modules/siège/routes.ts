@@ -12,8 +12,10 @@
 
 import { Router, Request, Response } from "express";
 import { body, param, query, validationResult } from "express-validator";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
+router.use(authorize(["administrateur"]));
 
 const validate = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
