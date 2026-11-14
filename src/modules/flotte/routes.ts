@@ -1,12 +1,12 @@
 import { NextFunction, Request, Response, Router } from "express";
-import { authorize } from "../../middleware/auth";
+import { authorizePermission } from "../../middleware/rbac";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
 
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorize(["administrateur"]));
+router.use(authorizePermission("fleet.manage"));
 const statuses = ["disponible", "en_service", "en_maintenance", "hors_service"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
