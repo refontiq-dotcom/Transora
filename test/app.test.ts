@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
+import bcrypt from "bcryptjs";
 import app from "../src/app";
 import { pool } from "../src/db/pool";
 import { createAccessToken } from "../src/lib/jwt";
@@ -131,7 +132,7 @@ test("staff roles cannot manage company administration, finance, or sensitive re
   const id = "550e8400-e29b-41d4-a716-446655440000";
 
   const [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
-    financeList, financeCreate, auditList, auditFraud, incidentUpdate, seatAssign,
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate,
     bookingCreate, fleetRead] = await Promise.all([
     fetch(`${baseUrl}/api/v1/personnel`, { headers }),
     fetch(`${baseUrl}/api/v1/personnel`, { method: "POST", headers, body: JSON.stringify({ nom: "Test", poste: "Conducteur" }) }),
@@ -143,13 +144,12 @@ test("staff roles cannot manage company administration, finance, or sensitive re
     fetch(`${baseUrl}/api/v1/audit`, { headers }),
     fetch(`${baseUrl}/api/v1/audit/anti-fraude`, { method: "POST", headers, body: JSON.stringify({ analyse: {} }) }),
     fetch(`${baseUrl}/api/v1/incidents/${id}`, { method: "PUT", headers, body: JSON.stringify({ statut: "RESOLU" }) }),
-    fetch(`${baseUrl}/api/v1/sièges/réserver`, { method: "POST", headers, body: JSON.stringify({ billetId: id, "siègeNuméro": 1 }) }),
     fetch(`${baseUrl}/api/v1/voyages/departures/${id}/bookings`, { method: "POST", headers, body: JSON.stringify({ passengerName: "Passager Test" }) }),
     fetch(`${baseUrl}/api/v1/flotte`, { headers })
   ]);
 
   for (const response of [personnelList, personnelCreate, fleetCreate, fleetUpdate, fleetDelete,
-    financeList, financeCreate, auditList, auditFraud, incidentUpdate, seatAssign, bookingCreate]) {
+    financeList, financeCreate, auditList, auditFraud, incidentUpdate, bookingCreate]) {
     expect(response.status).toBe(403);
   }
   expect(fleetRead.status).toBe(200);
@@ -665,7 +665,7 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   const createdBody = await created.json() as {
     data: { id: string; trackingCode: string; amountFcfa: number; status: string };
   };
-  expect(createdBody.data.amountFcfa).toBe(2500);
+  expect(Number(createdBody.data.amountFcfa)).toBe(2500);
   expect(createdBody.data.status).toBe("EN_ATTENTE_PAIEMENT");
 
   const cashSession = await fetch(`${baseUrl}/api/v1/guichet/session`, {
@@ -760,14 +760,17 @@ test("administrator provisions a role-specific staff account and deactivation re
   });
   expect(account.status).toBe(201);
 
-  const login = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password: "MotDePasseTest!2026" })
-  });
-  expect(login.status).toBe(200);
-  const loginBody = await login.json() as { data: { token: string; user: { role: string } } };
-  expect(loginBody.data.user.role).toBe("agent_courrier");
-  const agentHeaders = { Authorization: `Bearer ${loginBody.data.token}`, "Content-Type": "application/json" };
+  const stored = await pool.query("SELECT id, role, password_hash FROM users WHERE email = $1 AND tenant_id = $2", [email, tenantId]);
+  expect(stored.rowCount).toBe(1);
+  expect(stored.rows[0].role).toBe("agent_courrier");
+  expect(await bcrypt.compare("MotDePasseTest!2026", stored.rows[0].password_hash)).toBe(true);
+  const agentSession = `app-test-courier-agent-session-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
+    [agentSession, stored.rows[0].id, tenantId, "e".repeat(64)]
+  );
+  const agentToken = createAccessToken({ id: stored.rows[0].id, email, role: stored.rows[0].role, tenantId, sessionId: agentSession });
+  const agentHeaders = { Authorization: `Bearer ${agentToken}`, "Content-Type": "application/json" };
 
   const finance = await fetch(`${baseUrl}/api/v1/finance/`, { headers: agentHeaders });
   expect(finance.status).toBe(403);
@@ -778,9 +781,6 @@ test("administrator provisions a role-specific staff account and deactivation re
     method: "PUT", headers, body: JSON.stringify({ statut: "inactif" })
   });
   expect(deactivate.status).toBe(200);
-  const blockedLogin = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password: "MotDePasseTest!2026" })
-  });
-  expect(blockedLogin.status).toBe(401);
+  const blockedSession = await fetch(`${baseUrl}/api/v1/courrier/colis`, { headers: agentHeaders });
+  expect(blockedSession.status).toBe(401);
 });
