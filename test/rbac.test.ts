@@ -2,6 +2,7 @@ import { AddressInfo } from "node:net";
 import jwt from "jsonwebtoken";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import app from "../src/app";
+import { hasPermission } from "../src/middleware/rbac";
 
 const secret = "transora-rbac-test-secret-key-at-least-32-characters";
 const tenantId = "550e8400-e29b-41d4-a716-446655440001";
@@ -72,4 +73,19 @@ test("the administrator role passes authorization and reaches route validation",
 test("the administrator-only tenant user listing rejects non-administrator roles", async () => {
   const response = await request("/api/v1/tenant/users", "rh");
   expect(response.status).toBe(403);
+});
+
+test("the provisioned role matrix grants only the intended operational permissions", async () => {
+  expect(hasPermission("administrateur", "tenant.manage")).toBe(true);
+  expect(hasPermission("superviseur", "voyages.manage")).toBe(true);
+  expect(hasPermission("agent_acceuil", "bookings.create")).toBe(true);
+  expect(hasPermission("agent_acceuil", "payments.manage")).toBe(false);
+  expect(hasPermission("caissier", "payments.manage")).toBe(true);
+  expect(hasPermission("caissier", "voyages.manage")).toBe(false);
+  expect(hasPermission("conducteur", "incidents.read")).toBe(true);
+  expect(hasPermission("conducteur", "finance.read")).toBe(false);
+  expect(hasPermission("mécanicien", "fleet.read")).toBe(false);
+  expect(hasPermission("mécanicien", "personnel.manage")).toBe(false);
+  expect(hasPermission("rh", "personnel.manage")).toBe(false);
+  expect(hasPermission("unknown", "dashboard.read")).toBe(false);
 });
