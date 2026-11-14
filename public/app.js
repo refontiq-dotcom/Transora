@@ -416,7 +416,15 @@ function renderVoyages() {
     bookingButton.disabled = departure.status !== "SCHEDULED"
       || departure.availableSeats < 1
       || new Date(departure.departureAt) <= new Date();
-    options.append(bookingButton);
+    const statusButton = document.createElement("button");
+    statusButton.className = "voyage-action";
+    statusButton.type = "button";
+    statusButton.dataset.departureId = departure.id;
+    statusButton.dataset.action = "status";
+    statusButton.dataset.nextStatus = departure.status === "SCHEDULED" ? "BOARDING" : "DEPARTED";
+    statusButton.textContent = departure.status === "SCHEDULED" ? "Ouvrir embarquement" : "Clôturer départ";
+    statusButton.hidden = !["SCHEDULED", "BOARDING"].includes(departure.status);
+    options.append(bookingButton, statusButton);
     optionsCell.append(options);
 
     row.append(routeCell, departureCell, vehicleCell, seatsCell, occupancyCell, statusCell, optionsCell);
@@ -1621,9 +1629,28 @@ document.querySelector("#voyage-refresh").addEventListener("click", loadVoyages)
 document.querySelector("#voyage-search").addEventListener("input", renderVoyages);
 document.querySelector("#voyage-date").addEventListener("change", renderVoyages);
 document.querySelector("#voyage-status").addEventListener("change", renderVoyages);
-document.querySelector("#voyage-rows").addEventListener("click", (event) => {
+async function updateDepartureStatus(departureId, nextStatus) {
+  try {
+    const response = await fetch(`/api/v1/voyages/departures/${encodeURIComponent(departureId)}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ status: nextStatus })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de modifier le statut du départ.");
+    showToast(nextStatus === "BOARDING" ? "Embarquement ouvert pour ce départ." : "Départ clôturé.");
+    await loadVoyages();
+    await loadDashboard();
+  } catch (error) { showToast(error.message || "Erreur de mise à jour du départ."); }
+}
+
+document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
+  if (button.dataset.action === "status") {
+    await updateDepartureStatus(button.dataset.departureId, button.dataset.nextStatus);
+    return;
+  }
   selectedDeparture = voyageDepartures.find((departure) => departure.id === button.dataset.departureId);
   if (!selectedDeparture) {
     showToast("Ce départ n'est plus disponible. Actualisez la liste.");
