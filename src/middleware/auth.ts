@@ -68,12 +68,16 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
 export const authorize = (rolesAllowed: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
-    const authorized =
+    const authorized = Boolean(
+      user &&
+      user.id &&
+      user.email &&
+      user.role &&
+      req.tenantId &&
+      user.tenantId === req.tenantId &&
       rolesAllowed.length > 0 &&
-      Boolean(user?.id && user.email && user.role) &&
-      Boolean(req.tenantId) &&
-      user?.tenantId === req.tenantId &&
-      rolesAllowed.includes(user.role);
+      rolesAllowed.includes(user.role)
+    );
 
     if (!authorized) {
       return res.status(403).json({
