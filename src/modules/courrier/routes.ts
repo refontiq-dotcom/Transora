@@ -321,7 +321,7 @@ router.patch("/colis/:id/affectation", assignParcel, [
              lower(regexp_replace(btrim($4), '[[:space:]]+', ' ', 'g')) FOR SHARE`,
         [req.body.departureId, tenantId, parcel.rows[0].origin, parcel.rows[0].destination]
       ),
-      client.query("SELECT id, role FROM users WHERE id = $1 AND tenant_id = $2", [req.body.driverUserId, tenantId])
+      client.query("SELECT id, role FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE", [req.body.driverUserId, tenantId])
     ]);
     if (!departure.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Le départ doit correspondre au trajet du colis et être planifié" }); }
     if (!driver.rowCount || !hasRole(driver.rows[0].role, ["chauffeur"])) {
@@ -349,17 +349,17 @@ router.patch("/colis/:id/prise-en-charge", driverOnly, [param("id").isUUID()], v
     if (!tenantId || !req.user) return;
     try {
       const result = await pool.query(
-        `UPDATE courier_parcels SET status = 'CONFIE_CHAUFFEUR', updated_at = NOW()
-         WHERE id = $1 AND tenant_id = $2 AND assigned_driver_user_id = $3 AND status = 'AFFECTE'
-         RETURNING id, departure_id`,
+        `WITH changed AS (
+           UPDATE courier_parcels SET status = 'CONFIE_CHAUFFEUR', updated_at = NOW()
+           WHERE id = $1 AND tenant_id = $2 AND assigned_driver_user_id = $3 AND status = 'AFFECTE'
+           RETURNING id, departure_id
+         )
+         INSERT INTO courier_events (tenant_id, parcel_id, actor_user_id, event_type, notes, departure_id)
+         SELECT $2, changed.id, $3, 'CONFIE_CHAUFFEUR', 'Prise en charge confirmée par le chauffeur', changed.departure_id
+         FROM changed RETURNING parcel_id`,
         [req.params.id, tenantId, req.user.id]
       );
       if (!result.rowCount) return res.status(409).json({ success: false, message: "Courrier non affecté à ce chauffeur ou déjà pris en charge" });
-      await pool.query(
-        `INSERT INTO courier_events (tenant_id, parcel_id, actor_user_id, event_type, notes, departure_id)
-         VALUES ($1, $2, $3, 'CONFIE_CHAUFFEUR', 'Prise en charge confirmée par le chauffeur', $4)`,
-        [tenantId, req.params.id, req.user.id, result.rows[0].departure_id]
-      );
       return res.json({ success: true, message: "Prise en charge du courrier confirmée" });
     } catch (error) { return next(error); }
   }
@@ -371,17 +371,17 @@ router.patch("/colis/:id/en-transit", driverOnly, [param("id").isUUID()], valida
     if (!tenantId || !req.user) return;
     try {
       const result = await pool.query(
-        `UPDATE courier_parcels SET status = 'EN_TRANSIT', updated_at = NOW()
-         WHERE id = $1 AND tenant_id = $2 AND assigned_driver_user_id = $3 AND status = 'CONFIE_CHAUFFEUR'
-         RETURNING id, departure_id`,
+        `WITH changed AS (
+           UPDATE courier_parcels SET status = 'EN_TRANSIT', updated_at = NOW()
+           WHERE id = $1 AND tenant_id = $2 AND assigned_driver_user_id = $3 AND status = 'CONFIE_CHAUFFEUR'
+           RETURNING id, departure_id
+         )
+         INSERT INTO courier_events (tenant_id, parcel_id, actor_user_id, event_type, notes, departure_id)
+         SELECT $2, changed.id, $3, 'EN_TRANSIT', 'Départ du courrier confirmé', changed.departure_id
+         FROM changed RETURNING parcel_id`,
         [req.params.id, tenantId, req.user.id]
       );
       if (!result.rowCount) return res.status(409).json({ success: false, message: "Le courrier doit d'abord être pris en charge par ce chauffeur" });
-      await pool.query(
-        `INSERT INTO courier_events (tenant_id, parcel_id, actor_user_id, event_type, notes, departure_id)
-         VALUES ($1, $2, $3, 'EN_TRANSIT', 'Départ du courrier confirmé', $4)`,
-        [tenantId, req.params.id, req.user.id, result.rows[0].departure_id]
-      );
       return res.json({ success: true, message: "Courrier déclaré en transit" });
     } catch (error) { return next(error); }
   }
