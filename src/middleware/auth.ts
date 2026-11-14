@@ -1,71 +1,58 @@
 /**
- * Middleware: authentification stricte des requêtes par JWT.
- * Les tokens doivent être signés en HS256, avoir le bon issuer/audience,
- * et contenir des dates iat/exp valides avec une durée maximale de 8 heures.
+ * Authentification JWT et contrôle de révocation des sessions.
  */
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { verifyAccessToken } from "../lib/jwt";
+import { pool } from "../db/pool";
 
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const authorization = req.headers.authorization;
   if (!authorization || !authorization.startsWith("Bearer ")) {
-    return res.status(401).json({
-      success: false,
-      message: "Non authentifié - Token manquant"
-    });
+    return res.status(401).json({ success: false, message: "Non authentifié - Token manquant" });
   }
-
   try {
     const payload = verifyAccessToken(authorization.slice("Bearer ".length).trim());
-    if (
-      typeof payload.sub !== "string" ||
-      typeof payload.email !== "string" ||
-      typeof payload.role !== "string" ||
-      typeof payload.tenantId !== "string"
-    ) {
-      return res.status(401).json({
-        success: false,
-        message: "Non authentifié - Token invalide"
-      });
+    if (typeof payload.sub !== "string" || typeof payload.email !== "string" ||
+        typeof payload.role !== "string" || typeof payload.tenantId !== "string") {
+      return res.status(401).json({ success: false, message: "Non authentifié - Token invalide" });
     }
-
+    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : undefined;
+    if (sessionId) {
+      const active = await pool.query(
+        `SELECT 1 FROM user_sessions
+         WHERE id = $1 AND user_id = $2 AND tenant_id = $3
+           AND revoked_at IS NULL AND expires_at > NOW()`,
+        [sessionId, payload.sub, payload.tenantId]
+      );
+      if (!active.rowCount) return res.status(401).json({
+        success: false, message: "Session révoquée ou expirée"
+      });
+      await pool.query("UPDATE user_sessions SET last_used_at = NOW() WHERE id = $1", [sessionId]);
+    }
     req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-      tenantId: payload.tenantId
+      id: payload.sub, email: payload.email, role: payload.role,
+      tenantId: payload.tenantId, ...(sessionId ? { sessionId } : {})
     };
     req.tenantId = payload.tenantId;
     return next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError || error instanceof Error && error.message.includes("JWT_SECRET")) {
-      if (error.message.includes("JWT_SECRET")) {
-        return res.status(503).json({
-          success: false,
-          message: "Authentification indisponible - Configuration JWT invalide"
-        });
-      }
-      return res.status(401).json({
-        success: false,
-        message: "Non authentifié - Token invalide ou expiré"
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError ||
+        error instanceof Error && error.message.includes("JWT_SECRET")) {
+      if (error.message.includes("JWT_SECRET")) return res.status(503).json({
+        success: false, message: "Authentification indisponible - Configuration JWT invalide"
       });
+      return res.status(401).json({ success: false, message: "Non authentifié - Token invalide ou expiré" });
     }
     return next(error);
   }
 };
 
-/**
- * Middleware: autorisation historique par rôle.
- */
-export const authorize = (rolesAllowed: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user || !rolesAllowed.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Non autorisé - Vous n'avez pas les droits requis"
-      });
-    }
-    return next();
-  };
+export const authorize = (rolesAllowed: string[]) => (
+  req: Request, res: Response, next: NextFunction
+) => {
+  if (!req.user || !rolesAllowed.includes(req.user.role)) return res.status(403).json({
+    success: false, message: "Non autorisé - Vous n'avez pas les droits requis"
+  });
+  return next();
 };
