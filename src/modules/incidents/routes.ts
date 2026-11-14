@@ -1,12 +1,12 @@
 import { NextFunction, Request, Response, Router } from "express";
-import { authorize } from "../../middleware/auth";
+import { authorizePermission } from "../../middleware/rbac";
 import { body, param, query, validationResult } from "express-validator";
 import { pool } from "../../db/pool";
 
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorize(["administrateur"]));
+router.use(authorizePermission("incidents.manage"));
 const types = ["panne", "accident", "retard", "absence_chauffeur", "probleme_passager", "bagage", "billet", "paiement", "caisse"];
 const severities = ["faible", "moyenne", "eleve", "critique"];
 const statuses = ["OUVERT", "EN_COURS", "RESOLU", "CLOTURÉ"];
