@@ -46,10 +46,25 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   }
 };
 
+/**
+ * Canonicalise les anciens rôles sans leur accorder de privilèges supplémentaires.
+ * Les comptes existants restent compatibles pendant la migration progressive.
+ */
+const roleAliases: Record<string, string> = {
+  superviseur: "responsable_exploitation",
+  conducteur: "chauffeur",
+  agent_acceuil: "agent_accueil"
+};
+
+export const normalizeRole = (role: string): string => roleAliases[role] || role;
+
+export const hasRole = (role: string | undefined, rolesAllowed: string[]): boolean =>
+  Boolean(role && rolesAllowed.some((allowed) => normalizeRole(allowed) === normalizeRole(role)));
+
 export const authorize = (rolesAllowed: string[]) => (
   req: Request, res: Response, next: NextFunction
 ) => {
-  if (!req.user || !rolesAllowed.includes(req.user.role)) return res.status(403).json({
+  if (!req.user || !hasRole(req.user.role, rolesAllowed)) return res.status(403).json({
     success: false, message: "Non autorisé - Vous n'avez pas les droits requis"
   });
   return next();
