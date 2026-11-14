@@ -10,6 +10,7 @@ let tenantId: string;
 let userId: string;
 let sessionId: string;
 let accessToken: string;
+let userEmail: string;
 const previousJwtSecret = process.env.JWT_SECRET;
 
 beforeAll(async () => {
@@ -24,19 +25,20 @@ beforeAll(async () => {
   process.env.JWT_SECRET = "test-app-session-bound-token-secret-32";
   const tenant = await pool.query("INSERT INTO tenants (name) VALUES ('App Test Tenant') RETURNING id");
   tenantId = tenant.rows[0].id;
+  userEmail = `app-test-${Date.now()}@example.test`;
   const user = await pool.query(
     `INSERT INTO users (tenant_id, name, email, password_hash, role)
      VALUES ($1, 'App Test User', $2, 'test-hash', 'administrateur') RETURNING id`,
-    [tenantId, `app-test-${Date.now()}@example.test`]
+    [tenantId, userEmail]
   );
   userId = user.rows[0].id;
   sessionId = `app-test-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [sessionId, userId, tenantId, "a".repeat(64)]
+    [sessionId, userId, tenantId, "c".repeat(64)]
   );
   accessToken = createAccessToken({
-    id: userId, email: `app-test-${Date.now()}@example.test`, role: "administrateur", tenantId, sessionId
+    id: userId, email: userEmail, role: "administrateur", tenantId, sessionId
   });
 });
 
