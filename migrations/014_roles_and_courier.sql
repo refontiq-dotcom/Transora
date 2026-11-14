@@ -24,7 +24,7 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE employees ALTER COLUMN role SET DEFAULT 'chauffeur';
 CREATE UNIQUE INDEX IF NOT EXISTS employees_user_id_unique
   ON employees (user_id) WHERE user_id IS NOT NULL;
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -33,9 +33,9 @@ BEGIN
     ALTER TABLE employees ADD CONSTRAINT employees_user_tenant_fk
       FOREIGN KEY (user_id, tenant_id) REFERENCES users(id, tenant_id) ON DELETE RESTRICT;
   END IF;
-END $;
+END $$;
 
-DO $
+DO $$
 DECLARE constraint_name text;
 BEGIN
   FOR constraint_name IN
