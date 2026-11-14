@@ -13,7 +13,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const bookingStaff = authorize(["administrateur", "superviseur", "caissier", "agent_acceuil"]);
+const bookingStaff = authorize(["administrateur", "agent_guichet", "caissier", "agent_accueil"]);
 
 // Validation helpers
 const validate = (req: Request, res: Response, next: any) => {
@@ -30,7 +30,7 @@ const validate = (req: Request, res: Response, next: any) => {
 
 router.post(
   "/departures",
-  authorize(["administrateur", "superviseur"]),
+  authorize(["administrateur", "responsable_exploitation"]),
   [
     body("origin").isString().trim().notEmpty(),
     body("destination").isString().trim().notEmpty(),
