@@ -4,7 +4,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-router.use(authorize(["administrateur", "superviseur"]));
+router.use(authorize(["administrateur", "responsable_financier"]));
 const operationTypes = ["revenu", "dépense", "remboursement", "commission", "frais_transora"];
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
