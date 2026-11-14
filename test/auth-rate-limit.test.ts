@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const query = vi.fn();
+const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("../src/db/pool", () => ({ pool: { query } }));
 
 import express from "express";
