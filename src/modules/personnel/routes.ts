@@ -70,7 +70,7 @@ router.get(
     try {
       const result = await pool.query(
         `SELECT id, name AS "nom", position AS "poste", role, phone AS "telephone",
-                email, hire_date AS "dateEmbauche", status AS "statut",
+                email, user_id AS "compteId", hire_date AS "dateEmbauche", status AS "statut",
                 created_at AS "crééLe"
          FROM employees
          WHERE tenant_id = $1 AND deleted_at IS NULL
@@ -104,7 +104,7 @@ router.get(
     try {
       const result = await pool.query(
         `SELECT id, name AS "nom", position AS "poste", role, phone AS "telephone",
-                email, hire_date AS "dateEmbauche", status AS "statut",
+                email, user_id AS "compteId", hire_date AS "dateEmbauche", status AS "statut",
                 created_at AS "crééLe", updated_at AS "misAJourLe"
          FROM employees WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.tenantId]
