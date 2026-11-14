@@ -4,7 +4,7 @@ import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
 
 const router = Router();
-const reviewAudit = authorize(["administrateur", "superviseur"]);
+const reviewAudit = authorize(["administrateur"]);
 
 const eventTypes = [
   "création",
