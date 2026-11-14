@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS courier_parcels (
     (payment_status = 'PAID' AND paid_at IS NOT NULL AND paid_by IS NOT NULL)
   )
 );
+CREATE UNIQUE INDEX IF NOT EXISTS courier_parcels_tracking_code_global_unique ON courier_parcels (tracking_code);
 CREATE INDEX IF NOT EXISTS courier_parcels_tenant_status_idx
   ON courier_parcels (tenant_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS courier_parcels_driver_status_idx
