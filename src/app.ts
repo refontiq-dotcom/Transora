@@ -20,6 +20,9 @@ import notificationRoutes from "./modules/notifications/routes";
 import financeRoutes from "./modules/finance/routes";
 import auditRoutes from "./modules/audit/routes";
 import searchRoutes from "./modules/recherche/routes";
+import guichetRoutes from "./modules/guichet/routes";
+import embarquementRoutes from "./modules/embarquement/routes";
+import publicReservationRoutes from "./modules/reservation-publique/routes";
 
 const app = express();
 const rateLimitStore = createRateLimitStoreFromEnv();
@@ -98,6 +101,14 @@ app.use("/api/v1/auth/login", createRateLimiter({
   store: rateLimitStore
 }));
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/public", createRateLimiter({
+  namespace: "public-booking",
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 40,
+  message: "Trop de tentatives de réservation. Réessayez plus tard.",
+  store: rateLimitStore
+}));
+app.use("/api/public", publicReservationRoutes);
 app.use("/api/v1", authenticate);
 app.use("/api/v1/tenant", tenantRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
@@ -111,6 +122,8 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/finance", financeRoutes);
 app.use("/api/v1/audit", auditRoutes);
 app.use("/api/v1/recherche", searchRoutes);
+app.use("/api/v1/guichet", guichetRoutes);
+app.use("/api/v1/embarquement", embarquementRoutes);
 app.use(errorHandler);
 
 export default app;

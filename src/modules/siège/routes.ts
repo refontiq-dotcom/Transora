@@ -1,144 +1,71 @@
-/**
- * Module: Inventaire et Gestion des Sièges
- *
- * Implémentation de la règle fondamentale C-04 : disponibilité par segment.
- * Deux réservations sont incompatibles si leurs intervalles de segments se chevauchent
- * ET utilisent le même siège.
- *
- * Exemple : Abidjan → Bouaké → Katiola → Korhogo :
- * - Siège occupé A→B peut être vendu B→C (segments non chevauchants)
- * - Siège occupé A→K ne peut pas être vendu B→K (chevauchement)
- */
-
-import { Router, Request, Response } from "express";
-import { body, param, query, validationResult } from "express-validator";
+import { NextFunction, Request, Response, Router } from "express";
+import { body, query, validationResult } from "express-validator";
+import { PoolClient } from "pg";
+import { pool } from "../../db/pool";
 
 const router = Router();
-
-const validate = (req: Request, res: Response, next: any) => {
+const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: "Données invalides",
-      errors: errors.array()
-    });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, message: "Données invalides", errors: errors.array() });
   next();
 };
 
-// Helper: Vérifier si deux intervalles de segments se chevauchent
-const segmentsSechevauchent = (arrêt1: {gare: string, segmentId: string}, arrêt2: {gare: string, segmentId: string}): boolean => {
-  // Deux segments se chevauchent s'ils partagent au moins un segment commun
-  // Logique simplifiée : comparer les IDs de segment ou les positions dans le trajet
-  return arrêt1.segmentId === arrêt2.segmentId;
-};
+router.get("/availability", [
+  query("trajetId").isUUID().withMessage("L'identifiant du départ est requis")
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+  try {
+    const departure = await pool.query(
+      "SELECT id, capacity FROM departures WHERE id = $1 AND tenant_id = $2",
+      [req.query.trajetId, req.tenantId]
+    );
+    if (!departure.rowCount) return res.status(404).json({ success: false, message: "Départ introuvable dans cette compagnie" });
+    const occupied = await pool.query(
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL",
+      [req.query.trajetId, req.tenantId]
+    );
+    const taken = new Set(occupied.rows.map((row: { seat_number: number }) => Number(row.seat_number)));
+    const seats = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => ({
+      numero: index + 1, statut: taken.has(index + 1) ? "RESERVE" : "DISPONIBLE"
+    }));
+    return res.json({ success: true, data: {
+      departureId: departure.rows[0].id, capaciteTotale: seats.length,
+      siegesReserves: taken.size, siegesDisponibles: seats.length - taken.size, detail: seats
+    } });
+  } catch (error) { return next(error); }
+});
 
-// POST /api/v1/sièges/réserver - Réserver un siège
-router.post(
-  "/réserver",
-  [
-    body("tenantId").notEmpty().withMessage("L'ID tenant est requis"),
-    body("billetId").notEmpty().withMessage("L'ID billet est requis"),
-    body("siègeNuméro").isInt({ min: 1 }).withMessage("Le numéro de siège doit être >= 1"),
-    body("segmentDepart").notEmpty().withMessage("Le segment de départ est requis"),
-    body("segmentArrivée").notEmpty().withMessage("Le segment d'arrivée est requis"),
-    body("trajetId").notEmpty().withMessage("L'ID trajet est requis")
-  ],
-  validate,
-  async (req: Request, res: Response) => {
-    try {
-      const { tenantId, billetId, siègeNuméro, segmentDepart, segmentArrivée, trajetId } = req.body;
-
-      // TODO: Vérifier la disponibilité du siège selon la règle C-04
-      // 1. Récupérer le plan de sièges actuel pour ce trajet
-      // 2. Vérifier que le siège n'est pas déjà réservé
-      // 3. Vérifier qu'aucun autre segment chevauchant ne réserve ce même siège
-      //    - Pour chaque réservation existante, vérifier segmentsSechevauchent
-      // 4. Si disponible, marquer le siège comme réservé (statut: RESERVED)
-      // 5. Si non disponible, retourner une erreur de conflit
-
-      const siègeDéjàPris = false; // TODO: Vérification réelle
-
-      if (siègeDéjàPris) {
-        return res.status(409).json({
-          success: false,
-          message: "Ce siège est déjà réservé pour ce segment ou un segment chevauchant",
-          errors: [{ msg: "Siège en conflit" }]
-        });
-      }
-
-      // TODO: Créer la réservation
-      const réservation = {
-        id: "réservation-123",
-        billetId,
-        siègeNuméro,
-        segmentDepart,
-        segmentArrivée,
-        statut: "RESERVED",
-        réservéLe: new Date().toISOString(),
-        expireÀ: new Date(Date.now() + 15 * 60 * 1000).toISOString() // 15 min expiry
-      };
-
-      res.status(201).json({
-        success: true,
-        data: réservation,
-        message: "Siège réservé avec succès"
-      });
-    } catch (error) {
-      console.error("Erreur lors de la réservation du siège:", error);
-      res.status(500).json({
-        success: false,
-        message: "Erreur interne du serveur"
-      });
+router.post("/réserver", [
+  body("billetId").isUUID(),
+  body("siègeNuméro").isInt({ min: 1 })
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const booking = await client.query(
+      `SELECT b.id, b.departure_id, d.capacity
+       FROM bookings b JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
+       WHERE b.id = $1 AND b.tenant_id = $2 AND b.status <> 'CANCELLED'
+       FOR UPDATE OF d, b`,
+      [req.body.billetId, req.tenantId]
+    );
+    if (!booking.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Réservation introuvable dans cette compagnie" }); }
+    const seat = Number(req.body.siègeNuméro);
+    if (seat > Number(booking.rows[0].capacity)) {
+      await client.query("ROLLBACK"); return res.status(400).json({ success: false, message: "Ce numéro de siège dépasse la capacité du véhicule" });
     }
-  }
-);
-
-// GET /api/v1/sièges/availability - Obtenir la disponibilité des sièges
-router.get(
-  "/availability",
-  [
-    query("trajetId").notEmpty().withMessage("L'ID trajet est requis"),
-    query("segmentDepart").notEmpty().withMessage("Le segment de départ est requis"),
-    query("segmentArrivée").notEmpty().withMessage("Le segment d'arrivée est requis")
-  ],
-  validate,
-  async (req: Request, res: Response) => {
-    try {
-      const { trajetId, segmentDepart, segmentArrivée } = req.query;
-
-      // TODO: Calculer la disponibilité des sièges
-      // 1. Récupérer le plan de sièges du trajet
-      // 2. Soustraire les sièges déjà réservés selon la règle C-04
-      // 3. Retourner { siègesDisponibles: number, détail: [...] }
-
-      const mockAvailability = {
-        trajetId,
-        segmentDepart,
-        segmentArrivée,
-        capacitéTotale: 50,
-        siègesRéservés: 12,
-        siègesDisponibles: 38,
-        détail: [
-          { siège: 1, statut: "DISPONIBLE" },
-          { siège: 2, statut: "DISPONIBLE" },
-          // ... etc
-        ]
-      };
-
-      res.json({
-        success: true,
-        data: mockAvailability
-      });
-    } catch (error) {
-      console.error("Erreur lors du calcul de la disponibilité:", error);
-      res.status(500).json({
-        success: false,
-        message: "Erreur interne du serveur"
-      });
-    }
-  }
-);
+    const updated = await client.query(
+      "UPDATE bookings SET seat_number = $3 WHERE id = $1 AND tenant_id = $2 RETURNING id, seat_number AS \"seatNumber\"",
+      [req.body.billetId, req.tenantId, seat]
+    );
+    await client.query("COMMIT");
+    return res.json({ success: true, data: updated.rows[0], message: "Siège attribué" });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if ((error as { code?: string }).code === "23505") return res.status(409).json({ success: false, message: "Ce siège est déjà réservé pour ce départ" });
+    return next(error);
+  } finally { client.release(); }
+});
 
 export default router;

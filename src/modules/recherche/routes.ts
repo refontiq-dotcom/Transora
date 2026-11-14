@@ -146,15 +146,22 @@ router.get(
         departure_status: string;
         payment_status: string | null;
         payment_method: string | null;
+        ticket_token: string;
+        seat_number: number | null;
+        company_name: string;
+        boarded_at: Date | null;
       }>(
-        `SELECT b.id, b.passenger_name, b.amount_transport, b.platform_fee,
-                b.status AS booking_status, d.origin, d.destination, d.departure_at,
-                d.vehicle_code, d.status AS departure_status,
-                p.status AS payment_status, p.payment_method
+        `SELECT b.id, b.ticket_token, b.seat_number, b.passenger_name,
+                b.amount_transport, b.platform_fee, b.status AS booking_status,
+                d.origin, d.destination, d.departure_at, d.vehicle_code,
+                d.status AS departure_status, t.name AS company_name,
+                p.status AS payment_status, p.payment_method, be.boarded_at
          FROM bookings b
          JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
+         JOIN tenants t ON t.id = b.tenant_id
          LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
-         WHERE b.id = $1 AND b.tenant_id = $2`,
+         LEFT JOIN boarding_events be ON be.booking_id = b.id AND be.tenant_id = b.tenant_id
+         WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2`,
         [req.params.id, req.tenantId]
       );
       const booking = result.rows[0];
@@ -165,7 +172,8 @@ router.get(
       const isPaid = booking.booking_status === "PAID" && booking.payment_status === "CONFIRMED";
       const isCancelled = booking.booking_status === "CANCELLED" || booking.departure_status === "CANCELLED";
       const isExpired = new Date(booking.departure_at).getTime() < Date.now();
-      const valid = isPaid && !isCancelled && !isExpired;
+      const isBoarded = Boolean(booking.boarded_at);
+      const valid = isPaid && !isCancelled && !isExpired && !isBoarded;
       const includeImages = req.query.images === "true";
       const motif = isCancelled
         ? "La réservation ou le départ a été annulé."
@@ -173,13 +181,15 @@ router.get(
         ? "Le paiement de ce billet n'est pas confirmé."
         : isExpired
         ? "L'heure de départ de ce billet est passée."
+        : isBoarded
+        ? "Ce billet a déjà été utilisé pour l'embarquement."
         : null;
 
       let qrCode: string | undefined;
       let codeBarres: string | undefined;
-      if (includeImages && isPaid && !isCancelled) {
+      if (includeImages && !isCancelled) {
         const [qr, barcode] = await Promise.all([
-          QRCode.toDataURL(booking.id, {
+          QRCode.toDataURL(booking.ticket_token, {
             errorCorrectionLevel: "M",
             margin: 2,
             width: 280,
@@ -187,7 +197,7 @@ router.get(
           }),
           bwipjs.toBuffer({
             bcid: "code128",
-            text: booking.id.toUpperCase(),
+            text: booking.ticket_token.toUpperCase(),
             scale: 3,
             height: 12,
             includetext: true,
@@ -207,6 +217,10 @@ router.get(
         data: {
           billetId: booking.id,
           passager: booking.passenger_name,
+          compagnie: booking.company_name,
+          siege: booking.seat_number,
+          statutReservation: booking.booking_status,
+          embarqueLe: booking.boarded_at,
           origine: booking.origin,
           destination: booking.destination,
           départLe: booking.departure_at,

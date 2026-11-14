@@ -10,6 +10,7 @@ import { body, param, query, validationResult } from "express-validator";
 import { NextFunction } from "express";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
 
@@ -28,12 +29,14 @@ const validate = (req: Request, res: Response, next: any) => {
 
 router.post(
   "/departures",
+  authorize(["administrateur", "superviseur"]),
   [
     body("origin").isString().trim().notEmpty(),
     body("destination").isString().trim().notEmpty(),
     body("departureAt").isISO8601(),
     body("vehicleCode").isString().trim().notEmpty(),
     body("capacity").isInt({ min: 1 }),
+    body("fareAmount").isInt({ min: 1 }),
     body("status").optional().isIn(["SCHEDULED", "BOARDING", "DEPARTED", "CANCELLED"])
   ],
   validate,
@@ -44,13 +47,13 @@ router.post(
     }
 
     try {
-      const { origin, destination, departureAt, vehicleCode, capacity, status } = req.body;
+      const { origin, destination, departureAt, vehicleCode, capacity, fareAmount, status } = req.body;
       const result = await pool.query(
         `INSERT INTO departures
-           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, origin, destination, departure_at AS "departureAt",
-                   vehicle_code AS "vehicleCode", capacity, status`,
+                   vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount", status`,
         [
           tenantId,
           origin.trim(),
@@ -58,6 +61,7 @@ router.post(
           departureAt,
           vehicleCode.trim(),
           Number(capacity),
+          Number(fareAmount),
           status || "SCHEDULED"
         ]
       );
@@ -72,8 +76,7 @@ router.post(
   "/departures/:id/bookings",
   [
     param("id").isUUID(),
-    body("passengerName").isString().trim().notEmpty(),
-    body("amountTransport").isInt({ min: 1 })
+    body("passengerName").isString().trim().isLength({ min: 2, max: 160 })
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -89,9 +92,9 @@ router.post(
       await client.query("BEGIN");
       transactionStarted = true;
       const { id } = req.params;
-      const { passengerName, amountTransport } = req.body;
-      const departure = await client.query<{ capacity: number }>(
-        `SELECT capacity FROM departures
+      const { passengerName } = req.body;
+      const departure = await client.query<{ capacity: number; fare_amount: number }>(
+        `SELECT capacity, fare_amount FROM departures
          WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED'
            AND departure_at > NOW()
          FOR UPDATE`,
@@ -104,6 +107,12 @@ router.post(
           success: false,
           message: "Départ introuvable ou non disponible"
         });
+      }
+
+      if (Number(departure.rows[0].fare_amount) <= 0) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({ success: false, message: "Le tarif de ce départ doit être configuré avant la réservation" });
       }
 
       const reservations = await client.query<{ count: number }>(
@@ -120,13 +129,25 @@ router.post(
         });
       }
 
+      const taken = await client.query<{ seat_number: number }>(
+        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL",
+        [id, tenantId]
+      );
+      const occupied = new Set(taken.rows.map((row) => Number(row.seat_number)));
+      const seatNumber = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => index + 1)
+        .find((seat) => !occupied.has(seat));
+      if (!seatNumber) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({ success: false, message: "Aucune place disponible" });
+      }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, departure_id AS "departureId", passenger_name AS "passengerName",
-                   amount_transport AS "amountTransport", platform_fee AS "platformFee",
-                   status, created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), Number(amountTransport)]
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, seat_number)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId",
+                   passenger_name AS "passengerName", amount_transport AS "amountTransport",
+                   platform_fee AS "platformFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
+        [tenantId, id, passengerName.trim(), Number(departure.rows[0].fare_amount), seatNumber]
       );
       await client.query("COMMIT");
       transactionStarted = false;
@@ -139,6 +160,68 @@ router.post(
     } finally {
       client?.release();
     }
+  }
+);
+
+router.patch(
+  "/departures/:id/status",
+  authorize(["administrateur", "superviseur"]),
+  [
+    param("id").isUUID(),
+    body("status").isIn(["BOARDING", "DEPARTED", "CANCELLED"])
+  ],
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Tenant non identifié" });
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        "SELECT id, status FROM departures WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+        [req.params.id, req.tenantId]
+      );
+      if (!current.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ success: false, message: "Départ introuvable dans cette compagnie" });
+      }
+      const previous = current.rows[0].status as string;
+      const nextStatus = String(req.body.status);
+      const allowed = (previous === "SCHEDULED" && ["BOARDING", "CANCELLED"].includes(nextStatus))
+        || (previous === "BOARDING" && ["DEPARTED", "CANCELLED"].includes(nextStatus));
+      if (!allowed) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, message: "Transition de statut non autorisée" });
+      }
+      if (nextStatus === "CANCELLED") {
+        const boarded = await client.query(
+          "SELECT 1 FROM boarding_events WHERE departure_id = $1 AND tenant_id = $2 LIMIT 1",
+          [req.params.id, req.tenantId]
+        );
+        if (boarded.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ success: false, message: "Un départ avec des passagers déjà embarqués ne peut pas être annulé" });
+        }
+        await client.query(
+          "UPDATE bookings SET status = 'CANCELLED' WHERE departure_id = $1 AND tenant_id = $2 AND status = 'RESERVED'",
+          [req.params.id, req.tenantId]
+        );
+      }
+      const updated = await client.query(
+        "UPDATE departures SET status = $3 WHERE id = $1 AND tenant_id = $2 RETURNING id, status",
+        [req.params.id, req.tenantId, nextStatus]
+      );
+      await client.query(
+        `INSERT INTO audit_events (tenant_id, actor_user_id, type, subject, action, details)
+         VALUES ($1, $2, 'modification', 'départ', $3, $4::jsonb)`,
+        [req.tenantId, req.user.id, `Statut du départ ${req.params.id}`,
+          JSON.stringify({ previousStatus: previous, nextStatus })]
+      );
+      await client.query("COMMIT");
+      return res.json({ success: true, data: updated.rows[0], message: "Statut du départ mis à jour" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally { client.release(); }
   }
 );
 
@@ -167,11 +250,12 @@ router.get(
         departure_at: Date;
         vehicle_code: string;
         capacity: number;
+        fare_amount: number;
         status: string;
         reserved_seats: string;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.status,
+                d.capacity, d.fare_amount, d.status,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
@@ -201,6 +285,7 @@ router.get(
               departureAt: departure.departure_at,
               vehicleCode: departure.vehicle_code,
               capacity: departure.capacity,
+              fareAmount: Number(departure.fare_amount),
               reservedSeats,
               availableSeats: Math.max(0, departure.capacity - reservedSeats),
               occupancyRate: departure.capacity === 0

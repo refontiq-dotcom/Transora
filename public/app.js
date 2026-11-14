@@ -416,7 +416,15 @@ function renderVoyages() {
     bookingButton.disabled = departure.status !== "SCHEDULED"
       || departure.availableSeats < 1
       || new Date(departure.departureAt) <= new Date();
-    options.append(bookingButton);
+    const statusButton = document.createElement("button");
+    statusButton.className = "voyage-action";
+    statusButton.type = "button";
+    statusButton.dataset.departureId = departure.id;
+    statusButton.dataset.action = "status";
+    statusButton.dataset.nextStatus = departure.status === "SCHEDULED" ? "BOARDING" : "DEPARTED";
+    statusButton.textContent = departure.status === "SCHEDULED" ? "Ouvrir embarquement" : "Clôturer départ";
+    statusButton.hidden = !["SCHEDULED", "BOARDING"].includes(departure.status);
+    options.append(bookingButton, statusButton);
     optionsCell.append(options);
 
     row.append(routeCell, departureCell, vehicleCell, seatsCell, occupancyCell, statusCell, optionsCell);
@@ -1138,18 +1146,21 @@ function setScannerFeedback(message, state = "") {
   feedback.dataset.state = state;
 }
 
-function renderTicketCheck(ticket) {
+function renderTicketCheck(ticket, ticketId) {
   const result = document.querySelector("#scanner-result");
-  result.dataset.valid = String(ticket.valide);
+  result.dataset.valid = String(ticket.peutEmbarquer);
   result.replaceChildren();
   const heading = document.createElement("h3");
-  heading.textContent = ticket.valide ? "Paiement confirmé · billet valide" : "Billet non valide";
+  heading.textContent = ticket.peutEmbarquer ? "Billet valide pour l'embarquement" : "Embarquement refusé";
   const details = [
+    `Compagnie : ${ticket.compagnie}`,
     `Passager : ${ticket.passager}`,
     `Trajet : ${ticket.origine} → ${ticket.destination}`,
-    `Départ : ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ticket.départLe))}`,
-    `Véhicule : ${ticket.véhicule}`,
-    `Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "non confirmé"}`
+    `Départ : ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ticket.departLe))}`,
+    `Véhicule : ${ticket.vehicule}`,
+    `Siège : ${ticket.siege || "—"}`,
+    `Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "non confirmé"}`,
+    `État du départ : ${ticket.statutDepart}`
   ];
   if (ticket.motif) details.push(ticket.motif);
   const paragraphs = details.map((detail) => {
@@ -1158,6 +1169,30 @@ function renderTicketCheck(ticket) {
     return paragraph;
   });
   result.append(heading, ...paragraphs);
+  if (ticket.peutEmbarquer) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "primary-button";
+    button.textContent = "Confirmer l'embarquement";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/v1/embarquement/valider", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ billetId: ticketId })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || "Impossible de valider l'embarquement.");
+        setScannerFeedback("Embarquement enregistré avec succès.", "success");
+        await lookupScannedTicket(ticketId);
+      } catch (error) {
+        setScannerFeedback(error.message || "Erreur pendant la validation.", "error");
+        button.disabled = false;
+      }
+    });
+    result.append(button);
+  }
   result.hidden = false;
 }
 
@@ -1178,7 +1213,7 @@ async function lookupScannedTicket(rawValue) {
   submit.disabled = true;
   setScannerFeedback("Vérification du billet…");
   try {
-    const response = await fetch(`/api/v1/recherche/billet/${encodeURIComponent(ticketId)}`, {
+    const response = await fetch(`/api/v1/embarquement/scan/${encodeURIComponent(ticketId)}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const result = await response.json();
@@ -1189,12 +1224,12 @@ async function lookupScannedTicket(rawValue) {
       }
       throw new Error(result.message || "Billet introuvable.");
     }
-    renderTicketCheck(result.data);
+    renderTicketCheck(result.data, ticketId);
     setScannerFeedback(
-      result.data.valide
-        ? "Billet vérifié. Cette vérification ne marque pas le passager comme embarqué."
+      result.data.peutEmbarquer
+        ? "Billet authentique. Confirmez l'embarquement pour l'enregistrer."
         : result.data.motif || "Billet non valide.",
-      result.data.valide ? "success" : "error"
+      result.data.peutEmbarquer ? "success" : "error"
     );
     if (scannerStream) stopTicketScanner();
   } catch (error) {
@@ -1304,10 +1339,13 @@ async function openTicket(bookingId) {
     }
     document.querySelector("#ticket-title").textContent = `${ticket.origine} → ${ticket.destination}`;
     document.querySelector("#ticket-description").textContent =
-      `${ticket.passager} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)}`;
+      `${ticket.compagnie || "Compagnie"} · ${ticket.passager} · Siège ${ticket.siege || "—"} · Départ le ${new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.départLe))} · ${formatFcfa(ticket.montantTotal)} · Paiement : ${ticket.statutPaiement === "CONFIRMED" ? "confirmé" : "en attente"}`;
     setTicketImage("#ticket-qr", ticket.qrCode);
     setTicketImage("#ticket-barcode", ticket.codeBarres);
-    document.querySelector("#ticket-id").textContent = `Référence billet : ${ticket.billetId}`;
+    const ticketState = ticket.statutPaiement === "CONFIRMED"
+      ? (ticket.valide ? "Billet payé" : ticket.motif || "Billet payé mais non utilisable")
+      : "Réservation non payée — embarquement interdit";
+    document.querySelector("#ticket-id").textContent = `Référence : ${ticket.billetId} · ${ticketState}`;
     dialog.showModal();
   } catch (error) {
     showToast(error.message || "Impossible de charger le billet.");
@@ -1412,19 +1450,146 @@ document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => window.setTimeout(showCurrentView, 0));
 });
 
+async function loadGuichet() {
+  const token = accessToken;
+  if (!token) {
+    document.querySelector("#guichet-session-state").textContent = "Connectez-vous pour accéder au guichet.";
+    document.querySelector("#guichet-open-form").hidden = true;
+    document.querySelector("#guichet-sale-form").hidden = true;
+    document.querySelector("#guichet-close-form").hidden = true;
+    return;
+  }
+  try {
+    const headers = { Authorization: `Bearer ${token}` };
+    const [sessionResponse, departuresResponse] = await Promise.all([
+      fetch("/api/v1/guichet/session/current", { headers }),
+      fetch("/api/v1/voyages/departures", { headers })
+    ]);
+    const [sessionResult, departuresResult] = await Promise.all([sessionResponse.json(), departuresResponse.json()]);
+    if (!sessionResponse.ok) throw new Error(sessionResult.message || "Impossible de charger la caisse.");
+    if (!departuresResponse.ok) throw new Error(departuresResult.message || "Impossible de charger les départs.");
+    const session = sessionResult.data;
+    const openForm = document.querySelector("#guichet-open-form");
+    const saleForm = document.querySelector("#guichet-sale-form");
+    const closeForm = document.querySelector("#guichet-close-form");
+    const state = document.querySelector("#guichet-session-state");
+    const expected = document.querySelector("#guichet-expected-cash");
+    if (!session) {
+      state.textContent = "Aucune session ouverte. Saisissez le fond de caisse pour commencer.";
+      expected.textContent = "";
+      openForm.hidden = false;
+      saleForm.hidden = true;
+      closeForm.hidden = true;
+      return;
+    }
+    state.textContent = `Caisse ouverte depuis le ${new Date(session.openedAt).toLocaleString("fr-FR")}`;
+    expected.textContent = `Solde théorique : ${formatFcfa(session.expectedCash)}`;
+    openForm.hidden = true;
+    saleForm.hidden = false;
+    closeForm.hidden = false;
+    const select = document.querySelector("#guichet-departure");
+    const departures = departuresResult.data.departures || [];
+    select.replaceChildren();
+    departures.filter(item => item.status === "SCHEDULED" && item.availableSeats > 0).forEach(item => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.dataset.fare = String(item.fareAmount || 0);
+      option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount)}`;
+      select.append(option);
+    });
+    document.querySelector("#guichet-fare").textContent = select.selectedOptions[0]
+      ? `Tarif défini par la compagnie : ${formatFcfa(select.selectedOptions[0].dataset.fare)}`
+      : "Aucun départ disponible pour la vente.";
+  } catch (error) {
+    document.querySelector("#guichet-session-state").textContent = error.message || "Erreur de chargement du guichet.";
+  }
+}
+
+document.querySelector("#guichet-departure").addEventListener("change", () => {
+  const selected = document.querySelector("#guichet-departure").selectedOptions[0];
+  document.querySelector("#guichet-fare").textContent = selected
+    ? `Tarif défini par la compagnie : ${formatFcfa(selected.dataset.fare)}`
+    : "Aucun départ disponible pour la vente.";
+});
+
+document.querySelector("#guichet-open-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = document.querySelector("#guichet-open-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/guichet/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ openingAmount: Number(new FormData(form).get("openingAmount")) })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'ouvrir la caisse.");
+    form.reset();
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur d'ouverture de caisse."); }
+  finally { submit.disabled = false; }
+});
+
+document.querySelector("#guichet-sale-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const submit = document.querySelector("#guichet-sale-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/guichet/vente", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ departureId: values.departureId, passengerName: values.passengerName })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer la vente.");
+    form.reset();
+    await openTicket(result.data.id);
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur pendant la vente."); }
+  finally { submit.disabled = false; }
+});
+
+document.querySelector("#guichet-close-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const amount = Number(new FormData(event.currentTarget).get("closingAmount"));
+  const sessionResponse = await fetch("/api/v1/guichet/session/current", { headers: { Authorization: `Bearer ${accessToken}` } });
+  const sessionResult = await sessionResponse.json();
+  if (!sessionResponse.ok || !sessionResult.data) { showToast(sessionResult.message || "Aucune caisse ouverte."); return; }
+  const submit = document.querySelector("#guichet-close-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch(`/api/v1/guichet/session/${encodeURIComponent(sessionResult.data.id)}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ closingAmount: amount })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de clôturer la caisse.");
+    document.querySelector("#guichet-session-state").textContent =
+      `Caisse clôturée. Écart constaté : ${formatFcfa(result.data.discrepancy)}`;
+    await loadGuichet();
+  } catch (error) { showToast(error.message || "Erreur de clôture."); }
+  finally { submit.disabled = false; }
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
   const isFleet = hash === "#flotte";
   const isPayments = hash === "#payments";
   const isReports = hash === "#reports";
-  document.querySelector("#overview-page").hidden = isVoyages || isFleet || isPayments || isReports;
+  const isGuichet = hash === "#guichet";
+  document.querySelector("#overview-page").hidden = isVoyages || isFleet || isPayments || isReports || isGuichet;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#fleet-page").hidden = !isFleet;
   document.querySelector("#payments-page").hidden = !isPayments;
   document.querySelector("#reports-page").hidden = !isReports;
+  document.querySelector("#guichet-page").hidden = !isGuichet;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -1432,6 +1597,7 @@ function showCurrentView() {
   if (isFleet) loadFleet();
   if (isPayments) loadPayments();
   if (isReports) loadReports();
+  if (isGuichet) loadGuichet();
 }
 
 window.addEventListener("hashchange", showCurrentView);
@@ -1447,13 +1613,47 @@ document.querySelector("#voyages-add-departure").addEventListener("click", () =>
   departureDialog.showModal();
 });
 
+document.querySelector("#voyage-copy-link").addEventListener("click", async () => {
+  if (!accessToken) { showToast("Connectez-vous pour partager votre lien de réservation."); return; }
+  const button = document.querySelector("#voyage-copy-link");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/v1/tenant", { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de récupérer le lien.");
+    const url = new URL(result.data.publicBookingUrl, window.location.origin).toString();
+    await navigator.clipboard.writeText(url);
+    showToast("Lien de réservation copié. Vous pouvez le partager à vos clients.");
+  } catch (error) { showToast(error.message || "Copie du lien impossible."); }
+  finally { button.disabled = false; }
+});
+
 document.querySelector("#voyage-refresh").addEventListener("click", loadVoyages);
 document.querySelector("#voyage-search").addEventListener("input", renderVoyages);
 document.querySelector("#voyage-date").addEventListener("change", renderVoyages);
 document.querySelector("#voyage-status").addEventListener("change", renderVoyages);
-document.querySelector("#voyage-rows").addEventListener("click", (event) => {
+async function updateDepartureStatus(departureId, nextStatus) {
+  try {
+    const response = await fetch(`/api/v1/voyages/departures/${encodeURIComponent(departureId)}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ status: nextStatus })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de modifier le statut du départ.");
+    showToast(nextStatus === "BOARDING" ? "Embarquement ouvert pour ce départ." : "Départ clôturé.");
+    await loadVoyages();
+    await loadDashboard();
+  } catch (error) { showToast(error.message || "Erreur de mise à jour du départ."); }
+}
+
+document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
+  if (button.dataset.action === "status") {
+    await updateDepartureStatus(button.dataset.departureId, button.dataset.nextStatus);
+    return;
+  }
   selectedDeparture = voyageDepartures.find((departure) => departure.id === button.dataset.departureId);
   if (!selectedDeparture) {
     showToast("Ce départ n'est plus disponible. Actualisez la liste.");
@@ -1464,6 +1664,7 @@ document.querySelector("#voyage-rows").addEventListener("click", (event) => {
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
+  document.querySelector("#booking-fare").textContent = `Tarif du trajet : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Siège attribué automatiquement`;
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -1529,8 +1730,7 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
         Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
-        passengerName: values.passengerName,
-        amountTransport: Number(values.amountTransport)
+        passengerName: values.passengerName
       })
     });
     const result = await response.json();
@@ -1538,9 +1738,10 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
     form.reset();
     bookingDialog.close();
     selectedDeparture = undefined;
-    showToast("Réservation créée. Ouverture des paiements pour encaisser le billet.");
+    showToast("Réservation créée. Votre billet est prêt.");
     await loadDashboard();
-    window.location.hash = "#payments";
+    await loadPayments();
+    await openTicket(result.data.id);
   } catch (error) {
     showToast(error.message || "Connexion à l'API impossible.");
   } finally {
@@ -1823,7 +2024,8 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
       body: JSON.stringify({
         ...values,
         departureAt: new Date(values.departureAt).toISOString(),
-        capacity: Number(values.capacity)
+        capacity: Number(values.capacity),
+        fareAmount: Number(values.fareAmount)
       })
     });
     const result = await response.json();
