@@ -12,6 +12,9 @@ ALTER TABLE bookings
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_ticket_token_unique
   ON bookings (ticket_token);
 
+CREATE UNIQUE INDEX IF NOT EXISTS departures_id_tenant_unique
+  ON departures (id, tenant_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_id_tenant_unique
   ON bookings (id, tenant_id);
 
@@ -40,6 +43,9 @@ CREATE TABLE IF NOT EXISTS guichet_sessions (
   )
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS guichet_sessions_id_tenant_unique
+  ON guichet_sessions (id, tenant_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS guichet_one_open_session_per_agent
   ON guichet_sessions (tenant_id, opened_by) WHERE status = 'OPEN';
 
@@ -49,7 +55,7 @@ CREATE INDEX IF NOT EXISTS guichet_sessions_tenant_opened_idx
 CREATE TABLE IF NOT EXISTS guichet_operations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  session_id UUID NOT NULL REFERENCES guichet_sessions(id) ON DELETE RESTRICT,
+  session_id UUID NOT NULL,
   booking_id UUID,
   type TEXT NOT NULL CHECK (type IN ('OPENING', 'SALE', 'REFUND', 'CLOSING', 'ADJUSTMENT')),
   amount BIGINT NOT NULL CHECK (amount >= 0),
@@ -57,6 +63,8 @@ CREATE TABLE IF NOT EXISTS guichet_operations (
   description TEXT NOT NULL DEFAULT '',
   recorded_by UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT guichet_operations_session_tenant_fk
+    FOREIGN KEY (session_id, tenant_id) REFERENCES guichet_sessions(id, tenant_id) ON DELETE RESTRICT,
   CONSTRAINT guichet_operations_booking_tenant_fk
     FOREIGN KEY (booking_id, tenant_id) REFERENCES bookings(id, tenant_id),
   CONSTRAINT guichet_operations_recorded_by_tenant_fk
@@ -82,8 +90,8 @@ CREATE TABLE IF NOT EXISTS boarding_events (
     FOREIGN KEY (booking_id, tenant_id) REFERENCES bookings(id, tenant_id) ON DELETE CASCADE,
   CONSTRAINT boarding_events_boarded_by_tenant_fk
     FOREIGN KEY (boarded_by, tenant_id) REFERENCES users(id, tenant_id),
-  CONSTRAINT boarding_events_departure_fk
-    FOREIGN KEY (departure_id) REFERENCES departures(id) ON DELETE CASCADE,
+  CONSTRAINT boarding_events_departure_tenant_fk
+    FOREIGN KEY (departure_id, tenant_id) REFERENCES departures(id, tenant_id) ON DELETE CASCADE,
   CONSTRAINT boarding_events_booking_once UNIQUE (booking_id)
 );
 
