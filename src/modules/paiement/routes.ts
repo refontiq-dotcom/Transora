@@ -7,12 +7,12 @@ import { NextFunction, Router, Request, Response } from "express";
 import { body, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
-import { authorize } from "../../middleware/auth";
+import { authorizePermission } from "../../middleware/rbac";
 
 const router = Router();
 
 // Les comptes applicatifs disponibles sont actuellement administrateurs d'entreprise.
-router.use(authorize(["administrateur"]));
+router.use(authorizePermission("payments.manage"));
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
