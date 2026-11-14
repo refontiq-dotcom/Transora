@@ -1591,11 +1591,18 @@ document.querySelector(".notification-button").addEventListener("click", () => {
   showToast("Vous êtes à jour. Aucune nouvelle notification.");
 });
 
-loginButton.addEventListener("click", () => {
+loginButton.addEventListener("click", async () => {
   if (localStorage.getItem("transora_token")) {
-    localStorage.removeItem("transora_token");
-    localStorage.removeItem("transora_user");
-    window.location.reload();
+    const token = localStorage.getItem("transora_token");
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST", headers: { Authorization: `Bearer ${token}` }
+      });
+    } finally {
+      localStorage.removeItem("transora_token");
+      localStorage.removeItem("transora_user");
+      window.location.reload();
+    }
     return;
   }
   setAuthMode(false);
@@ -1809,6 +1816,7 @@ authForm.addEventListener("submit", async (event) => {
     }
     localStorage.setItem("transora_token", result.data.token);
     localStorage.setItem("transora_user", JSON.stringify(result.data.user));
+    startSessionRefresh();
     authDialog.close();
     showToast("Connecté. Chargement des données de l'entreprise...");
     await loadDashboard();
@@ -1822,6 +1830,33 @@ authForm.addEventListener("submit", async (event) => {
   }
 });
 
+
+// Keep the short-lived access token fresh while the HttpOnly refresh cookie is valid.
+let refreshInFlight = false;
+async function refreshAccessToken() {
+  if (refreshInFlight || !localStorage.getItem("transora_token")) return false;
+  refreshInFlight = true;
+  try {
+    const response = await fetch("/api/v1/auth/refresh", { method: "POST" });
+    if (!response.ok) throw new Error("Session expirée");
+    const result = await response.json();
+    localStorage.setItem("transora_token", result.data.token);
+    if (result.data.user) localStorage.setItem("transora_user", JSON.stringify(result.data.user));
+    return true;
+  } catch {
+    localStorage.removeItem("transora_token");
+    localStorage.removeItem("transora_user");
+    setAuthenticatedState(false);
+    return false;
+  } finally { refreshInFlight = false; }
+}
+let sessionRefreshTimer;
+function startSessionRefresh() {
+  if (sessionRefreshTimer) return;
+  sessionRefreshTimer = window.setInterval(refreshAccessToken, 10 * 60 * 1000);
+  window.addEventListener("focus", refreshAccessToken);
+}
+if (localStorage.getItem("transora_token")) startSessionRefresh();
 setAuthenticatedState(Boolean(localStorage.getItem("transora_token")));
 const now = new Date();
 document.querySelector("#today-label").textContent =

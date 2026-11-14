@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("JWT access token security", () => {
-  it("creates and verifies an HS256 token with issuer, audience and an eight-hour expiry", () => {
+  it("creates and verifies an HS256 token with issuer, audience and a fifteen-minute expiry", () => {
     process.env.JWT_SECRET = secret;
     process.env.JWT_ISSUER = "transora-api";
     process.env.JWT_AUDIENCE = "transora-clients";
@@ -39,7 +39,7 @@ describe("JWT access token security", () => {
     expect(payload.aud).toBe("transora-clients");
     expect(payload.exp).toBeTypeOf("number");
     expect(payload.iat).toBeTypeOf("number");
-    expect((payload.exp as number) - (payload.iat as number)).toBe(8 * 60 * 60);
+    expect((payload.exp as number) - (payload.iat as number)).toBe(15 * 60);
   });
 
   it("rejects tokens signed with a different algorithm", () => {
