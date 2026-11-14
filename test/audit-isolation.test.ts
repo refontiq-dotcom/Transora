@@ -54,12 +54,12 @@ beforeAll(async () => {
   tokenA = jwt.sign(
     { email: "a@tenant.test", role: "administrateur", tenantId: tenantAId },
     process.env.JWT_SECRET,
-    { subject: userAId }
+    { subject: userAId, algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
   );
   tokenB = jwt.sign(
     { email: "b@tenant.test", role: "administrateur", tenantId: tenantBId },
     process.env.JWT_SECRET,
-    { subject: userBId }
+    { subject: userBId, algorithm: "HS256", issuer: "transora-api", audience: "transora-clients", expiresIn: "8h" }
   );
 });
 
