@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09271b">
+  <meta name="description" content="Réservez votre voyage en quelques étapes avec votre compagnie de transport.">
+  <title>Réservation de voyage · TRANSORA</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body{min-height:100vh;background:#f4f7f5;color:#14251d}
+    .public-booking{width:min(760px,calc(100% - 32px));margin:48px auto}
+    .public-card{background:#fff;border:1px solid #e2e9e4;border-radius:20px;padding:clamp(20px,5vw,40px);box-shadow:0 18px 50px #09271b12}
+    .public-brand{font-weight:800;letter-spacing:.16em;color:#1c6b4c;font-size:12px}
+    .public-booking h1{font-size:clamp(28px,5vw,40px);margin:12px 0}
+    .public-subtitle{color:#607168;line-height:1.6;margin-bottom:26px}
+    .public-form{display:grid;gap:16px}
+    .public-form label{display:grid;gap:7px;font-weight:650}
+    .public-form input,.public-form select{width:100%;min-height:48px;border:1px solid #d6e0d9;border-radius:10px;padding:10px 12px;background:#fff;font:inherit}
+    .public-ticket{margin-top:22px;padding:20px;border:1px dashed #9bb8a7;border-radius:14px;display:grid;gap:12px}
+    .public-ticket img{width:220px;max-width:100%;height:auto;justify-self:center}
+    .public-ticket p{margin:0;line-height:1.5}
+    .public-message{margin-top:14px;color:#607168}
+    .public-error{color:#a52c2c}
+    @media print{body{background:#fff}.public-booking{margin:0;width:100%}.public-card{box-shadow:none;border:0}.public-form,.public-message,.public-print,.public-subtitle{display:none!important}.public-ticket{border:1px solid #aaa}}
+  </style>
+</head>
+<body>
+  <main class="public-booking">
+    <section class="public-card">
+      <div class="public-brand">TRANSORA</div>
+      <h1 id="public-title">Réserver votre voyage</h1>
+      <p class="public-subtitle">Choisissez votre départ, renseignez vos coordonnées et recevez immédiatement votre billet. Le règlement s'effectue auprès de la compagnie.</p>
+      <form id="public-booking-form" class="public-form">
+        <label>Départ disponible<select name="departureId" id="public-departure" required><option value="">Chargement…</option></select></label>
+        <label>Nom complet du passager<input name="passengerName" required minlength="2" maxlength="160" autocomplete="name"></label>
+        <label>Téléphone<input name="passengerPhone" required minlength="8" maxlength="24" autocomplete="tel" placeholder="+225 07 00 00 00 00"></label>
+        <button class="primary-button" type="submit" id="public-submit">Réserver et générer mon billet</button>
+      </form>
+      <p id="public-message" class="public-message" role="status" aria-live="polite"></p>
+      <section id="public-ticket" class="public-ticket" hidden>
+        <h2>Votre billet</h2>
+        <p id="public-ticket-company"></p>
+        <p id="public-ticket-route"></p>
+        <p id="public-ticket-passenger"></p>
+        <p id="public-ticket-seat"></p>
+        <p id="public-ticket-amount"></p>
+        <p id="public-ticket-payment"></p>
+        <img id="public-ticket-qr" alt="QR code sécurisé du billet">
+        <p id="public-ticket-reference"></p>
+        <button class="primary-button public-print" id="public-print" type="button">Enregistrer / imprimer en PDF</button>
+      </section>
+    </section>
+  </main>
+  <script src="/reservation.js" defer></script>
+</body>
+</html>
