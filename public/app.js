@@ -1602,6 +1602,21 @@ document.querySelector("#voyages-add-departure").addEventListener("click", () =>
   departureDialog.showModal();
 });
 
+document.querySelector("#voyage-copy-link").addEventListener("click", async () => {
+  if (!accessToken) { showToast("Connectez-vous pour partager votre lien de réservation."); return; }
+  const button = document.querySelector("#voyage-copy-link");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/v1/tenant", { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de récupérer le lien.");
+    const url = new URL(result.data.publicBookingUrl, window.location.origin).toString();
+    await navigator.clipboard.writeText(url);
+    showToast("Lien de réservation copié. Vous pouvez le partager à vos clients.");
+  } catch (error) { showToast(error.message || "Copie du lien impossible."); }
+  finally { button.disabled = false; }
+});
+
 document.querySelector("#voyage-refresh").addEventListener("click", loadVoyages);
 document.querySelector("#voyage-search").addEventListener("input", renderVoyages);
 document.querySelector("#voyage-date").addEventListener("change", renderVoyages);
