@@ -202,8 +202,7 @@ router.post(
       }
 
       const taken = await client.query<{ seat_number: number }>(
-        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL
-           AND segment_range && '[0,)'::int4range",
+        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL AND segment_range && '[0,)'::int4range",
         [id, tenantId]
       );
       const occupied = new Set(taken.rows.map((row) => Number(row.seat_number)));
