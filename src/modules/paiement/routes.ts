@@ -1,5 +1,4 @@
 /**
-import { authorize } from "../../middleware/auth";
  * Module: Réservation et billetterie avec paiement
  * Les montants sont lus depuis la réservation en base, jamais depuis le tenant fourni par le client.
  */
@@ -8,6 +7,7 @@ import { NextFunction, Router, Request, Response } from "express";
 import { body, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { authorize } from "../../middleware/auth";
 
 const router = Router();
 
