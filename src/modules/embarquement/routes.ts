@@ -42,6 +42,7 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
       const motif = ticket.embarqueLe ? "Ce billet a déjà été utilisé."
         : ticket.statutReservation !== "PAID" || ticket.statutPaiement !== "CONFIRMED" ? "Le règlement de ce billet n'est pas confirmé."
         : ticket.statutDepart === "CANCELLED" ? "Ce départ a été annulé."
+        : ticket.statutDepart !== "BOARDING" ? "L’embarquement n’est pas encore ouvert."
         : new Date(ticket.departLe).getTime() <= Date.now() - 2 * 60 * 60 * 1000 ? "L'heure de départ est dépassée."
         : null;
       return res.json({ success: true, data: { ...ticket, motif } });
@@ -65,7 +66,7 @@ router.post("/valider", controllerRoles, [
        FROM bookings b
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
-       WHERE b.id = $1 AND b.tenant_id = $2
+       WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2
        FOR UPDATE OF b`,
       [req.body.billetId, req.tenantId]
     );
