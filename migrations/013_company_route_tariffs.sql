@@ -41,3 +41,18 @@ ALTER TABLE payments
 
 CREATE INDEX IF NOT EXISTS departures_route_tariff_idx
   ON departures (tenant_id, route_tariff_id);
+
+-- Même modèle de sécurité que user_sessions : accès réservé au backend de confiance.
+-- Aucun accès direct depuis anon/authenticated ; l'API applique l'isolation tenant.
+ALTER TABLE company_route_tariffs ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE company_route_tariffs FROM PUBLIC;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON TABLE company_route_tariffs FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE company_route_tariffs FROM authenticated;
+  END IF;
+END $$;
