@@ -31,19 +31,30 @@ ALTER TABLE stations
   ADD COLUMN IF NOT EXISTS address TEXT,
   ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
-INSERT INTO company_cities (tenant_id, name)
-SELECT DISTINCT tenant_id, btrim(city)
-FROM stations
-WHERE city IS NOT NULL AND length(btrim(city)) BETWEEN 2 AND 100
-ON CONFLICT DO NOTHING;
+DO $legacy_stations$
+BEGIN
+  -- Older deployments used a plain-text stations.city column. Fresh installs
+  -- already use city_id and therefore have no legacy city column to backfill.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'stations' AND column_name = 'city'
+  ) THEN
+    INSERT INTO company_cities (tenant_id, name)
+    SELECT DISTINCT tenant_id, btrim(city)
+    FROM stations
+    WHERE city IS NOT NULL AND length(btrim(city)) BETWEEN 2 AND 100
+    ON CONFLICT DO NOTHING;
 
-UPDATE stations AS s
-SET city_id = c.id
-FROM company_cities AS c
-WHERE c.tenant_id = s.tenant_id
-  AND lower(regexp_replace(btrim(c.name), '[[:space:]]+', ' ', 'g')) =
-      lower(regexp_replace(btrim(s.city), '[[:space:]]+', ' ', 'g'))
-  AND s.city_id IS NULL;
+    UPDATE stations AS s
+    SET city_id = c.id
+    FROM company_cities AS c
+    WHERE c.tenant_id = s.tenant_id
+      AND lower(regexp_replace(btrim(c.name), '[[:space:]]+', ' ', 'g')) =
+          lower(regexp_replace(btrim(s.city), '[[:space:]]+', ' ', 'g'))
+      AND s.city_id IS NULL;
+  END IF;
+END
+$legacy_stations$;
 
 ALTER TABLE stations ALTER COLUMN city_id SET NOT NULL;
 ALTER TABLE stations ADD CONSTRAINT stations_tenant_id_id_unique UNIQUE (tenant_id, id);
