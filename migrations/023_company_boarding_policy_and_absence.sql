@@ -47,6 +47,29 @@ CREATE TRIGGER tenants_default_boarding_policy
 AFTER INSERT ON tenants
 FOR EACH ROW EXECUTE FUNCTION create_default_company_boarding_policy();
 
+ALTER TABLE departures
+  ADD COLUMN IF NOT EXISTS actual_departed_at TIMESTAMPTZ;
+
+CREATE OR REPLACE FUNCTION stamp_departure_actual_departure()
+RETURNS TRIGGER LANGUAGE plpgsql AS $
+BEGIN
+  IF NEW.status = 'DEPARTED' AND NEW.actual_departed_at IS NULL THEN
+    NEW.actual_departed_at := NOW();
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS departures_stamp_actual_departure_insert ON departures;
+CREATE TRIGGER departures_stamp_actual_departure_insert
+BEFORE INSERT ON departures
+FOR EACH ROW EXECUTE FUNCTION stamp_departure_actual_departure();
+
+DROP TRIGGER IF EXISTS departures_stamp_actual_departure_update ON departures;
+CREATE TRIGGER departures_stamp_actual_departure_update
+BEFORE UPDATE OF status ON departures
+FOR EACH ROW EXECUTE FUNCTION stamp_departure_actual_departure();
+
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS boarding_policy_version INTEGER,
   ADD COLUMN IF NOT EXISTS boarding_policy_snapshot JSONB,
