@@ -15,8 +15,11 @@ function showMessage(value, error = false) {
   message.classList.toggle("public-error", error);
 }
 function displayTicket(ticket) {
-  document.querySelector("#public-title").textContent = "Réservation enregistrée";
-  document.querySelector(".public-subtitle").textContent = "Conservez ce billet. Présentez-le à votre compagnie pour effectuer le règlement avant l'embarquement.";
+  const isHold = ticket.bookingStatus === "HELD";
+  document.querySelector("#public-title").textContent = isHold ? "Votre place est bloquée temporairement" : "Réservation enregistrée";
+  document.querySelector(".public-subtitle").textContent = isHold
+    ? "Vous avez 15 minutes pour finaliser le paiement auprès de la compagnie. Après ce délai, la place sera automatiquement remise à disposition."
+    : "Conservez ce billet. L'embarquement est autorisé uniquement après confirmation du paiement.";
   form.hidden = true;
   document.querySelector("#public-ticket-company").textContent = ticket.companyName;
   document.querySelector("#public-ticket-route").textContent = ticket.origin + " → " + ticket.destination + " · " +
@@ -24,9 +27,14 @@ function displayTicket(ticket) {
   document.querySelector("#public-ticket-passenger").textContent = "Passager : " + ticket.passengerName;
   document.querySelector("#public-ticket-seat").textContent = "Siège : " + (ticket.seatNumber || "À attribuer");
   document.querySelector("#public-ticket-amount").textContent = "Transport : " + money(ticket.transportAmount) + " · Frais compagnie : " + money(ticket.companyBookingFee) + " · Frais TRANSORA : " + money(ticket.platformFee) + " · Total : " + money(ticket.totalAmount);
-  document.querySelector("#public-ticket-payment").textContent = ticket.paymentStatus === "CONFIRMED"
-    ? "Paiement confirmé" : "Paiement en attente — embarquement non autorisé";
-  document.querySelector("#public-ticket-qr").src = ticket.qrCode;
+  const expiresAt = ticket.holdExpiresAt ? new Date(ticket.holdExpiresAt) : null;
+  document.querySelector("#public-ticket-payment").textContent = isHold && expiresAt
+    ? "Place réservée jusqu'au " + new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(expiresAt)
+    : ticket.paymentStatus === "CONFIRMED"
+      ? "Paiement confirmé" : "Paiement en attente — embarquement non autorisé";
+  const qr = document.querySelector("#public-ticket-qr");
+  qr.hidden = !ticket.qrCode;
+  if (ticket.qrCode) qr.src = ticket.qrCode;
   document.querySelector("#public-ticket-reference").textContent = "Référence : " + ticket.bookingId;
   ticketPanel.hidden = false;
 }
