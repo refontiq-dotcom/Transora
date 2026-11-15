@@ -33,6 +33,7 @@ router.post(
   authorize(["administrateur", "responsable_exploitation"]),
   [
     body("origin").isString().trim().notEmpty(),
+    body("routeId").optional().isUUID(),
     body("destination").isString().trim().notEmpty(),
     body("departureAt").isISO8601(),
     body("vehicleCode").isString().trim().notEmpty(),
@@ -47,7 +48,7 @@ router.post(
     }
 
     try {
-      const { origin, destination, departureAt, vehicleCode, capacity, status } = req.body;
+      const { origin, destination, departureAt, vehicleCode, capacity, status, routeId } = req.body;
       const tariff = await pool.query<{ id: string; fare_amount: number; company_booking_fee: number }>(
         `SELECT id, fare_amount, company_booking_fee
          FROM company_route_tariffs
@@ -65,11 +66,11 @@ router.post(
       });
       const result = await pool.query(
         `INSERT INTO departures
-           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, route_tariff_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, route_tariff_id, status, route_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id, origin, destination, departure_at AS "departureAt",
                    vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount",
-                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId", status`,
+                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId", status, route_id AS "routeId"`,
         [
           tenantId,
           origin.trim(),
@@ -80,7 +81,8 @@ router.post(
           Number(tariff.rows[0].fare_amount),
           Number(tariff.rows[0].company_booking_fee),
           tariff.rows[0].id,
-          status || "SCHEDULED"
+          status || "SCHEDULED",
+          routeId || null
         ]
       );
       return res.status(201).json({ success: true, data: result.rows[0] });
