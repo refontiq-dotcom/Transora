@@ -677,7 +677,8 @@
         <button class="dialog-close" id="departure-dialog-close" type="button" aria-label="Fermer">×</button>
         <p class="eyebrow">NOUVEAU TRAJET</p>
         <h2>Programmer un départ</h2>
-        <p class="auth-description">Le départ sera enregistré dans l'espace de votre entreprise.</p>
+        <p class="auth-description">Le départ sera enregistré dans l’espace de votre entreprise.</p>
+        <label>Ligne du réseau (facultatif)<select name="routeId" id="departure-route"><option value="">Trajet libre sans ligne</option></select></label>
         <label>Ville de départ<input name="origin" required maxlength="100"></label>
         <label>Destination<input name="destination" required maxlength="100"></label>
         <label>Date et heure<input name="departureAt" type="datetime-local" required></label>
