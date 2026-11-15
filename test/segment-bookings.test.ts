@@ -181,6 +181,12 @@ test("le contrôleur confirme la descente réelle avant d'autoriser la montée s
   expect(after.data.summary.seatsBlockedByPreviousPassenger).toBe(0);
   expect(after.data.boardings[0].seatBlockedByPreviousPassenger).toBe(false);
 
+  await pool.query("UPDATE departures SET status='DEPARTED' WHERE id=$1 AND tenant_id=$2", [departureId, tenantId]);
+  await pool.query(
+    "INSERT INTO stop_arrival_events (tenant_id, departure_id, stop_id, arrived_by) VALUES ($1,$2,$3,$4)",
+    [tenantId, departureId, middleStopId, userId]
+  );
+
   const boarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
     method: "POST", headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ billetId: secondSegmentBookingId })
