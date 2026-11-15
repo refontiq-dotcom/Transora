@@ -417,7 +417,7 @@ test("company route tariffs control departures and preserve historical reservati
     const cashDeskSale = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
       method: "POST",
       headers: headersA,
-      body: JSON.stringify({ departureId: departureBody.data.id, passengerName: "Passager Guichet Tarif" })
+      body: JSON.stringify({ departureId: departureBody.data.id, passengerName: "Passager Guichet Tarif", policyAccepted: true })
     });
     expect(cashDeskSale.status).toBe(201);
     const cashDeskSaleBody = await cashDeskSale.json() as {
@@ -544,7 +544,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
 
     const saleResponse = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
       method: "POST", headers: headersA,
-      body: JSON.stringify({ departureId, passengerName: "Passager Guichet" })
+      body: JSON.stringify({ departureId, passengerName: "Passager Guichet", policyAccepted: true })
     });
     expect(saleResponse.status).toBe(201);
     const saleBody = await saleResponse.json() as { data: { id: string; ticketToken: string; totalPaid: number; seatNumber: number } };
