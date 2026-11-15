@@ -82,10 +82,9 @@ router.get("/:departureId/:stopId", controllerRoles, [
        LEFT JOIN alighting_events ae ON ae.booking_id = b.id AND ae.tenant_id = b.tenant_id
        WHERE b.tenant_id = $1 AND b.departure_id = $2
          AND b.seat_number IS NOT NULL AND b.status = 'PAID'
-         AND upper(b.segment_range) <= $3::integer
-         AND ae.id IS NOT NULL
+         AND ae.stop_id = $3
        ORDER BY b.seat_number`,
-      [req.tenantId, req.params.departureId, stop.stop_order]
+      [req.tenantId, req.params.departureId, req.params.stopId]
     );
 
     return res.json({ success: true, data: {
