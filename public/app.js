@@ -1633,6 +1633,22 @@ function updateGuichetSegmentFields() {
       : "Aucun départ disponible pour la vente.";
 }
 
+function renderGuichetPolicy(policy) {
+  const lines = [
+    "Ouverture de l’embarquement : " + policy.boardingOpenMinutesBefore + " min avant le départ.",
+    "Heure limite conseillée : " + policy.boardingDeadlineMinutesBefore + " min avant le départ.",
+    "Délai de grâce : " + policy.gracePeriodMinutes + " min après l’heure prévue ou l’arrivée réelle du car.",
+    policy.allowRebookingAfterNoShow
+      ? "Report après absence : autorisé jusqu’à " + policy.maxRebookings + " fois" + (Number(policy.rebookingFeeAmount) > 0 ? ", avec " + formatFcfa(policy.rebookingFeeAmount) + " de frais." : ", sans frais.")
+      : "Report après absence : non autorisé.",
+    policy.refundPolicy === "FULL" ? "Remboursement prévu : 100 % selon les conditions de la compagnie."
+      : policy.refundPolicy === "PARTIAL" ? "Remboursement prévu : " + policy.refundPercentage + " % selon les conditions de la compagnie."
+      : "Remboursement après absence : non prévu."
+  ];
+  document.querySelector("#guichet-policy-summary").textContent = lines.join(" ");
+  document.querySelector("#guichet-policy-accepted").checked = false;
+}
+
 async function loadGuichet() {
   const token = accessToken;
   if (!token) {
@@ -1646,11 +1662,14 @@ async function loadGuichet() {
     const headers = { Authorization: `Bearer ${token}` };
     const [sessionResponse, departuresResponse] = await Promise.all([
       fetch("/api/v1/guichet/session/current", { headers }),
-      fetch("/api/v1/voyages/departures", { headers })
+      fetch("/api/v1/voyages/departures", { headers }),
+      fetch("/api/v1/embarquement/policy", { headers })
     ]);
-    const [sessionResult, departuresResult] = await Promise.all([sessionResponse.json(), departuresResponse.json()]);
+    const [sessionResult, departuresResult, policyResult] = await Promise.all([sessionResponse.json(), departuresResponse.json(), policyResponse.json()]);
     if (!sessionResponse.ok) throw new Error(sessionResult.message || "Impossible de charger la caisse.");
     if (!departuresResponse.ok) throw new Error(departuresResult.message || "Impossible de charger les départs.");
+    if (!policyResponse.ok) throw new Error(policyResult.message || "Impossible de charger les conditions de voyage.");
+    renderGuichetPolicy(policyResult.data);
     const session = sessionResult.data;
     const openForm = document.querySelector("#guichet-open-form");
     const saleForm = document.querySelector("#guichet-sale-form");
@@ -1722,6 +1741,7 @@ document.querySelector("#guichet-sale-form").addEventListener("submit", async (e
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({
+        policyAccepted: document.querySelector("#guichet-policy-accepted").checked,
         departureId: values.departureId,
         passengerName: values.passengerName,
         ...(values.originStopId ? { originStopId: values.originStopId } : {}),
