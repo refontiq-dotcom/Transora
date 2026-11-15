@@ -59,12 +59,16 @@ router.get("/:publicCode/departs/:departureId/places", [
     );
     if (!departure.rowCount) return res.status(404).json({ success: false, message: "Départ introuvable ou fermé à la réservation" });
     const trip = departure.rows[0];
-    const segment = await resolveBookingSegment(
-      pool, trip.tenant_id, trip.route_id || null,
-      typeof req.query.originStopId === "string" ? req.query.originStopId : null,
-      typeof req.query.destinationStopId === "string" ? req.query.destinationStopId : null,
-      { origin: trip.origin, destination: trip.destination, fareAmount: 0, companyBookingFee: 0 }
-    );
+    const segmentClient = await pool.connect();
+    let segment;
+    try {
+      segment = await resolveBookingSegment(
+        segmentClient, trip.tenant_id, trip.route_id || null,
+        typeof req.query.originStopId === "string" ? req.query.originStopId : null,
+        typeof req.query.destinationStopId === "string" ? req.query.destinationStopId : null,
+        { origin: trip.origin, destination: trip.destination, fareAmount: 0, companyBookingFee: 0 }
+      );
+    } finally { segmentClient.release(); }
     if (segment.error || !segment.data) {
       return res.status(segment.error?.status || 400).json({ success: false, message: segment.error?.message || "Sélectionnez votre gare de départ et votre gare d'arrivée" });
     }
