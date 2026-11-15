@@ -636,6 +636,8 @@
             <form id="guichet-sale-form" class="auth-form" style="max-width:520px" hidden>
               <h3>Vendre un billet</h3>
               <label>Départ<select name="departureId" id="guichet-departure" required></select></label>
+              <label id="guichet-origin-wrap" hidden>Gare de départ<select name="originStopId" id="guichet-origin-stop"></select></label>
+              <label id="guichet-destination-wrap" hidden>Gare d’arrivée<select name="destinationStopId" id="guichet-destination-stop"></select></label>
               <label>Nom du passager<input name="passengerName" minlength="2" maxlength="160" required></label>
               <p class="auth-description" id="guichet-fare"></p>
               <button class="primary-button" type="submit" id="guichet-sale-submit">Encaisser et générer le billet</button>
@@ -675,7 +677,8 @@
         <button class="dialog-close" id="departure-dialog-close" type="button" aria-label="Fermer">×</button>
         <p class="eyebrow">NOUVEAU TRAJET</p>
         <h2>Programmer un départ</h2>
-        <p class="auth-description">Le départ sera enregistré dans l'espace de votre entreprise.</p>
+        <p class="auth-description">Le départ sera enregistré dans l’espace de votre entreprise.</p>
+        <label>Ligne du réseau (facultatif)<select name="routeId" id="departure-route"><option value="">Trajet libre sans ligne</option></select></label>
         <label>Ville de départ<input name="origin" required maxlength="100"></label>
         <label>Destination<input name="destination" required maxlength="100"></label>
         <label>Date et heure<input name="departureAt" type="datetime-local" required></label>
@@ -692,6 +695,8 @@
         <h2>Réserver une place</h2>
         <p class="auth-description" id="booking-trip-description"></p>
         <label>Nom du passager<input name="passengerName" required maxlength="160"></label>
+        <label id="booking-origin-wrap" hidden>Gare de départ<select name="originStopId" id="booking-origin-stop"></select></label>
+        <label id="booking-destination-wrap" hidden>Gare d’arrivée<select name="destinationStopId" id="booking-destination-stop"></select></label>
         <p class="auth-description" id="booking-fare">Tarif fixé par la compagnie pour ce départ.</p>
         <button class="primary-button auth-submit" type="submit" id="booking-submit"><span>Créer la réservation</span></button>
       </form>

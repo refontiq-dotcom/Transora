@@ -33,6 +33,7 @@ router.post(
   authorize(["administrateur", "responsable_exploitation"]),
   [
     body("origin").isString().trim().notEmpty(),
+    body("routeId").optional().isUUID(),
     body("destination").isString().trim().notEmpty(),
     body("departureAt").isISO8601(),
     body("vehicleCode").isString().trim().notEmpty(),
@@ -47,7 +48,20 @@ router.post(
     }
 
     try {
-      const { origin, destination, departureAt, vehicleCode, capacity, status } = req.body;
+      const { origin, destination, departureAt, vehicleCode, capacity, status, routeId } = req.body;
+      if (routeId) {
+        const route = await pool.query(
+          `SELECT r.id,
+             (SELECT c.name FROM route_stops x JOIN stations s ON s.id=x.station_id AND s.tenant_id=x.tenant_id JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id WHERE x.route_id=r.id AND x.tenant_id=r.tenant_id ORDER BY x.stop_order ASC LIMIT 1) AS route_origin,
+             (SELECT c.name FROM route_stops x JOIN stations s ON s.id=x.station_id AND s.tenant_id=x.tenant_id JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id WHERE x.route_id=r.id AND x.tenant_id=r.tenant_id ORDER BY x.stop_order DESC LIMIT 1) AS route_destination
+           FROM transport_routes r WHERE r.id=$1 AND r.tenant_id=$2 AND r.is_active=TRUE`,
+          [routeId, tenantId]
+        );
+        if (!route.rowCount) return res.status(404).json({ success: false, message: "Ligne introuvable ou inactive dans votre compagnie" });
+        if (String(route.rows[0].route_origin).toLowerCase() !== String(origin).trim().toLowerCase() || String(route.rows[0].route_destination).toLowerCase() !== String(destination).trim().toLowerCase()) {
+          return res.status(400).json({ success: false, message: "Les extrémités du départ doivent correspondre à celles de la ligne" });
+        }
+      }
       const tariff = await pool.query<{ id: string; fare_amount: number; company_booking_fee: number }>(
         `SELECT id, fare_amount, company_booking_fee
          FROM company_route_tariffs
@@ -65,11 +79,11 @@ router.post(
       });
       const result = await pool.query(
         `INSERT INTO departures
-           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, route_tariff_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, route_tariff_id, status, route_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id, origin, destination, departure_at AS "departureAt",
                    vehicle_code AS "vehicleCode", capacity, fare_amount AS "fareAmount",
-                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId", status`,
+                   company_booking_fee AS "companyBookingFee", route_tariff_id AS "routeTariffId", status, route_id AS "routeId"`,
         [
           tenantId,
           origin.trim(),
@@ -80,7 +94,8 @@ router.post(
           Number(tariff.rows[0].fare_amount),
           Number(tariff.rows[0].company_booking_fee),
           tariff.rows[0].id,
-          status || "SCHEDULED"
+          status || "SCHEDULED",
+          routeId || null
         ]
       );
       return res.status(201).json({ success: true, data: result.rows[0] });
@@ -147,7 +162,9 @@ router.post(
   bookingStaff,
   [
     param("id").isUUID(),
-    body("passengerName").isString().trim().isLength({ min: 2, max: 160 })
+    body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
+    body("originStopId").optional().isUUID(),
+    body("destinationStopId").optional().isUUID()
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -164,62 +181,44 @@ router.post(
       transactionStarted = true;
       const { id } = req.params;
       const { passengerName } = req.body;
-      const departure = await client.query<{ capacity: number; fare_amount: number; company_booking_fee: number }>(
-        `SELECT capacity, fare_amount, company_booking_fee FROM departures
-         WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED'
-           AND departure_at > NOW()
-         FOR UPDATE`,
+      const departure = await client.query<{ capacity: number; fare_amount: number; company_booking_fee: number; route_id: string | null }> (
+        `SELECT capacity, fare_amount, company_booking_fee, route_id FROM departures WHERE id=$1 AND tenant_id=$2 AND status='SCHEDULED' AND departure_at>NOW() FOR UPDATE`,
         [id, tenantId]
       );
-      if (departure.rowCount === 0) {
-        await client.query("ROLLBACK");
-        transactionStarted = false;
-        return res.status(404).json({
-          success: false,
-          message: "Départ introuvable ou non disponible"
-        });
-      }
-
-      if (Number(departure.rows[0].fare_amount) <= 0) {
-        await client.query("ROLLBACK");
-        transactionStarted = false;
-        return res.status(409).json({ success: false, message: "Le tarif de ce départ doit être configuré avant la réservation" });
-      }
-
-      const reservations = await client.query<{ count: number }>(
-        `SELECT COUNT(*)::int AS count FROM bookings
-         WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED'
-           AND segment_range && '[0,)'::int4range`,
-        [id, tenantId]
-      );
-      if (reservations.rows[0].count >= departure.rows[0].capacity) {
-        await client.query("ROLLBACK");
-        transactionStarted = false;
-        return res.status(409).json({
-          success: false,
-          message: "Ce départ est complet"
-        });
-      }
-
+      if (!departure.rowCount) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(404).json({ success: false, message: "Départ introuvable ou non disponible" }); }
+      let originStopId: string | null = null;
+      let destinationStopId: string | null = null;
+      let segmentRange = "[0,)";
+      let fareAmount = Number(departure.rows[0].fare_amount);
+      let companyBookingFee = Number(departure.rows[0].company_booking_fee);
+      if (departure.rows[0].route_id) {
+        originStopId = typeof req.body.originStopId === "string" ? req.body.originStopId : null;
+        destinationStopId = typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null;
+        if (!originStopId || !destinationStopId) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(400).json({ success: false, message: "Choisissez votre gare de départ et votre gare d'arrivée" }); }
+        const stops = await client.query(
+          `SELECT rs.id, rs.stop_order, c.name AS city FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id WHERE rs.tenant_id=$1 AND rs.route_id=$2 AND rs.id=ANY($3::uuid[]) ORDER BY rs.stop_order`,
+          [tenantId, departure.rows[0].route_id, [originStopId, destinationStopId]]
+        );
+        if (stops.rowCount !== 2 || stops.rows[0].id !== originStopId || stops.rows[1].id !== destinationStopId || Number(stops.rows[0].stop_order) >= Number(stops.rows[1].stop_order)) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(400).json({ success: false, message: "Le trajet sélectionné ne respecte pas l'ordre des arrêts" }); }
+        const tariff = await client.query(
+          `SELECT fare_amount, company_booking_fee FROM company_route_tariffs WHERE tenant_id=$1 AND is_active=TRUE AND lower(regexp_replace(btrim(origin), '[[:space:]]+', ' ', 'g'))=lower(regexp_replace(btrim($2), '[[:space:]]+', ' ', 'g')) AND lower(regexp_replace(btrim(destination), '[[:space:]]+', ' ', 'g'))=lower(regexp_replace(btrim($3), '[[:space:]]+', ' ', 'g')) LIMIT 1`,
+          [tenantId, stops.rows[0].city, stops.rows[1].city]
+        );
+        if (!tariff.rowCount) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(409).json({ success: false, message: "Aucun tarif actif pour ce segment" }); }
+        fareAmount = Number(tariff.rows[0].fare_amount);
+        companyBookingFee = Number(tariff.rows[0].company_booking_fee);
+        segmentRange = "[" + Number(stops.rows[0].stop_order) + "," + Number(stops.rows[1].stop_order) + ")";
+      } else if (fareAmount <= 0) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(409).json({ success: false, message: "Le tarif de ce départ doit être configuré avant la réservation" }); }
       const taken = await client.query<{ seat_number: number }>(
-        "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL AND segment_range && '[0,)'::int4range",
-        [id, tenantId]
+        `SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL AND segment_range && $3::int4range`,
+        [id, tenantId, segmentRange]
       );
-      const occupied = new Set(taken.rows.map((row) => Number(row.seat_number)));
-      const seatNumber = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => index + 1)
-        .find((seat) => !occupied.has(seat));
-      if (!seatNumber) {
-        await client.query("ROLLBACK");
-        transactionStarted = false;
-        return res.status(409).json({ success: false, message: "Aucune place disponible" });
-      }
+      const occupied = new Set(taken.rows.map(row => Number(row.seat_number)));
+      const seatNumber = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
+      if (!seatNumber) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number, segment_range)
-         VALUES ($1, $2, $3, $4, $5, $6, '[0,)'::int4range)
-         RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId",
-                   passenger_name AS "passengerName", amount_transport AS "amountTransport",
-                   platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), Number(departure.rows[0].fare_amount), Number(departure.rows[0].company_booking_fee), seatNumber]
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id) VALUES ($1,$2,$3,$4,$5,$6,$7::int4range,$8,$9) RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId", passenger_name AS "passengerName", amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, origin_stop_id AS "originStopId", destination_stop_id AS "destinationStopId", created_at AS "createdAt"`,
+        [tenantId, id, passengerName.trim(), fareAmount, companyBookingFee, seatNumber, segmentRange, originStopId, destinationStopId]
       );
       await client.query("COMMIT");
       transactionStarted = false;
@@ -325,11 +324,17 @@ router.get(
         fare_amount: number;
         company_booking_fee: number;
         route_tariff_id: string | null;
+        route_id: string | null;
+        route_stops: Array<{ id: string; city: string; station: string; stopOrder: number }>;
         status: string;
         reserved_seats: string;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.fare_amount, d.company_booking_fee, d.route_tariff_id, d.status,
+                d.capacity, d.fare_amount, d.company_booking_fee, d.route_tariff_id, d.status, d.route_id,
+                COALESCE((SELECT json_agg(json_build_object('id', rs.id, 'city', c.name, 'station', s.name, 'stopOrder', rs.stop_order) ORDER BY rs.stop_order)
+                  FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
+                  JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
+                  WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS route_stops,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
@@ -362,6 +367,8 @@ router.get(
               fareAmount: Number(departure.fare_amount),
               companyBookingFee: Number(departure.company_booking_fee),
               routeTariffId: departure.route_tariff_id,
+              routeId: departure.route_id,
+              routeStops: departure.route_stops,
               reservedSeats,
               availableSeats: Math.max(0, departure.capacity - reservedSeats),
               occupancyRate: departure.capacity === 0

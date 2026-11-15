@@ -422,7 +422,7 @@ function renderVoyages() {
     bookingButton.dataset.departureId = departure.id;
     bookingButton.textContent = "Réserver";
     bookingButton.disabled = departure.status !== "SCHEDULED"
-      || departure.availableSeats < 1
+      || (!departure.routeId && departure.availableSeats < 1)
       || new Date(departure.departureAt) <= new Date();
     const tariffButton = document.createElement("button");
     tariffButton.className = "voyage-action";
@@ -1598,6 +1598,39 @@ document.querySelector("#tariff-rows").addEventListener("click", async (event) =
   } finally { button.disabled = false; }
 });
 
+function updateGuichetSegmentFields() {
+  const departure = document.querySelector("#guichet-departure").selectedOptions[0];
+  const originWrap = document.querySelector("#guichet-origin-wrap");
+  const destinationWrap = document.querySelector("#guichet-destination-wrap");
+  const originSelect = document.querySelector("#guichet-origin-stop");
+  const destinationSelect = document.querySelector("#guichet-destination-stop");
+  let stops = [];
+  try { stops = JSON.parse(departure?.dataset.routeStops || "[]"); } catch { stops = []; }
+  const hasStops = Array.isArray(stops) && stops.length >= 2;
+  originWrap.hidden = !hasStops;
+  destinationWrap.hidden = !hasStops;
+  if (hasStops) {
+    const options = stops.map(stop => {
+      const option = document.createElement("option");
+      option.value = stop.id;
+      option.textContent = stop.city === stop.station ? stop.city : `${stop.city} · ${stop.station}`;
+      return option;
+    });
+    originSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.selectedIndex = 1;
+  } else {
+    originSelect.replaceChildren();
+    destinationSelect.replaceChildren();
+  }
+  const selected = departure;
+  document.querySelector("#guichet-fare").textContent = hasStops
+    ? "Le tarif exact du segment sera appliqué automatiquement selon le barème de votre compagnie."
+    : selected
+      ? `Transport : ${formatFcfa(selected.dataset.fare)} · Frais compagnie : ${formatFcfa(selected.dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
+      : "Aucun départ disponible pour la vente.";
+}
+
 async function loadGuichet() {
   const token = accessToken;
   if (!token) {
@@ -1638,28 +1671,24 @@ async function loadGuichet() {
     const select = document.querySelector("#guichet-departure");
     const departures = departuresResult.data.departures || [];
     select.replaceChildren();
-    departures.filter(item => item.status === "SCHEDULED" && item.availableSeats > 0).forEach(item => {
+    departures.filter(item => item.status === "SCHEDULED" && (item.availableSeats > 0 || item.routeId)).forEach(item => {
       const option = document.createElement("option");
       option.value = item.id;
       option.dataset.fare = String(item.fareAmount || 0);
       option.dataset.companyFee = String(item.companyBookingFee || 0);
+      option.dataset.routeStops = JSON.stringify(item.routeStops || []);
       option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount + (item.companyBookingFee || 0) + 100)}`;
       select.append(option);
     });
-    document.querySelector("#guichet-fare").textContent = select.selectedOptions[0]
-      ? `Transport : ${formatFcfa(select.selectedOptions[0].dataset.fare)} · Frais compagnie : ${formatFcfa(select.selectedOptions[0].dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
-      : "Aucun départ disponible pour la vente.";
+    updateGuichetSegmentFields();
   } catch (error) {
     document.querySelector("#guichet-session-state").textContent = error.message || "Erreur de chargement du guichet.";
   }
 }
 
-document.querySelector("#guichet-departure").addEventListener("change", () => {
-  const selected = document.querySelector("#guichet-departure").selectedOptions[0];
-  document.querySelector("#guichet-fare").textContent = selected
-    ? `Transport : ${formatFcfa(selected.dataset.fare)} · Frais compagnie : ${formatFcfa(selected.dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
-    : "Aucun départ disponible pour la vente.";
-});
+document.querySelector("#guichet-departure").addEventListener("change", updateGuichetSegmentFields);
+document.querySelector("#guichet-origin-stop").addEventListener("change", updateGuichetSegmentFields);
+document.querySelector("#guichet-destination-stop").addEventListener("change", updateGuichetSegmentFields);
 
 document.querySelector("#guichet-open-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1690,7 +1719,12 @@ document.querySelector("#guichet-sale-form").addEventListener("submit", async (e
     const response = await fetch("/api/v1/guichet/vente", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ departureId: values.departureId, passengerName: values.passengerName })
+      body: JSON.stringify({
+        departureId: values.departureId,
+        passengerName: values.passengerName,
+        ...(values.originStopId ? { originStopId: values.originStopId } : {}),
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
+      })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer la vente.");
@@ -2335,6 +2369,7 @@ document.querySelector("#voyages-add-departure").addEventListener("click", () =>
     authDialog.showModal();
     return;
   }
+  loadDepartureRoutes();
   departureDialog.showModal();
 });
 
@@ -2372,6 +2407,34 @@ async function updateDepartureStatus(departureId, nextStatus) {
   } catch (error) { showToast(error.message || "Erreur de mise à jour du départ."); }
 }
 
+function populateBookingStops(departure) {
+  const originWrap = document.querySelector("#booking-origin-wrap");
+  const destinationWrap = document.querySelector("#booking-destination-wrap");
+  const originSelect = document.querySelector("#booking-origin-stop");
+  const destinationSelect = document.querySelector("#booking-destination-stop");
+  const stops = Array.isArray(departure.routeStops) ? departure.routeStops : [];
+  const hasStops = stops.length >= 2;
+  originWrap.hidden = !hasStops;
+  destinationWrap.hidden = !hasStops;
+  if (hasStops) {
+    const options = stops.map(stop => {
+      const option = document.createElement("option");
+      option.value = stop.id;
+      option.textContent = stop.city === stop.station ? stop.city : `${stop.city} · ${stop.station}`;
+      return option;
+    });
+    originSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.selectedIndex = 1;
+  } else {
+    originSelect.replaceChildren();
+    destinationSelect.replaceChildren();
+  }
+  document.querySelector("#booking-fare").textContent = hasStops
+    ? "Le tarif du segment sera appliqué automatiquement selon le barème de votre compagnie. Le siège est attribué selon les portions déjà réservées."
+    : `Transport : ${formatFcfa(departure.fareAmount || 0)} · Frais compagnie : ${formatFcfa(departure.companyBookingFee || 0)} · Frais TRANSORA : 100 FCFA · Siège attribué automatiquement`;
+}
+
 document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
@@ -2404,7 +2467,7 @@ document.querySelector("#voyage-rows").addEventListener("click", async (event) =
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
-  document.querySelector("#booking-fare").textContent = `Transport : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Frais compagnie : ${formatFcfa(selectedDeparture.companyBookingFee || 0)} · Frais TRANSORA : 100 FCFA · Siège attribué automatiquement`;
+  populateBookingStops(selectedDeparture);
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -2470,7 +2533,9 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
         Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
-        passengerName: values.passengerName
+        passengerName: values.passengerName,
+        ...(values.originStopId ? { originStopId: values.originStopId } : {}),
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
       })
     });
     const result = await response.json();
@@ -2733,6 +2798,34 @@ document.querySelector("#payment-export").addEventListener("click", () => {
   showToast("Liste des paiements exportée.");
 });
 
+async function loadDepartureRoutes() {
+  const select = document.querySelector("#departure-route");
+  select.replaceChildren(new Option("Trajet libre sans ligne", ""));
+  try {
+    const response = await fetch("/api/v1/reseau/routes", { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les lignes.");
+    (result.data.routes || []).filter(route => route.active && Array.isArray(route.stops) && route.stops.length >= 2).forEach(route => {
+      const option = document.createElement("option");
+      option.value = route.id;
+      option.textContent = `${route.name} · ${route.stops[0].city} → ${route.stops.at(-1).city}`;
+      option.dataset.origin = route.stops[0].city;
+      option.dataset.destination = route.stops.at(-1).city;
+      select.append(option);
+    });
+  } catch (error) {
+    showToast(error.message || "Impossible de charger les lignes du réseau.");
+  }
+}
+
+document.querySelector("#departure-route").addEventListener("change", event => {
+  const option = event.currentTarget.selectedOptions[0];
+  if (option.value) {
+    document.querySelector('#departure-form [name="origin"]').value = option.dataset.origin || "";
+    document.querySelector('#departure-form [name="destination"]').value = option.dataset.destination || "";
+  }
+});
+
 const departureDialog = document.querySelector("#departure-dialog");
 document.querySelector("#add-departure-button").addEventListener("click", () => {
   if (!accessToken) {
@@ -2761,11 +2854,15 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        ...values,
-        departureAt: new Date(values.departureAt).toISOString(),
-        capacity: Number(values.capacity),
-      })
+      body: JSON.stringify((() => {
+        const payload = {
+          ...values,
+          departureAt: new Date(values.departureAt).toISOString(),
+          capacity: Number(values.capacity)
+        };
+        if (!payload.routeId) delete payload.routeId;
+        return payload;
+      })())
     });
     const result = await response.json();
     if (!response.ok) {

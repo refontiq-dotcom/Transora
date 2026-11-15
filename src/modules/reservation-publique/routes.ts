@@ -3,6 +3,7 @@ import { body, param, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import QRCode from "qrcode";
 import { pool } from "../../db/pool";
+import { resolveBookingSegment } from "../../lib/booking-segment";
 
 const router = Router();
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -17,9 +18,13 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
       const result = await pool.query(
         `SELECT t.name AS "companyName", d.id, d.origin, d.destination,
                 d.departure_at AS "departureAt", d.vehicle_code AS "vehicleCode",
-                d.capacity, d.fare_amount AS "fareAmount",
+                d.capacity, d.route_id AS "routeId", d.fare_amount AS "fareAmount",
+                COALESCE((SELECT json_agg(json_build_object('id', rs.id, 'city', c.name, 'station', s.name, 'stopOrder', rs.stop_order) ORDER BY rs.stop_order)
+                  FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
+                  JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
+                  WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS "routeStops",
                 d.company_booking_fee AS "companyBookingFee",
-                COUNT(b.id) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
+                COUNT(DISTINCT b.seat_number) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
          FROM tenants t JOIN departures d ON d.tenant_id = t.id
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE t.public_code = $1 AND d.status = 'SCHEDULED'
@@ -31,7 +36,7 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
       if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
       return res.json({ success: true, data: {
         companyName: tenant.rows[0].name,
-        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats))
+        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats) || Boolean(row.routeId))
           .map(row => ({ ...row, availableSeats: Number(row.capacity) - Number(row.reservedSeats) }))
       } });
     } catch (error) { return next(error); }
@@ -42,14 +47,16 @@ router.post("/:publicCode/reservations", [
   param("publicCode").isAlphanumeric().isLength({ min: 32, max: 32 }),
   body("departureId").isUUID(),
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
-  body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/)
+  body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/),
+  body("originStopId").optional().isUUID(),
+  body("destinationStopId").optional().isUUID()
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
     const departure = await client.query(
       `SELECT t.id AS tenant_id, t.name AS company_name, d.id, d.origin, d.destination,
-              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount, d.company_booking_fee
+              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount, d.company_booking_fee, d.route_id
        FROM tenants t JOIN departures d ON d.tenant_id = t.id
        WHERE t.public_code = $1 AND d.id = $2 AND d.status = 'SCHEDULED'
          AND d.departure_at > NOW() FOR UPDATE OF d`,
@@ -60,30 +67,34 @@ router.post("/:publicCode/reservations", [
       return res.status(404).json({ success: false, message: "Départ indisponible pour cette compagnie" });
     }
     const trip = departure.rows[0];
+    const segment = await resolveBookingSegment(
+      client, trip.tenant_id, trip.route_id || null,
+      typeof req.body.originStopId === "string" ? req.body.originStopId : null,
+      typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
+      { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+    );
+    if (segment.error || !segment.data) {
+      await client.query("ROLLBACK");
+      return res.status(segment.error?.status || 400).json({ success: false, message: segment.error?.message || "Segment invalide" });
+    }
+    const selectedSegment = segment.data;
     if (Number(trip.fare_amount) <= 0) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Ce départ n'a pas encore de tarif défini" });
     }
     const reservations = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
-      [trip.id, trip.tenant_id]
+      "SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status <> 'CANCELLED' AND segment_range && $3::int4range",
+      [trip.id, trip.tenant_id, selectedSegment.segmentRange]
     );
     const occupied = new Set(reservations.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
-    if (occupied.size >= Number(trip.capacity)) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "Ce départ est complet" });
-    }
+    if (occupied.size >= Number(trip.capacity)) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ce segment est complet" }); }
     const seatNumber = Array.from({ length: Number(trip.capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
-    if (!seatNumber) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "Aucune place disponible" });
-    }
+    if (!seatNumber) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
     const bookingResult = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, '[0,)'::int4range)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::int4range,$9,$10)
        RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, company_booking_fee, seat_number, status, created_at`,
-      [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(),
-        Number(trip.fare_amount), Number(trip.company_booking_fee), seatNumber]
+      [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seatNumber, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId]
     );
     await client.query("COMMIT");
     const booking = bookingResult.rows[0];
@@ -94,7 +105,7 @@ router.post("/:publicCode/reservations", [
     return res.status(201).json({ success: true, data: {
       ticketToken: booking.ticket_token, bookingId: booking.id,
       companyName: trip.company_name, passengerName: booking.passenger_name,
-      passengerPhone: booking.passenger_phone, origin: trip.origin, destination: trip.destination,
+      passengerPhone: booking.passenger_phone, origin: selectedSegment.origin, destination: selectedSegment.destination,
       departureAt: trip.departure_at, vehicleCode: trip.vehicle_code, seatNumber: booking.seat_number,
       transportAmount: Number(booking.amount_transport),
       companyBookingFee: Number(booking.company_booking_fee),
@@ -116,12 +127,18 @@ router.get("/:publicCode/ticket/:ticketToken", [
   try {
     const result = await pool.query(
       `SELECT b.id, b.ticket_token, b.passenger_name, b.amount_transport, b.platform_fee, b.company_booking_fee,
-              b.seat_number, b.status AS booking_status, d.origin, d.destination,
+              b.seat_number, b.status AS booking_status, COALESCE(oc.name, d.origin) AS origin, COALESCE(dc.name, d.destination) AS destination,
               d.departure_at, d.vehicle_code, d.status AS departure_status, t.name AS company_name,
               COALESCE(p.status, 'NOT_INITIATED') AS payment_status,
               EXISTS (SELECT 1 FROM boarding_events be WHERE be.booking_id = b.id AND be.tenant_id = b.tenant_id) AS boarded
        FROM tenants t JOIN bookings b ON b.tenant_id = t.id
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
+       LEFT JOIN route_stops ors ON ors.id = b.origin_stop_id AND ors.tenant_id = b.tenant_id
+       LEFT JOIN stations os ON os.id = ors.station_id AND os.tenant_id = ors.tenant_id
+       LEFT JOIN company_cities oc ON oc.id = os.city_id AND oc.tenant_id = os.tenant_id
+       LEFT JOIN route_stops drs ON drs.id = b.destination_stop_id AND drs.tenant_id = b.tenant_id
+       LEFT JOIN stations ds ON ds.id = drs.station_id AND ds.tenant_id = drs.tenant_id
+       LEFT JOIN company_cities dc ON dc.id = ds.city_id AND dc.tenant_id = ds.tenant_id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
        WHERE t.public_code = $1 AND b.ticket_token = $2`,
       [req.params.publicCode, req.params.ticketToken]
