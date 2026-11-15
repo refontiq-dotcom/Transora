@@ -300,7 +300,7 @@ router.post("/absence", controllerRoles, [
       `INSERT INTO boarding_absence_events
         (tenant_id, booking_id, departure_id, stop_id, scheduled_at, grace_period_minutes, policy_version, confirmed_by, comments)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (booking_id) DO NOTHING
+       ON CONFLICT (booking_id, departure_id) DO NOTHING
        RETURNING id, confirmed_at AS "confirmedAt"`,
       [req.tenantId, booking.id, booking.departure_id, stopId, scheduledAt, graceMinutes,
         Number(booking.boarding_policy_version || snapshot.version || 1), req.user.id, req.body.comments || null]
@@ -388,6 +388,8 @@ router.get("/alternatives/:bookingId", controllerRoles, [
     return res.json({ success: true, data: {
       rebookingAllowed: true,
       maxRebookings: Number(policy.maxRebookings || 0),
+      usedRebookings,
+      remainingRebookings: Math.max(0, Number(policy.maxRebookings || 0) - usedRebookings),
       rebookingFeeAmount: Number(policy.rebookingFeeAmount || 0),
       refundPolicy: policy.refundPolicy || "NONE",
       refundPercentage: Number(policy.refundPercentage || 0),
