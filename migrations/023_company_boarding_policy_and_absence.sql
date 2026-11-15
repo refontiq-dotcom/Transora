@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS boarding_absence_events (
   confirmed_by UUID NOT NULL,
   comments TEXT,
   confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT boarding_absence_booking_once UNIQUE (booking_id),
+  CONSTRAINT boarding_absence_booking_once UNIQUE (booking_id, departure_id),
   CONSTRAINT boarding_absence_booking_tenant_fk
     FOREIGN KEY (booking_id, tenant_id) REFERENCES bookings(id, tenant_id) ON DELETE CASCADE,
   CONSTRAINT boarding_absence_departure_tenant_fk
@@ -141,6 +141,39 @@ CREATE TABLE IF NOT EXISTS boarding_absence_events (
   CONSTRAINT boarding_absence_actor_tenant_fk
     FOREIGN KEY (confirmed_by, tenant_id) REFERENCES users(id, tenant_id)
 );
+
+CREATE TABLE IF NOT EXISTS booking_rebooking_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  booking_id UUID NOT NULL,
+  previous_departure_id UUID NOT NULL,
+  new_departure_id UUID NOT NULL,
+  previous_seat_number INTEGER,
+  new_seat_number INTEGER NOT NULL,
+  fee_amount INTEGER NOT NULL DEFAULT 0 CHECK (fee_amount >= 0),
+  fee_payment_method TEXT CHECK (fee_payment_method IS NULL OR fee_payment_method = 'cash'),
+  fee_receipt TEXT,
+  consent_method TEXT NOT NULL CHECK (consent_method IN ('IN_PERSON', 'PHONE', 'SMS', 'WHATSAPP', 'OTHER')),
+  consent_reference TEXT,
+  confirmed_by UUID NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT booking_rebooking_booking_target_once UNIQUE (booking_id, new_departure_id),
+  CONSTRAINT booking_rebooking_booking_tenant_fk
+    FOREIGN KEY (booking_id, tenant_id) REFERENCES bookings(id, tenant_id) ON DELETE CASCADE,
+  CONSTRAINT booking_rebooking_previous_departure_tenant_fk
+    FOREIGN KEY (previous_departure_id, tenant_id) REFERENCES departures(id, tenant_id) ON DELETE RESTRICT,
+  CONSTRAINT booking_rebooking_new_departure_tenant_fk
+    FOREIGN KEY (new_departure_id, tenant_id) REFERENCES departures(id, tenant_id) ON DELETE RESTRICT,
+  CONSTRAINT booking_rebooking_actor_tenant_fk
+    FOREIGN KEY (confirmed_by, tenant_id) REFERENCES users(id, tenant_id),
+  CONSTRAINT booking_rebooking_fee_receipt_check CHECK (
+    (fee_amount = 0 AND fee_payment_method IS NULL) OR
+    (fee_amount > 0 AND fee_payment_method = 'cash' AND fee_receipt IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS booking_rebooking_tenant_booking_idx
+  ON booking_rebooking_events (tenant_id, booking_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS stop_arrival_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -168,14 +201,15 @@ CREATE INDEX IF NOT EXISTS boarding_absence_departure_time_idx
 ALTER TABLE company_boarding_policies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE boarding_absence_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stop_arrival_events ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM PUBLIC;
+ALTER TABLE booking_rebooking_events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events, booking_rebooking_events FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM anon;
+    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events, booking_rebooking_events FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM authenticated;
+    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events, booking_rebooking_events FROM authenticated;
   END IF;
 END $$;
 
