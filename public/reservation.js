@@ -7,6 +7,8 @@ const message = document.querySelector("#public-message");
 const ticketPanel = document.querySelector("#public-ticket");
 let companyName = "";
 let publicDepartures = [];
+let boardingPolicy = null;
+const policyAccepted = document.querySelector("#public-policy-accepted");
 
 function money(value) {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Number(value) || 0) + " FCFA";
@@ -75,7 +77,7 @@ async function refreshPublicSeatAvailability() {
   if (!departure) { target.textContent = ""; submit.disabled = true; return; }
   if (!departure.routeStops?.length) {
     target.textContent = "Places disponibles : " + departure.availableSeats + " sur " + departure.capacity + ".";
-    submit.disabled = departure.availableSeats <= 0;
+    submit.disabled = departure.availableSeats <= 0 || !policyAccepted.checked;
     return;
   }
   if (!originId || !destinationId) {
@@ -91,7 +93,7 @@ async function refreshPublicSeatAvailability() {
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
     target.textContent = result.data.availableCount + " place(s) disponible(s) sur ce segment · " +
       money(result.data.fareAmount) + " de transport + " + money(result.data.companyBookingFee) + " de frais compagnie + 100 FCFA TRANSORA.";
-    submit.disabled = result.data.availableCount === 0;
+    submit.disabled = result.data.availableCount === 0 || !policyAccepted.checked;
   } catch (error) {
     target.textContent = error.message || "Vérification des places impossible.";
     submit.disabled = true;
@@ -137,6 +139,13 @@ async function loadDepartures() {
   placeholder.textContent = "Choisissez un départ";
   select.append(placeholder);
   publicDepartures = result.data.departures;
+  boardingPolicy = result.data.boardingPolicy || null;
+  const policySummary = document.querySelector("#public-policy-summary");
+  if (boardingPolicy) {
+    const refund = boardingPolicy.refundPolicy === "FULL" ? "Remboursement intégral prévu après absence." : boardingPolicy.refundPolicy === "PARTIAL" ? "Remboursement de " + boardingPolicy.refundPercentage + "% prévu après absence." : "Aucun remboursement n’est prévu après absence selon cette politique.";
+    const rebooking = boardingPolicy.allowRebookingAfterNoShow ? "Report possible jusqu’à " + boardingPolicy.maxRebookings + " fois" + (Number(boardingPolicy.rebookingFeeAmount) ? " avec des frais de " + money(boardingPolicy.rebookingFeeAmount) + "." : " sans frais.") : "Aucun report n’est prévu après absence.";
+    policySummary.textContent = "L’embarquement ouvre " + boardingPolicy.boardingOpenMinutesBefore + " minutes avant le départ. Présentez-vous au plus tard " + boardingPolicy.boardingDeadlineMinutesBefore + " minutes avant l’heure prévue. Délai de grâce après l’heure prévue ou l’arrivée réelle du car : " + boardingPolicy.gracePeriodMinutes + " minutes. " + rebooking + " " + refund;
+  } else policySummary.textContent = "Les conditions d’embarquement seront communiquées par la compagnie.";
   for (const departure of publicDepartures) {
     const option = document.createElement("option");
     option.value = departure.id;
@@ -151,6 +160,7 @@ async function loadDepartures() {
 select.addEventListener("change", configurePublicStops);
 document.querySelector("#public-origin-stop").addEventListener("change", () => { updateDestinationStops(); });
 document.querySelector("#public-destination-stop").addEventListener("change", refreshPublicSeatAvailability);
+policyAccepted.addEventListener("change", refreshPublicSeatAvailability);
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const submit = document.querySelector("#public-submit");
@@ -158,6 +168,7 @@ form.addEventListener("submit", async (event) => {
   showMessage("Enregistrement de votre réservation…");
   try {
     const values = Object.fromEntries(new FormData(form).entries());
+    values.policyAccepted = policyAccepted.checked;
     const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values)
     });

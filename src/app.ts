@@ -26,6 +26,7 @@ import searchRoutes from "./modules/recherche/routes";
 import guichetRoutes from "./modules/guichet/routes";
 import embarquementRoutes from "./modules/embarquement/routes";
 import embarquementOperationsRoutes from "./modules/embarquement/operations.routes";
+import embarquementPolicyRoutes from "./modules/embarquement/policy.routes";
 import courrierRoutes from "./modules/courrier/routes";
 import publicReservationRoutes from "./modules/reservation-publique/routes";
 import publicCourierRoutes from "./modules/courrier/public.routes";
@@ -135,6 +136,7 @@ app.use("/api/v1/recherche", searchRoutes);
 app.use("/api/v1/guichet", guichetRoutes);
 app.use("/api/v1/embarquement", embarquementRoutes);
 app.use("/api/v1/embarquement/operations", embarquementOperationsRoutes);
+app.use("/api/v1/embarquement", embarquementPolicyRoutes);
 app.use("/api/v1/courrier", courrierRoutes);
 app.use(errorHandler);
 

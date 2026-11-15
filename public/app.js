@@ -33,6 +33,8 @@ let scannerAnimationFrame;
 let scannerDetector;
 let scannerLastFrameAt = 0;
 let scannerDetecting = false;
+let activeRebookingBookingId = null;
+let activeRebookingFeeAmount = 0;
 
 localStorage.removeItem("transora_token");
 let accessToken = null;
@@ -2399,25 +2401,47 @@ async function loadStopOperations() {
       return;
     }
     setStopOperationsMessage("Actualisation des opérations…");
-    const response = await fetch("/api/v1/embarquement/operations/" + encodeURIComponent(departureId) + "/" + encodeURIComponent(stopId), {
-      headers: { Authorization: "Bearer " + accessToken }
-    });
-    const result = await response.json();
+    const headers = { Authorization: "Bearer " + accessToken };
+    const [response, manifestResponse] = await Promise.all([
+      fetch("/api/v1/embarquement/operations/" + encodeURIComponent(departureId) + "/" + encodeURIComponent(stopId), { headers }),
+      fetch("/api/v1/embarquement/manifest/" + encodeURIComponent(departureId) + "?stopId=" + encodeURIComponent(stopId), { headers })
+    ]);
+    const [result, manifestResult] = await Promise.all([response.json(), manifestResponse.json()]);
     if (!response.ok) throw new Error(result.message || "Impossible de charger les opérations de cet arrêt.");
-    renderStopOperations(result.data);
+    if (!manifestResponse.ok) throw new Error(manifestResult.message || "Impossible de charger le manifeste de ce départ.");
+    renderStopOperations(result.data, manifestResult.data);
     const stop = result.data.stop;
     setStopOperationsMessage(result.data.departure.origin + " → " + result.data.departure.destination + " · " + stop.city + (stop.station ? " / " + stop.station : "") + " · Arrêt " + (stop.order + 1));
   } catch (error) {
     setStopOperationsMessage(error.message || "Erreur de chargement des opérations.", true);
   }
 }
-function renderStopOperations(data) {
+function renderStopOperations(data, manifest) {
+  const arrivalButton = document.querySelector("#stop-arrival-confirm");
+  arrivalButton.hidden = Number(data.stop.order) === 0 || Boolean(manifest.departure.actualArrivalAt);
+  arrivalButton.onclick = async () => {
+    arrivalButton.disabled = true;
+    try {
+      const response = await fetch("/api/v1/embarquement/arrival", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ departureId: data.departure.id, stopId: data.stop.id })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible d’enregistrer l’arrivée du car.");
+      showToast("Arrivée réelle enregistrée. Le délai de grâce commence maintenant.");
+      await loadStopOperations();
+    } catch (error) { showToast(error.message || "Erreur d’enregistrement."); arrivalButton.disabled = false; }
+  };
   const summary = data.summary;
   document.querySelector("#stop-expected-descents").textContent = summary.expectedDescents;
   document.querySelector("#stop-confirmed-descents").textContent = summary.confirmedDescents;
   document.querySelector("#stop-expected-boardings").textContent = summary.expectedBoardings;
   document.querySelector("#stop-blocked-seats").textContent = summary.seatsBlockedByPreviousPassenger;
   document.querySelector("#stop-released-seats").textContent = summary.seatsConfirmedReleased;
+  document.querySelector("#stop-manifest-present").textContent = manifest.summary.present;
+  document.querySelector("#stop-manifest-expected").textContent = manifest.summary.expected;
+  document.querySelector("#stop-manifest-absent").textContent = manifest.summary.confirmedAbsences;
   const descentList = document.querySelector("#stop-descent-list");
   const boardingList = document.querySelector("#stop-boarding-list");
   descentList.replaceChildren();
@@ -2457,8 +2481,145 @@ function renderStopOperations(data) {
         openScannerDialog();
         lookupScannedTicket(passenger.ticketToken);
       });
+    if (!passenger.boardedAt) {
+      stopOperationRow(boardingList, "Absence à traiter", "Ne confirmez l’absence qu’après l’heure prévue et le délai de grâce annoncé au voyageur.", "Confirmer l’absence", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/v1/embarquement/absence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+            body: JSON.stringify({ bookingId: passenger.bookingId, stopId: data.stop.id })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || "Impossible de confirmer l’absence.");
+          const alternativesResponse = await fetch("/api/v1/embarquement/alternatives/" + encodeURIComponent(passenger.bookingId), {
+            headers: { Authorization: "Bearer " + accessToken }
+          });
+          const alternativesResult = await alternativesResponse.json();
+          const alternativeData = alternativesResponse.ok ? alternativesResult.data : null;
+          const alternatives = alternativeData?.alternatives || [];
+          const refundText = alternativeData?.refundPolicy === "FULL"
+            ? "Remboursement intégral prévu."
+            : alternativeData?.refundPolicy === "PARTIAL"
+              ? "Remboursement de " + alternativeData.refundPercentage + "% prévu."
+              : "Aucun remboursement prévu après absence.";
+          if (alternativeData && !alternativeData.rebookingAllowed) {
+            showToast("Absence confirmée. " + alternativeData.message + " " + refundText + " Le traitement financier reste à la compagnie.");
+          } else {
+            showToast("Absence confirmée. " + (alternatives.length ? alternatives.length + " départ(s) compatible(s) trouvé(s)." : "Aucun départ alternatif disponible pour le moment.") + " " + refundText);
+          }
+          await loadStopOperations();
+          if (alternatives.length) openRebookingDialog(passenger.bookingId, alternativeData);
+        } catch (error) {
+          showToast(error.message || "Erreur de confirmation.");
+          button.disabled = false;
+        }
+      });
+    }
   });
 }
+
+function openRebookingDialog(bookingId, data) {
+  activeRebookingBookingId = bookingId;
+  activeRebookingFeeAmount = Number(data.rebookingFeeAmount || 0);
+  const form = document.querySelector("#rebooking-form");
+  const select = form.elements.targetDepartureId;
+  select.replaceChildren();
+  data.alternatives.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.departureId;
+    option.textContent = new Date(item.departureAt).toLocaleString("fr-FR") + " · " + item.origin + " → " + item.destination + " · " + item.vehicleCode + " · siège " + item.suggestedSeat;
+    select.append(option);
+  });
+  const feeWrap = document.querySelector("#rebooking-fee-wrap");
+  feeWrap.hidden = activeRebookingFeeAmount <= 0;
+  form.elements.feeReceipt.required = activeRebookingFeeAmount > 0;
+  document.querySelector("#rebooking-description").textContent =
+    "Le voyageur doit accepter le nouveau départ. " +
+    (activeRebookingFeeAmount > 0 ? "Frais de report : " + formatFcfa(activeRebookingFeeAmount) + ". Encaissement en espèces via une caisse ouverte obligatoire." : "Aucun frais de report prévu pour ce billet.") +
+    " Le tarif du nouveau trajet doit rester identique; sinon le report est bloqué pour éviter toute modification de prix non consentie.";
+  document.querySelector("#rebooking-dialog").showModal();
+}
+
+document.querySelector("#rebooking-close").addEventListener("click", () => document.querySelector("#rebooking-dialog").close());
+document.querySelector("#rebooking-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!activeRebookingBookingId) return;
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  values.passengerConsent = form.elements.passengerConsent.checked;
+  const submit = document.querySelector("#rebooking-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/embarquement/rebook/" + encodeURIComponent(activeRebookingBookingId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify(values)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Le report n’a pas pu être confirmé.");
+    document.querySelector("#rebooking-dialog").close();
+    showToast("Report confirmé. L’ancien QR code est invalidé; imprimez ou transmettez le nouveau billet.");
+    const bookingId = activeRebookingBookingId;
+    activeRebookingBookingId = null;
+    await loadStopOperations();
+    openTicket(bookingId);
+  } catch (error) {
+    showToast(error.message || "Erreur pendant le report.");
+  } finally { submit.disabled = false; }
+});
+
+async function loadBoardingPolicy() {
+  if (!accessToken) { showToast("Connectez-vous pour consulter la politique."); return; }
+  try {
+    const response = await fetch("/api/v1/embarquement/policy", { headers: { Authorization: "Bearer " + accessToken } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger la politique.");
+    const form = document.querySelector("#boarding-policy-form");
+    const policy = result.data;
+    for (const key of ["boardingOpenMinutesBefore", "boardingDeadlineMinutesBefore", "gracePeriodMinutes", "maxRebookings", "rebookingFeeAmount", "refundPolicy", "refundPercentage"]) {
+      form.elements[key].value = policy[key];
+    }
+    form.elements.allowRebookingAfterNoShow.checked = policy.allowRebookingAfterNoShow;
+    form.elements.autoFindNextDeparture.checked = policy.autoFindNextDeparture;
+    document.querySelector("#boarding-policy-dialog").showModal();
+  } catch (error) { showToast(error.message || "Erreur de chargement de la politique."); }
+}
+
+document.querySelector("#boarding-policy-open").addEventListener("click", loadBoardingPolicy);
+document.querySelector("#boarding-policy-close").addEventListener("click", () => document.querySelector("#boarding-policy-dialog").close());
+document.querySelector("#boarding-policy-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  for (const key of ["boardingOpenMinutesBefore", "boardingDeadlineMinutesBefore", "gracePeriodMinutes", "maxRebookings", "rebookingFeeAmount", "refundPercentage"]) values[key] = Number(values[key]);
+  values.allowRebookingAfterNoShow = form.elements.allowRebookingAfterNoShow.checked;
+  values.autoFindNextDeparture = form.elements.autoFindNextDeparture.checked;
+  if (!values.allowRebookingAfterNoShow) values.maxRebookings = 0;
+  if (values.refundPolicy === "NONE") values.refundPercentage = 0;
+  if (values.refundPolicy === "FULL") values.refundPercentage = 100;
+  const submit = document.querySelector("#boarding-policy-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/embarquement/policy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify(values)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d’enregistrer la politique.");
+    document.querySelector("#boarding-policy-dialog").close();
+    showToast("Politique enregistrée. Les réservations existantes ne changent pas.");
+  } catch (error) { showToast(error.message || "Erreur d’enregistrement."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventListener("change", (event) => {
+  const percentage = document.querySelector("#boarding-policy-form").elements.refundPercentage;
+  if (event.target.value === "NONE") percentage.value = "0";
+  if (event.target.value === "FULL") percentage.value = "100";
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";

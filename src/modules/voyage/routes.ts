@@ -217,8 +217,8 @@ router.post(
       const seatNumber = Array.from({ length: Number(departure.rows[0].capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
       if (!seatNumber) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
       const booking = await client.query(
-        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id) VALUES ($1,$2,$3,$4,$5,$6,$7::int4range,$8,$9) RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId", passenger_name AS "passengerName", amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, origin_stop_id AS "originStopId", destination_stop_id AS "destinationStopId", created_at AS "createdAt"`,
-        [tenantId, id, passengerName.trim(), fareAmount, companyBookingFee, seatNumber, segmentRange, originStopId, destinationStopId]
+        `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id, boarding_policy_accepted_at, boarding_policy_accepted_by) VALUES ($1,$2,$3,$4,$5,$6,$7::int4range,$8,$9,NOW(),$10) RETURNING id, ticket_token AS "ticketToken", departure_id AS "departureId", passenger_name AS "passengerName", amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee", seat_number AS "seatNumber", status, origin_stop_id AS "originStopId", destination_stop_id AS "destinationStopId", created_at AS "createdAt"`,
+        [tenantId, id, passengerName.trim(), fareAmount, companyBookingFee, seatNumber, segmentRange, originStopId, destinationStopId, req.user?.id || null]
       );
       await client.query("COMMIT");
       transactionStarted = false;

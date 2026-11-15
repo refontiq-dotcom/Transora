@@ -15,7 +15,7 @@ Départs rattachés aux lignes de compagnie ; billets avec arrêts de départ/ar
 Réservation, billet, QR, paiement, frais 100 FCFA, annulation, remboursement, audit, canaux multiples. Le cycle interne de paiement vérifie désormais l'expiration du hold avant confirmation ; les intégrations des prestataires, webhooks signés et remboursements restent à finaliser.
 
 ## Phase 4 — Guichet / Caisse / Embarquement
-Vente physique, sessions de caisse, rapprochement, manifestes, scan, suivi par arrêt.
+Vente physique, sessions de caisse, rapprochement, scan et suivi par arrêt. La politique d’embarquement par compagnie, son instantané à la réservation, le manifeste numérique, l’enregistrement de l’arrivée réelle aux arrêts intermédiaires, la confirmation manuelle des absences après délai de grâce et le report consenti avec invalidation de l’ancien QR sont intégrés par la migration 023. Les remboursements effectifs restent à traiter dans le module financier/paiement.
 
 ## Phase 5 — API / TrouveTout
 API versionnée, recherche, disponibilité, réservation, paiement, billet, validation, intégration.

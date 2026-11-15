@@ -394,7 +394,8 @@ test("company route tariffs control departures and preserve historical reservati
       body: JSON.stringify({
         departureId: departureBody.data.id,
         passengerName: "Passager Web Tarif",
-        passengerPhone: "+2250700000000"
+        passengerPhone: "+2250700000000",
+        policyAccepted: true
       })
     });
     expect(publicReservation.status).toBe(201);
@@ -502,7 +503,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
 
     const departureResult = await pool.query(
       `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount)
-       VALUES ($1, 'Abidjan', 'Bouaké', NOW() + INTERVAL '3 hours', 'TEST-A', 3, 1500) RETURNING id`,
+       VALUES ($1, 'Abidjan', 'Bouaké', NOW() + INTERVAL '30 minutes', 'TEST-A', 3, 1500) RETURNING id`,
       [tenantId]
     );
     const departureId = departureResult.rows[0].id as string;
@@ -587,7 +588,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     expect(publicList.status).toBe(200);
     const publicBooking = await fetch(`${baseUrl}/api/public/${publicCodeA}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Client Web", passengerPhone: "+2250700000000" })
+      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Client Web", passengerPhone: "+2250700000000", policyAccepted: true })
     });
     expect(publicBooking.status).toBe(201);
     const publicBody = await publicBooking.json() as { data: { ticketToken: string; qrCode: string | null; paymentStatus: string; bookingStatus: string; holdExpiresAt: string } };
@@ -603,7 +604,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     expect(crossCompanyPublicTicket.status).toBe(404);
     const crossCompanyPublicBooking = await fetch(`${baseUrl}/api/public/${publicCodeB}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Intrus", passengerPhone: "+2250700000000" })
+      body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Intrus", passengerPhone: "+2250700000000", policyAccepted: true })
     });
     expect(crossCompanyPublicBooking.status).toBe(404);
   } finally {

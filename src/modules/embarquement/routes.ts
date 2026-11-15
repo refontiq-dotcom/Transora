@@ -22,8 +22,14 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 d.origin AS "origine", d.destination AS "destination",
                 d.departure_at AS "departLe", d.vehicle_code AS "vehicule",
                 d.status AS "statutDepart", t.name AS "compagnie",
+                COALESCE(rs.stop_order, 0) AS "stopOrder",
                 COALESCE(p.status, 'NOT_INITIATED') AS "statutPaiement",
                 be.boarded_at AS "embarqueLe",
+                ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                  AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+                 OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                  AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                  AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute')) AS "boardingWindowOpen",
                 EXISTS (
                   SELECT 1 FROM bookings previous
                   JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
@@ -35,8 +41,11 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 ) AS "seatBlockedByPreviousPassenger",
                 (b.status = 'PAID' AND p.status = 'CONFIRMED'
                   AND b.status <> 'CANCELLED' AND d.status <> 'CANCELLED'
-                  AND d.status = 'BOARDING'
-                  AND d.departure_at > NOW() - INTERVAL '2 hours'
+                  AND ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                    AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+                    OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                    AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                    AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute'))
                   AND be.id IS NULL
                   AND NOT EXISTS (
                     SELECT 1 FROM bookings previous
@@ -52,6 +61,8 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
          JOIN tenants t ON t.id = b.tenant_id
          LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
          LEFT JOIN boarding_events be ON be.booking_id = b.id AND be.tenant_id = b.tenant_id
+         LEFT JOIN route_stops rs ON rs.id = b.origin_stop_id AND rs.tenant_id = b.tenant_id
+         LEFT JOIN stop_arrival_events sae ON sae.departure_id = d.id AND sae.tenant_id = d.tenant_id AND sae.stop_id = rs.id
          WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2`,
         [req.params.billetId, req.tenantId]
       );
@@ -61,8 +72,9 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
         : ticket.statutReservation !== "PAID" || ticket.statutPaiement !== "CONFIRMED" ? "Le règlement de ce billet n'est pas confirmé."
         : ticket.statutDepart === "CANCELLED" ? "Ce départ a été annulé."
         : ticket.seatBlockedByPreviousPassenger ? "Le passager précédent n’a pas encore été confirmé comme descendu de ce siège."
-        : ticket.statutDepart !== "BOARDING" ? "L’embarquement n’est pas encore ouvert."
-        : new Date(ticket.departLe).getTime() <= Date.now() - 2 * 60 * 60 * 1000 ? "L'heure de départ est dépassée."
+        : !ticket.boardingWindowOpen ? "La période d’embarquement définie par la compagnie n’est pas ouverte ou est terminée."
+        : Number(ticket.stopOrder) === 0 && ticket.statutDepart !== "BOARDING" ? "L’embarquement à la gare de départ n’est pas ouvert."
+        : Number(ticket.stopOrder) > 0 && !["DEPARTED", "IN_TRANSIT"].includes(ticket.statutDepart) ? "Le car n’est pas encore arrivé à cet arrêt ou n’a pas commencé son trajet."
         : null;
       return res.json({ success: true, data: { ...ticket, motif } });
     } catch (error) { return next(error); }
@@ -81,6 +93,14 @@ router.post("/valider", controllerRoles, [
     const result = await client.query(
       `SELECT b.id, b.status AS booking_status, d.id AS departure_id,
               d.status AS departure_status, d.departure_at, b.seat_number,
+              COALESCE(rs.stop_order, 0) AS stop_order,
+              sae.arrived_at AS actual_arrival_at,
+              b.boarding_policy_snapshot,
+              ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+               OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute')) AS boarding_window_open,
               EXISTS (
                 SELECT 1 FROM bookings previous
                 JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
@@ -94,6 +114,8 @@ router.post("/valider", controllerRoles, [
        FROM bookings b
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
+       LEFT JOIN route_stops rs ON rs.id = b.origin_stop_id AND rs.tenant_id = b.tenant_id
+       LEFT JOIN stop_arrival_events sae ON sae.departure_id = d.id AND sae.tenant_id = d.tenant_id AND sae.stop_id = rs.id
        WHERE (b.id = $1 OR b.ticket_token = $1) AND b.tenant_id = $2
        FOR UPDATE OF b, d`,
       [req.body.billetId, req.tenantId]
@@ -108,13 +130,12 @@ router.post("/valider", controllerRoles, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Embarquement refusé : le passager précédent n’a pas encore été confirmé comme descendu de ce siège." });
     }
-    if (ticket.departure_status !== "BOARDING") {
+    const boardingStateAllowed = Number(ticket.stop_order) === 0
+      ? ticket.departure_status === "BOARDING"
+      : ["DEPARTED", "IN_TRANSIT"].includes(ticket.departure_status) && Boolean(ticket.actual_arrival_at);
+    if (!boardingStateAllowed || !ticket.boarding_window_open) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "Embarquement non ouvert pour ce départ" });
-    }
-    if (new Date(ticket.departure_at).getTime() <= Date.now() - 2 * 60 * 60 * 1000) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "L'heure de départ est dépassée" });
+      return res.status(409).json({ success: false, message: "La période d’embarquement de cet arrêt n’est pas ouverte ou est terminée. Vérifiez aussi que l’arrivée réelle du car a été enregistrée." });
     }
     const inserted = await client.query(
       `INSERT INTO boarding_events (tenant_id, booking_id, departure_id, boarded_by, scanner_id, comments)
@@ -127,6 +148,7 @@ router.post("/valider", controllerRoles, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Ce billet a déjà été utilisé pour l'embarquement" });
     }
+    await client.query("UPDATE bookings SET boarding_status='BOARDED' WHERE id=$1 AND tenant_id=$2", [ticket.id, req.tenantId]);
     await client.query("COMMIT");
     return res.json({ success: true, data: { billetId: ticket.id, ...inserted.rows[0], statut: "BOARDED" }, message: "Embarquement validé" });
   } catch (error) {

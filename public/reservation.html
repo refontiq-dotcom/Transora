@@ -38,7 +38,8 @@
         <p id="public-seat-availability" class="public-message" aria-live="polite"></p>
         <label>Nom complet du passager<input name="passengerName" required minlength="2" maxlength="160" autocomplete="name"></label>
         <label>Téléphone<input name="passengerPhone" required minlength="8" maxlength="24" autocomplete="tel" placeholder="+225 07 00 00 00 00"></label>
-        <button class="primary-button" type="submit" id="public-submit">Réserver et générer mon billet</button>
+        <section class="public-policy" aria-labelledby="public-policy-title"><h3 id="public-policy-title">Conditions d’embarquement de la compagnie</h3><p id="public-policy-summary">Chargement des conditions…</p><label class="public-policy-accept"><input type="checkbox" id="public-policy-accepted" name="policyAccepted" required> J’ai lu et j’accepte ces conditions pour cette réservation.</label></section>
+        <button class="primary-button" type="submit" id="public-submit" disabled>Réserver et générer mon billet</button>
       </form>
       <p id="public-message" class="public-message" role="status" aria-live="polite"></p>
       <section id="public-ticket" class="public-ticket" hidden>

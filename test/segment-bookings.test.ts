@@ -75,7 +75,7 @@ beforeAll(async () => {
   );
   const departure = await pool.query(
     `INSERT INTO departures (tenant_id,origin,destination,departure_at,vehicle_code,capacity,fare_amount,company_booking_fee,route_id)
-     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '2 days','SEG-TEST',2,10000,300,$2) RETURNING id`,
+     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '30 minutes','SEG-TEST',2,10000,300,$2) RETURNING id`,
     [tenantId, route.rows[0].id]
   );
   departureId = departure.rows[0].id;
@@ -181,6 +181,12 @@ test("le contrôleur confirme la descente réelle avant d'autoriser la montée s
   expect(after.data.summary.seatsBlockedByPreviousPassenger).toBe(0);
   expect(after.data.boardings[0].seatBlockedByPreviousPassenger).toBe(false);
 
+  await pool.query("UPDATE departures SET status='DEPARTED' WHERE id=$1 AND tenant_id=$2", [departureId, tenantId]);
+  await pool.query(
+    "INSERT INTO stop_arrival_events (tenant_id, departure_id, stop_id, arrived_by) VALUES ($1,$2,$3,$4)",
+    [tenantId, departureId, middleStopId, userId]
+  );
+
   const boarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
     method: "POST", headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ billetId: secondSegmentBookingId })
@@ -219,6 +225,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
       departureId: holdDepartureId,
       passengerName: "Client temporaire",
       passengerPhone: "+2250700000000",
+      policyAccepted: true,
       originStopId,
       destinationStopId,
       amountTransport: 1
@@ -256,6 +263,7 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
       departureId: holdDepartureId,
       passengerName: "Client paiement expiré",
       passengerPhone: "+2250700000001",
+      policyAccepted: true,
       originStopId,
       destinationStopId
     })
