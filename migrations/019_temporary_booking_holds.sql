@@ -17,7 +17,8 @@ ALTER TABLE bookings
 -- Les réservations expirées libèrent le siège ; les holds actifs continuent
 -- de participer à l'exclusion de chevauchement par segment.
 ALTER TABLE bookings
-  DROP CONSTRAINT IF EXISTS bookings_seat_segment_no_overlap;
+  DROP CONSTRAINT IF EXISTS bookings_seat_segment_no_overlap,
+  DROP CONSTRAINT IF EXISTS exclude_overlapping_seats;
 
 ALTER TABLE bookings
   ADD CONSTRAINT bookings_seat_segment_no_overlap
