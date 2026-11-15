@@ -127,12 +127,18 @@ router.get("/:publicCode/ticket/:ticketToken", [
   try {
     const result = await pool.query(
       `SELECT b.id, b.ticket_token, b.passenger_name, b.amount_transport, b.platform_fee, b.company_booking_fee,
-              b.seat_number, b.status AS booking_status, d.origin, d.destination,
+              b.seat_number, b.status AS booking_status, COALESCE(oc.name, d.origin) AS origin, COALESCE(dc.name, d.destination) AS destination,
               d.departure_at, d.vehicle_code, d.status AS departure_status, t.name AS company_name,
               COALESCE(p.status, 'NOT_INITIATED') AS payment_status,
               EXISTS (SELECT 1 FROM boarding_events be WHERE be.booking_id = b.id AND be.tenant_id = b.tenant_id) AS boarded
        FROM tenants t JOIN bookings b ON b.tenant_id = t.id
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
+       LEFT JOIN route_stops ors ON ors.id = b.origin_stop_id AND ors.tenant_id = b.tenant_id
+       LEFT JOIN stations os ON os.id = ors.station_id AND os.tenant_id = ors.tenant_id
+       LEFT JOIN company_cities oc ON oc.id = os.city_id AND oc.tenant_id = os.tenant_id
+       LEFT JOIN route_stops drs ON drs.id = b.destination_stop_id AND drs.tenant_id = b.tenant_id
+       LEFT JOIN stations ds ON ds.id = drs.station_id AND ds.tenant_id = drs.tenant_id
+       LEFT JOIN company_cities dc ON dc.id = ds.city_id AND dc.tenant_id = ds.tenant_id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
        WHERE t.public_code = $1 AND b.ticket_token = $2`,
       [req.params.publicCode, req.params.ticketToken]
