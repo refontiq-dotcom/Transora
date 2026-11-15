@@ -3,6 +3,7 @@ import { body, param, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import QRCode from "qrcode";
 import { pool } from "../../db/pool";
+import { resolveBookingSegment } from "../../lib/booking-segment";
 
 const router = Router();
 const validate = (req: Request, res: Response, next: NextFunction) => {
