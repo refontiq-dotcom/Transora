@@ -207,6 +207,7 @@ router.get("/manifest/:departureId", controllerRoles, [
     );
     const rows = bookings.rows.map((booking: Record<string, unknown>) => ({
       ...booking,
+      paymentConfirmed: booking.paymentConfirmed === true,
       operationalStatus: booking.absenceConfirmedAt ? "ABSENT_CONFIRMED"
         : booking.boardedAt ? "PRESENT" : "EXPECTED"
     }));
