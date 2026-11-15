@@ -80,8 +80,9 @@ router.post(
         company_booking_fee: number;
         platform_fee: number;
         status: string;
+        hold_expires_at: Date | null;
       }>(
-        `SELECT amount_transport, company_booking_fee, platform_fee, status
+        `SELECT amount_transport, company_booking_fee, platform_fee, status, hold_expires_at
          FROM bookings WHERE id = $1 AND tenant_id = $2`,
         [billetId, tenantId]
       );
@@ -89,10 +90,20 @@ router.post(
       if (!booking) {
         return res.status(404).json({ success: false, message: "Réservation introuvable" });
       }
-      if (booking.status !== "RESERVED") {
+      if (booking.status !== "RESERVED" && booking.status !== "HELD") {
         return res.status(409).json({
           success: false,
           message: "Cette réservation ne peut pas être payée"
+        });
+      }
+      if (booking.status === "HELD" && (!booking.hold_expires_at || new Date(booking.hold_expires_at).getTime() <= Date.now())) {
+        await pool.query(
+          "UPDATE bookings SET status='EXPIRED', hold_expires_at=NULL WHERE id=$1 AND tenant_id=$2 AND status='HELD' AND hold_expires_at <= NOW()",
+          [billetId, tenantId]
+        );
+        return res.status(409).json({
+          success: false,
+          message: "Le délai de réservation a expiré. Veuillez choisir à nouveau votre place."
         });
       }
 
@@ -160,9 +171,15 @@ router.post(
         booking_id: string;
         status: string;
         payment_method: string;
+        booking_status: string;
+        hold_expires_at: Date | null;
       }>(
-        `SELECT booking_id, status, payment_method FROM payments
-         WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+        `SELECT p.booking_id, p.status, p.payment_method,
+                b.status AS booking_status, b.hold_expires_at
+         FROM payments p
+         JOIN bookings b ON b.id=p.booking_id AND b.tenant_id=p.tenant_id
+         WHERE p.id = $1 AND p.tenant_id = $2
+         FOR UPDATE OF p, b`,
         [transactionId, tenantId]
       );
       const payment = paymentResult.rows[0];
@@ -186,6 +203,31 @@ router.post(
         return res.status(409).json({
           success: false,
           message: "Cette transaction ne peut pas être confirmée"
+        });
+      }
+      if (payment.booking_status === "HELD" &&
+          (!payment.hold_expires_at || new Date(payment.hold_expires_at).getTime() <= Date.now())) {
+        await client.query(
+          "UPDATE bookings SET status='EXPIRED', hold_expires_at=NULL WHERE id=$1 AND tenant_id=$2 AND status='HELD'",
+          [payment.booking_id, tenantId]
+        );
+        await client.query(
+          "UPDATE payments SET status='CANCELLED' WHERE id=$1 AND tenant_id=$2 AND status='PENDING'",
+          [transactionId, tenantId]
+        );
+        await client.query("COMMIT");
+        transactionStarted = false;
+        return res.status(409).json({
+          success: false,
+          message: "Le délai de réservation a expiré. Le paiement ne peut plus confirmer cette place."
+        });
+      }
+      if (payment.booking_status === "CANCELLED" || payment.booking_status === "EXPIRED") {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return res.status(409).json({
+          success: false,
+          message: "La réservation a été annulée ou a expiré"
         });
       }
 
