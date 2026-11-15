@@ -219,6 +219,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
       departureId: holdDepartureId,
       passengerName: "Client temporaire",
       passengerPhone: "+2250700000000",
+      policyAccepted: true,
       originStopId,
       destinationStopId,
       amountTransport: 1
