@@ -75,7 +75,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (tenantId) await pool.query("DELETE FROM tenants WHERE id=$1", [tenantId]);
+  if (tenantId) {
+    await pool.query("DELETE FROM bookings WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM departures WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM route_stops WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM transport_routes WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM stations WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM company_cities WHERE tenant_id=$1", [tenantId]);
+    await pool.query("DELETE FROM tenants WHERE id=$1", [tenantId]);
+  }
   if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
   else process.env.JWT_SECRET = previousJwtSecret;
   if (server) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
