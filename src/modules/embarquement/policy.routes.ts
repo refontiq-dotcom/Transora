@@ -357,7 +357,12 @@ router.get("/alternatives/:bookingId", controllerRoles, [
     const policy = booking.boarding_policy_snapshot || {};
     if (booking.status !== "NO_SHOW") return res.status(409).json({ success: false, message: "Une alternative n'est proposée qu'après confirmation de l'absence." });
     if (!policy.allowRebookingAfterNoShow || !policy.autoFindNextDeparture) {
-      return res.json({ success: true, data: { alternatives: [], rebookingAllowed: false, message: "La politique acceptée pour ce billet ne prévoit pas de recherche automatique de report." } });
+      return res.json({ success: true, data: {
+        alternatives: [], rebookingAllowed: false,
+        refundPolicy: policy.refundPolicy || "NONE",
+        refundPercentage: Number(policy.refundPercentage || 0),
+        message: "La politique acceptée pour ce billet ne prévoit pas de recherche automatique de report."
+      } });
     }
     const usedResult = await pool.query(
       "SELECT COUNT(*)::int AS used FROM booking_rebooking_events WHERE tenant_id = $1 AND booking_id = $2",
