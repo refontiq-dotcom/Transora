@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS boarding_absence_events (
   booking_id UUID NOT NULL,
   departure_id UUID NOT NULL,
   stop_id UUID,
-  scheduled_at TIMESTAMPTZ NOT NULL,
+  grace_reference_at TIMESTAMPTZ NOT NULL,
   grace_period_minutes INTEGER NOT NULL CHECK (grace_period_minutes BETWEEN 0 AND 180),
   policy_version INTEGER NOT NULL,
   confirmed_by UUID NOT NULL,
