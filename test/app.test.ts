@@ -394,7 +394,8 @@ test("company route tariffs control departures and preserve historical reservati
       body: JSON.stringify({
         departureId: departureBody.data.id,
         passengerName: "Passager Web Tarif",
-        passengerPhone: "+2250700000000"
+        passengerPhone: "+2250700000000",
+        policyAccepted: true
       })
     });
     expect(publicReservation.status).toBe(201);
