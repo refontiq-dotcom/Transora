@@ -8,7 +8,7 @@ ALTER TABLE bookings
 
 ALTER TABLE bookings
   ADD CONSTRAINT bookings_status_check
-  CHECK (status IN ('RESERVED', 'HELD', 'PAID', 'CANCELLED', 'EXPIRED'));
+  CHECK (status IN ('RESERVED', 'HELD', 'PAID', 'ISSUED', 'BOARDED', 'USED', 'CANCELLED', 'REFUNDED', 'NO_SHOW', 'EXPIRED'));
 
 ALTER TABLE bookings
   ADD CONSTRAINT bookings_hold_expiry_check
