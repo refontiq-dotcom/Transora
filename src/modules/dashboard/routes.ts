@@ -62,7 +62,7 @@ router.get(
            (SELECT COUNT(*) FROM bookings b
              JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
              WHERE b.tenant_id = $1 AND d.departure_at::date = $2::date
-               AND b.status IN ('RESERVED', 'PAID')) AS reserved_seats_today,
+               AND (b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW()))) AS reserved_seats_today,
            (SELECT COUNT(*) FROM vehicles
              WHERE tenant_id = $1 AND deleted_at IS NULL AND status = 'en_service') AS active_vehicles,
            (SELECT name FROM tenants WHERE id = $1) AS tenant_name`,
@@ -82,7 +82,7 @@ router.get(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
                 d.capacity,
                 COUNT(b.id) FILTER (WHERE b.status = 'PAID') AS passengers,
-                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats,
+                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW())) AS reserved_seats,
                 d.status
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
