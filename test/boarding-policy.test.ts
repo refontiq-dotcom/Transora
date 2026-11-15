@@ -58,7 +58,7 @@ beforeAll(async () => {
 
   const source = await pool.query(
     `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, status)
-     VALUES ($1,'Ville Test A','Ville Test B',NOW()-INTERVAL '10 minutes','BUS-ABSENT',2,10000,0,'DEPARTED')
+     VALUES ($1,'Ville Test A','Ville Test B',NOW()-INTERVAL '10 minutes','BUS-ABSENT',2,10000,0,'BOARDING')
      RETURNING id`,
     [tenantId]
   );
@@ -118,6 +118,16 @@ test("la compagnie configure sa politique et les billets conservent leur version
     [bookingId, tenantId]
   );
   expect(booking.rows[0].boarding_policy_snapshot.gracePeriodMinutes).toBe(0);
+});
+
+test("une absence ne peut pas être confirmée tant que le car n'a pas réellement quitté la gare", async () => {
+  const response = await fetch(`${baseUrl}/api/v1/embarquement/absence`, {
+    method: "POST", headers: headers(), body: JSON.stringify({ bookingId })
+  });
+  expect(response.status).toBe(409);
+  await pool.query("UPDATE departures SET status='DEPARTED' WHERE id=$1 AND tenant_id=$2", [sourceDepartureId, tenantId]);
+  const departure = await pool.query("SELECT actual_departed_at FROM departures WHERE id=$1", [sourceDepartureId]);
+  expect(departure.rows[0].actual_departed_at).not.toBeNull();
 });
 
 test("une absence ne peut être confirmée qu'après le délai accepté et libère le siège du segment", async () => {
