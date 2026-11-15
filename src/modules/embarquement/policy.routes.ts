@@ -6,6 +6,7 @@ import { authorize } from "../../middleware/auth";
 
 const router = Router();
 const policyEditors = authorize(["administrateur", "responsable_exploitation"]);
+const policyReaders = authorize(["administrateur", "responsable_exploitation", "agent_guichet", "caissier"]);
 const controllerRoles = authorize(["administrateur", "responsable_exploitation", "controleur", "chauffeur"]);
 
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -27,7 +28,7 @@ const policySelect = `SELECT version,
   updated_at AS "updatedAt"
   FROM company_boarding_policies WHERE tenant_id = $1`;
 
-router.get("/policy", policyEditors, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/policy", policyReaders, async (req: Request, res: Response, next: NextFunction) => {
   if (!req.tenantId) return res.status(401).json({ success: false, message: "Tenant non identifié" });
   try {
     await pool.query("INSERT INTO company_boarding_policies (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING", [req.tenantId]);

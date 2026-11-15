@@ -87,7 +87,8 @@ router.post("/vente", cashDeskRoles, [
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
   body("seatNumber").optional().isInt({ min: 1 }),
   body("originStopId").optional().isUUID(),
-  body("destinationStopId").optional().isUUID()
+  body("destinationStopId").optional().isUUID(),
+  body("policyAccepted").custom(value => value === true || value === "true")
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Session entreprise manquante" });
   const client: PoolClient = await pool.connect();

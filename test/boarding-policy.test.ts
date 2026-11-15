@@ -105,6 +105,16 @@ afterAll(async () => {
 
 const headers = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
 
+test("la vente au guichet exige la confirmation de présentation et d’acceptation des conditions", async () => {
+  const response = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
+    method: "POST", headers: headers(),
+    body: JSON.stringify({ departureId: "00000000-0000-0000-0000-000000000001", passengerName: "Client Test" })
+  });
+  expect(response.status).toBe(400);
+  const result = await response.json() as { errors: Array<{ path?: string; param?: string }> };
+  expect(result.errors.some(error => error.path === "policyAccepted" || error.param === "policyAccepted")).toBe(true);
+});
+
 test("la compagnie configure sa politique et les billets conservent leur version", async () => {
   const response = await fetch(`${baseUrl}/api/v1/embarquement/policy`, { headers: headers() });
   expect(response.status).toBe(200);
