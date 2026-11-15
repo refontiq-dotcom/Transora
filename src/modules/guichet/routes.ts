@@ -109,7 +109,7 @@ router.post("/vente", cashDeskRoles, [
       client, req.tenantId, trip.route_id || null,
       typeof req.body.originStopId === "string" ? req.body.originStopId : null,
       typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
-      { origin: selectedSegment.origin, destination: selectedSegment.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+      { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
     );
     if (segment.error || !segment.data) {
       await client.query("ROLLBACK");
@@ -149,11 +149,11 @@ router.post("/vente", cashDeskRoles, [
     await client.query(
       `INSERT INTO guichet_operations (tenant_id, session_id, booking_id, type, amount, payment_method, description, recorded_by)
        VALUES ($1, $2, $3, 'SALE', $4, 'cash', $5, $6)`,
-      [req.tenantId, session.rows[0].id, booking.id, total, `Billet ${booking.id} · ${trip.origin} → ${trip.destination}`, req.user.id]
+      [req.tenantId, session.rows[0].id, booking.id, total, `Billet ${booking.id} · ${selectedSegment.origin} → ${selectedSegment.destination}`, req.user.id]
     );
     await client.query("COMMIT");
     return res.status(201).json({ success: true, data: {
-      ...booking, departureId: trip.id, origin: trip.origin, destination: trip.destination,
+      ...booking, departureId: trip.id, origin: selectedSegment.origin, destination: selectedSegment.destination,
       departureAt: trip.departure_at, vehicleCode: trip.vehicle_code, totalPaid: total,
       paymentStatus: "CONFIRMED", companyId: req.tenantId
     }, message: "Billet vendu et règlement en espèces enregistré" });
