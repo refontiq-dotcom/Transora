@@ -59,9 +59,19 @@ $legacy_stations$;
 ALTER TABLE stations ALTER COLUMN city_id SET NOT NULL;
 ALTER TABLE stations ADD CONSTRAINT stations_tenant_id_id_unique UNIQUE (tenant_id, id);
 
-ALTER TABLE stations
-  ADD CONSTRAINT stations_city_same_tenant_fk
-  FOREIGN KEY (tenant_id, city_id) REFERENCES company_cities(tenant_id, id) ON DELETE RESTRICT;
+DO $station_city_fk$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.stations'::regclass
+      AND conname = 'stations_city_same_tenant_fk'
+  ) THEN
+    ALTER TABLE stations
+      ADD CONSTRAINT stations_city_same_tenant_fk
+      FOREIGN KEY (tenant_id, city_id) REFERENCES company_cities(tenant_id, id) ON DELETE RESTRICT;
+  END IF;
+END
+$station_city_fk$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS stations_name_city_unique
   ON stations (tenant_id, city_id, lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g')));
