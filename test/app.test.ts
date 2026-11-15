@@ -544,7 +544,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
 
     const saleResponse = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
       method: "POST", headers: headersA,
-      body: JSON.stringify({ departureId, passengerName: "Passager Guichet", policyAccepted: true })
+      body: JSON.stringify({ departureId, passengerName: "Passager Guichet" })
     });
     expect(saleResponse.status).toBe(201);
     const saleBody = await saleResponse.json() as { data: { id: string; ticketToken: string; totalPaid: number; seatNumber: number } };

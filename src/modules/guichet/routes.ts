@@ -87,8 +87,7 @@ router.post("/vente", cashDeskRoles, [
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
   body("seatNumber").optional().isInt({ min: 1 }),
   body("originStopId").optional().isUUID(),
-  body("destinationStopId").optional().isUUID(),
-  body("policyAccepted").custom(value => value === true || value === "true")
+  body("destinationStopId").optional().isUUID()
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Session entreprise manquante" });
   const client: PoolClient = await pool.connect();
@@ -133,12 +132,12 @@ router.post("/vente", cashDeskRoles, [
       await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Place indisponible" });
     }
     const inserted = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range, origin_stop_id, destination_stop_id, boarding_policy_accepted_at, boarding_policy_accepted_by)
-       VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7::int4range, $8, $9, NOW(), $10)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range, origin_stop_id, destination_stop_id)
+       VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7::int4range, $8, $9)
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
                  amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
                  seat_number AS "seatNumber", created_at AS "createdAt"`,
-      [req.tenantId, trip.id, String(req.body.passengerName).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seat, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId, req.user.id]
+      [req.tenantId, trip.id, String(req.body.passengerName).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seat, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId]
     );
     const booking = inserted.rows[0];
     const total = Number(booking.amountTransport) + Number(booking.companyBookingFee) + Number(booking.platformFee);
