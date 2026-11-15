@@ -257,6 +257,7 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
       departureId: holdDepartureId,
       passengerName: "Client paiement expiré",
       passengerPhone: "+2250700000001",
+      policyAccepted: true,
       originStopId,
       destinationStopId
     })
