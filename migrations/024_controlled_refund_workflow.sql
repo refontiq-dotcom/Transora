@@ -1,4 +1,5 @@
 -- Circuit de remboursement contrôlé, tenant-scoped et traçable.
+CREATE UNIQUE INDEX IF NOT EXISTS payments_id_tenant_unique ON payments (id, tenant_id);
 CREATE TABLE IF NOT EXISTS refund_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
