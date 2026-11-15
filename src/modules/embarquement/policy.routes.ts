@@ -111,6 +111,57 @@ router.put("/policy", policyEditors, [
   } finally { client.release(); }
 });
 
+// À un arrêt intermédiaire, le délai de grâce commence à l'arrivée réelle du car, jamais à l'heure théorique.
+router.post("/arrival", controllerRoles, [
+  body("departureId").isUUID(),
+  body("stopId").isUUID(),
+  body("comments").optional().isString().trim().isLength({ max: 500 })
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Session entreprise manquante" });
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const departure = await client.query(
+      `SELECT d.id, d.status, rs.id AS stop_id, rs.stop_order
+       FROM departures d
+       JOIN route_stops rs ON rs.route_id = d.route_id AND rs.tenant_id = d.tenant_id
+       WHERE d.id = $1 AND d.tenant_id = $2 AND rs.id = $3
+       FOR UPDATE OF d`,
+      [req.body.departureId, req.tenantId, req.body.stopId]
+    );
+    if (!departure.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, message: "Départ ou arrêt introuvable dans cette compagnie." });
+    }
+    if (Number(departure.rows[0].stop_order) === 0 || !["DEPARTED", "IN_TRANSIT"].includes(departure.rows[0].status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "L'arrivée réelle ne peut être enregistrée que pour un arrêt intermédiaire après le départ du car." });
+    }
+    const inserted = await client.query(
+      `INSERT INTO stop_arrival_events (tenant_id, departure_id, stop_id, arrived_by, comments)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (departure_id, stop_id) DO NOTHING
+       RETURNING id, arrived_at AS "arrivedAt"`,
+      [req.tenantId, req.body.departureId, req.body.stopId, req.user.id, req.body.comments || null]
+    );
+    if (!inserted.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "L'arrivée à cet arrêt a déjà été enregistrée." });
+    }
+    await client.query(
+      `INSERT INTO audit_events (tenant_id, actor_user_id, type, subject, action, details)
+       VALUES ($1,$2,'création','arrêt','Arrivée réelle du car confirmée',$3::jsonb)`,
+      [req.tenantId, req.user.id, JSON.stringify({ departureId: req.body.departureId, stopId: req.body.stopId, arrivedAt: inserted.rows[0].arrivedAt })]
+    );
+    await client.query("COMMIT");
+    return res.status(201).json({ success: true, data: inserted.rows[0], message: "Arrivée réelle enregistrée. Le délai de grâce des passagers à cet arrêt commence maintenant." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if ((error as { code?: string }).code === "23505") return res.status(409).json({ success: false, message: "L'arrivée à cet arrêt a déjà été enregistrée." });
+    return next(error);
+  } finally { client.release(); }
+});
+
 // Manifeste numérique : les billets payés non scannés restent « attendus », jamais automatiquement absents.
 router.get("/manifest/:departureId", controllerRoles, [
   param("departureId").isUUID(),
@@ -123,9 +174,11 @@ router.get("/manifest/:departureId", controllerRoles, [
       `SELECT d.id, d.origin, d.destination, d.departure_at AS "departureAt",
               d.status, d.route_id AS "routeId", d.vehicle_code AS "vehicleCode",
               COALESCE(rs.duration_from_origin_minutes, 0) AS "stopDurationMinutes",
+              sae.arrived_at AS "actualArrivalAt",
               rs.id AS "stopId", c.name AS "stopCity", s.name AS "stopStation"
        FROM departures d
        LEFT JOIN route_stops rs ON rs.id = $3 AND rs.route_id = d.route_id AND rs.tenant_id = d.tenant_id
+       LEFT JOIN stop_arrival_events sae ON sae.departure_id = d.id AND sae.tenant_id = d.tenant_id AND sae.stop_id = rs.id
        LEFT JOIN stations s ON s.id = rs.station_id AND s.tenant_id = rs.tenant_id
        LEFT JOIN company_cities c ON c.id = s.city_id AND c.tenant_id = s.tenant_id
        WHERE d.id = $1 AND d.tenant_id = $2
@@ -148,7 +201,7 @@ router.get("/manifest/:departureId", controllerRoles, [
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
        WHERE b.tenant_id = $1 AND b.departure_id = $2
          AND b.status IN ('PAID', 'NO_SHOW')
-         AND ($3::uuid IS NULL OR b.origin_stop_id = $3 OR b.destination_stop_id = $3)
+         AND ($3::uuid IS NULL OR b.origin_stop_id = $3)
        ORDER BY b.seat_number NULLS LAST, b.passenger_name`,
       [req.tenantId, req.params.departureId, stopId]
     );
@@ -186,11 +239,14 @@ router.post("/absence", controllerRoles, [
               b.boarding_policy_version, b.boarding_policy_snapshot,
               b.origin_stop_id, b.seat_number, d.departure_at, d.status AS departure_status,
               COALESCE(rs.duration_from_origin_minutes, 0) AS stop_duration_minutes,
+              rs.stop_order,
+              sae.arrived_at AS actual_arrival_at,
               p.status AS payment_status,
               EXISTS (SELECT 1 FROM boarding_events be WHERE be.booking_id = b.id AND be.tenant_id = b.tenant_id) AS boarded
        FROM bookings b
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
        LEFT JOIN route_stops rs ON rs.id = $3 AND rs.route_id = d.route_id AND rs.tenant_id = d.tenant_id
+       LEFT JOIN stop_arrival_events sae ON sae.departure_id = d.id AND sae.tenant_id = d.tenant_id AND sae.stop_id = rs.id
        LEFT JOIN payments p ON p.booking_id = b.id AND p.tenant_id = b.tenant_id
        WHERE b.id = $1 AND b.tenant_id = $2
          AND ($3::uuid IS NULL OR rs.id IS NOT NULL)
@@ -224,7 +280,13 @@ router.post("/absence", controllerRoles, [
     }
     const snapshot = booking.boarding_policy_snapshot || {};
     const graceMinutes = Math.max(0, Math.min(180, Number(snapshot.gracePeriodMinutes ?? 15)));
-    const scheduledAt = new Date(new Date(booking.departure_at).getTime() + Number(booking.stop_duration_minutes || 0) * 60000);
+    if (stopId && Number(booking.stop_order) > 0 && !booking.actual_arrival_at) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Le car doit d’abord être déclaré arrivé à cet arrêt. Le délai de grâce commencera à l’heure réelle d’arrivée." });
+    }
+    const scheduledAt = stopId && Number(booking.stop_order) > 0
+      ? new Date(booking.actual_arrival_at)
+      : new Date(new Date(booking.departure_at).getTime() + Number(booking.stop_duration_minutes || 0) * 60000);
     const eligibleAt = new Date(scheduledAt.getTime() + graceMinutes * 60000);
     if (Date.now() < eligibleAt.getTime()) {
       await client.query("ROLLBACK");
