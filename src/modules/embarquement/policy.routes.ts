@@ -205,7 +205,7 @@ router.get("/manifest/:departureId", controllerRoles, [
        ORDER BY b.seat_number NULLS LAST, b.passenger_name`,
       [req.tenantId, req.params.departureId, stopId]
     );
-    const rows = bookings.rows.map((booking: Record<string, unknown>) => ({
+    const rows: Array<Record<string, unknown> & { paymentConfirmed: boolean; operationalStatus: string }> = bookings.rows.map((booking: Record<string, unknown>) => ({
       ...booking,
       paymentConfirmed: booking.paymentConfirmed === true,
       operationalStatus: booking.absenceConfirmedAt ? "ABSENT_CONFIRMED"
