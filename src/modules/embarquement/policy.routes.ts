@@ -237,7 +237,7 @@ router.post("/absence", controllerRoles, [
     const stopId = typeof req.body.stopId === "string" ? req.body.stopId : null;
     const result = await client.query(
       `SELECT b.id, b.departure_id, b.status AS booking_status,
-              b.boarding_policy_version, b.boarding_policy_snapshot,
+              b.boarding_policy_version, b.boarding_policy_snapshot, b.boarding_policy_accepted_at,
               b.origin_stop_id, b.seat_number, d.departure_at, d.status AS departure_status,
               COALESCE(rs.duration_from_origin_minutes, 0) AS stop_duration_minutes,
               rs.stop_order,
@@ -262,6 +262,10 @@ router.post("/absence", controllerRoles, [
     if (booking.booking_status !== "PAID" || booking.payment_status !== "CONFIRMED") {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Seul un billet payé et confirmé peut être déclaré absent." });
+    }
+    if (!booking.boarding_policy_accepted_at) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Les conditions de la compagnie n'ont pas été acceptées pour ce billet historique. Traitez ce cas manuellement sans appliquer de nouvelle pénalité." });
     }
     if (booking.boarded) {
       await client.query("ROLLBACK");
