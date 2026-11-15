@@ -72,9 +72,10 @@ async function refreshPublicSeatAvailability() {
   const destinationId = document.querySelector("#public-destination-stop").value;
   const target = document.querySelector("#public-seat-availability");
   const submit = document.querySelector("#public-submit");
-  if (!departure) { target.textContent = ""; return; }
+  if (!departure) { target.textContent = ""; submit.disabled = true; return; }
   if (!departure.routeStops?.length) {
     target.textContent = "Places disponibles : " + departure.availableSeats + " sur " + departure.capacity + ".";
+    submit.disabled = departure.availableSeats <= 0;
     return;
   }
   if (!originId || !destinationId) {
@@ -103,6 +104,7 @@ function configurePublicStops() {
   const originSelect = document.querySelector("#public-origin-stop");
   const destinationSelect = document.querySelector("#public-destination-stop");
   const stops = departure?.routeStops || [];
+  document.querySelector("#public-submit").disabled = Boolean(stops.length);
   originWrap.hidden = !stops.length;
   destinationWrap.hidden = !stops.length;
   originSelect.disabled = !stops.length;
