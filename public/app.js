@@ -2325,6 +2325,139 @@ document.querySelector("#courier-tracking-form").addEventListener("submit", asyn
   } catch (error) { target.textContent = error.message || "Erreur de suivi."; }
 });
 
+
+function setStopOperationsMessage(message, error = false) {
+  const target = document.querySelector("#stop-operations-message");
+  target.textContent = message;
+  target.classList.toggle("public-error", error);
+}
+function stopOperationRow(container, title, details, label, handler) {
+  const row = document.createElement("article");
+  row.className = "courier-list-item";
+  const copy = document.createElement("div");
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const description = document.createElement("p");
+  description.textContent = details;
+  copy.append(heading, description);
+  row.append(copy);
+  if (label && handler) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary-button";
+    button.textContent = label;
+    button.addEventListener("click", handler);
+    row.append(button);
+  }
+  container.append(row);
+}
+function populateStopOperationSelectors() {
+  const departureSelect = document.querySelector("#stop-operations-departure");
+  const stopSelect = document.querySelector("#stop-operations-stop");
+  const previousDeparture = departureSelect.value;
+  const previousStop = stopSelect.value;
+  departureSelect.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choisissez un voyage";
+  departureSelect.append(placeholder);
+  const eligible = voyageDepartures.filter((item) => item.routeId && item.routeStops && item.routeStops.length);
+  eligible.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.origin + " → " + item.destination + " · " + new Date(item.departureAt).toLocaleString("fr-FR") + " · " + item.vehicleCode;
+    departureSelect.append(option);
+  });
+  departureSelect.value = eligible.some((item) => item.id === previousDeparture) ? previousDeparture : (eligible[0]?.id || "");
+  const selected = eligible.find((item) => item.id === departureSelect.value);
+  stopSelect.replaceChildren();
+  const stopPlaceholder = document.createElement("option");
+  stopPlaceholder.value = "";
+  stopPlaceholder.textContent = "Choisissez un arrêt";
+  stopSelect.append(stopPlaceholder);
+  (selected?.routeStops || []).forEach((stop) => {
+    const option = document.createElement("option");
+    option.value = stop.id;
+    option.textContent = stop.city + (stop.station ? " · " + stop.station : "");
+    stopSelect.append(option);
+  });
+  stopSelect.disabled = !selected;
+  stopSelect.value = (selected?.routeStops || []).some((stop) => stop.id === previousStop) ? previousStop : (selected?.routeStops[0]?.id || "");
+}
+async function loadStopOperations() {
+  if (!accessToken) {
+    setStopOperationsMessage("Connectez-vous avec un compte contrôleur, chauffeur, responsable d'exploitation ou administrateur.", true);
+    return;
+  }
+  try {
+    await loadVoyages();
+    populateStopOperationSelectors();
+    const departureId = document.querySelector("#stop-operations-departure").value;
+    const stopId = document.querySelector("#stop-operations-stop").value;
+    if (!departureId || !stopId) {
+      setStopOperationsMessage("Aucun voyage avec arrêts configurés n'est disponible.");
+      return;
+    }
+    setStopOperationsMessage("Actualisation des opérations…");
+    const response = await fetch("/api/v1/embarquement/operations/" + encodeURIComponent(departureId) + "/" + encodeURIComponent(stopId), {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les opérations de cet arrêt.");
+    renderStopOperations(result.data);
+    const stop = result.data.stop;
+    setStopOperationsMessage(result.data.departure.origin + " → " + result.data.departure.destination + " · " + stop.city + (stop.station ? " / " + stop.station : "") + " · Arrêt " + (stop.order + 1));
+  } catch (error) {
+    setStopOperationsMessage(error.message || "Erreur de chargement des opérations.", true);
+  }
+}
+function renderStopOperations(data) {
+  const summary = data.summary;
+  document.querySelector("#stop-expected-descents").textContent = summary.expectedDescents;
+  document.querySelector("#stop-confirmed-descents").textContent = summary.confirmedDescents;
+  document.querySelector("#stop-expected-boardings").textContent = summary.expectedBoardings;
+  document.querySelector("#stop-blocked-seats").textContent = summary.seatsBlockedByPreviousPassenger;
+  const descentList = document.querySelector("#stop-descent-list");
+  const boardingList = document.querySelector("#stop-boarding-list");
+  descentList.replaceChildren();
+  boardingList.replaceChildren();
+  if (!data.descents.length) stopOperationRow(descentList, "Aucune descente prévue", "Aucun passager déjà embarqué ne doit descendre à cet arrêt.");
+  data.descents.forEach((passenger) => {
+    const details = "Siège " + (passenger.seatNumber || "non attribué") + " · " + passenger.passengerName + (passenger.isAlighted ? " · Descente confirmée" : " · Descente à confirmer");
+    stopOperationRow(descentList, passenger.isAlighted ? "Descendu" : "À faire descendre", details,
+      passenger.isAlighted ? null : "Confirmer la descente", passenger.isAlighted ? null : async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/v1/embarquement/operations/descendre", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+            body: JSON.stringify({ billetId: passenger.bookingId, stopId: data.stop.id })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || "Impossible de confirmer la descente.");
+          showToast("Descente confirmée. Le siège est libéré pour le segment suivant.");
+          await loadStopOperations();
+        } catch (error) {
+          showToast(error.message || "Erreur de confirmation.");
+          button.disabled = false;
+        }
+      });
+  });
+  if (!data.boardings.length) stopOperationRow(boardingList, "Aucune montée prévue", "Aucun billet payé n'est prévu pour monter à cet arrêt.");
+  data.boardings.forEach((passenger) => {
+    const blocked = passenger.seatBlockedByPreviousPassenger;
+    const details = "Siège " + (passenger.seatNumber || "non attribué") + " · " + passenger.passengerName + " · " +
+      (blocked ? "Siège bloqué : descente précédente non confirmée" : passenger.boardedAt ? "Embarquement déjà enregistré" : "En attente de vérification");
+    stopOperationRow(boardingList, passenger.boardedAt ? "Passager embarqué" : "Passager attendu", details,
+      passenger.boardedAt || blocked ? null : "Vérifier le billet",
+      passenger.boardedAt || blocked ? null : () => {
+        document.querySelector("#scanner-input").value = passenger.ticketToken;
+        openScannerDialog();
+        lookupScannedTicket(passenger.ticketToken);
+      });
+  });
+}
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
@@ -2335,7 +2468,8 @@ function showCurrentView() {
   const isGuichet = hash === "#guichet";
   const isCourier = hash === "#courrier";
   const isPersonnel = hash === "#personnel";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel;
+  const isStopOperations = hash === "#operations-arrets";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel || isStopOperations;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
@@ -2344,6 +2478,7 @@ function showCurrentView() {
   document.querySelector("#guichet-page").hidden = !isGuichet;
   document.querySelector("#courier-page").hidden = !isCourier;
   document.querySelector("#personnel-page").hidden = !isPersonnel;
+  document.querySelector("#stop-operations-page").hidden = !isStopOperations;
   document.querySelector(".breadcrumbs strong").textContent =
     isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
@@ -2357,8 +2492,13 @@ function showCurrentView() {
   if (isGuichet) loadGuichet();
   if (isCourier) loadCourier();
   if (isPersonnel) loadPersonnel();
+  if (isStopOperations) loadStopOperations();
 }
 
+document.querySelector("#stop-operations-departure").addEventListener("change", () => { populateStopOperationSelectors(); loadStopOperations(); });
+document.querySelector("#stop-operations-stop").addEventListener("change", loadStopOperations);
+document.querySelector("#stop-operations-refresh").addEventListener("click", loadStopOperations);
+document.querySelector("#stop-open-scanner").addEventListener("click", openScannerDialog);
 window.addEventListener("hashchange", showCurrentView);
 showCurrentView();
 
