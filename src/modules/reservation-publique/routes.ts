@@ -108,7 +108,7 @@ router.post("/:publicCode/reservations", [
   body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/),
   body("originStopId").optional().isUUID(),
   body("destinationStopId").optional().isUUID(),
-  body("seatNumber").optional().isInt({ min: 1, max: 200 }),
+  body("seatNumber").optional().isInt({ min: 1 }),
   body("policyAccepted").custom(value => value === true || value === "true")
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   const client: PoolClient = await pool.connect();
