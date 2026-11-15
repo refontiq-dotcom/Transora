@@ -32,10 +32,15 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
          GROUP BY t.id, d.id ORDER BY d.departure_at LIMIT 100`,
         [req.params.publicCode]
       );
-      const tenant = await pool.query("SELECT name FROM tenants WHERE public_code = $1", [req.params.publicCode]);
+      const tenant = await pool.query("SELECT id, name FROM tenants WHERE public_code = $1", [req.params.publicCode]);
       if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
+      const policy = await pool.query(
+        `SELECT version, boarding_open_minutes_before AS "boardingOpenMinutesBefore", boarding_deadline_minutes_before AS "boardingDeadlineMinutesBefore", grace_period_minutes AS "gracePeriodMinutes", allow_rebooking_after_no_show AS "allowRebookingAfterNoShow", max_rebookings AS "maxRebookings", rebooking_fee_amount AS "rebookingFeeAmount", refund_policy AS "refundPolicy", refund_percentage AS "refundPercentage" FROM company_boarding_policies WHERE tenant_id = $1`,
+        [tenant.rows[0].id]
+      );
       return res.json({ success: true, data: {
         companyName: tenant.rows[0].name,
+        boardingPolicy: policy.rows[0] || { boardingOpenMinutesBefore: 60, boardingDeadlineMinutesBefore: 5, gracePeriodMinutes: 15, allowRebookingAfterNoShow: false, maxRebookings: 0, rebookingFeeAmount: 0, refundPolicy: "NONE", refundPercentage: 0 },
         departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats) || Boolean(row.routeId))
           .map(row => ({ ...row, availableSeats: Number(row.capacity) - Number(row.reservedSeats) }))
       } });
@@ -102,7 +107,8 @@ router.post("/:publicCode/reservations", [
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
   body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/),
   body("originStopId").optional().isUUID(),
-  body("destinationStopId").optional().isUUID()
+  body("destinationStopId").optional().isUUID(),
+  body("policyAccepted").isBoolean().custom(value => value === true)
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   const client: PoolClient = await pool.connect();
   try {
@@ -144,8 +150,8 @@ router.post("/:publicCode/reservations", [
     const seatNumber = Array.from({ length: Number(trip.capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
     if (!seatNumber) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
     const bookingResult = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id, status, hold_expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::int4range,$9,$10,'HELD',NOW() + INTERVAL '15 minutes')
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id, status, hold_expires_at, boarding_policy_accepted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::int4range,$9,$10,'HELD',NOW() + INTERVAL '15 minutes',NOW())
        RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, company_booking_fee, seat_number, status, hold_expires_at, created_at`,
       [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seatNumber, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId]
     );
