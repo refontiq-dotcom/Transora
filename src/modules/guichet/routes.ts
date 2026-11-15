@@ -3,6 +3,7 @@ import { body, param, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { authorize } from "../../middleware/auth";
+import { resolveBookingSegment } from "../../lib/booking-segment";
 
 const router = Router();
 const cashDeskRoles = authorize(["administrateur", "caissier"]);
@@ -84,7 +85,9 @@ router.get("/session/:id", cashDeskRoles, [param("id").isUUID()], validate,
 router.post("/vente", cashDeskRoles, [
   body("departureId").isUUID(),
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
-  body("seatNumber").optional().isInt({ min: 1 })
+  body("seatNumber").optional().isInt({ min: 1 }),
+  body("originStopId").optional().isUUID(),
+  body("destinationStopId").optional().isUUID()
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Session entreprise manquante" });
   const client: PoolClient = await pool.connect();
@@ -96,16 +99,27 @@ router.post("/vente", cashDeskRoles, [
     );
     if (!session.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ouvrez votre caisse avant de vendre un billet" }); }
     const departure = await client.query(
-      `SELECT id, fare_amount, company_booking_fee, capacity, origin, destination, departure_at, vehicle_code
+      `SELECT id, fare_amount, company_booking_fee, capacity, origin, destination, departure_at, vehicle_code, route_id
        FROM departures WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED' AND departure_at > NOW() FOR UPDATE`,
       [req.body.departureId, req.tenantId]
     );
     if (!departure.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ success: false, message: "Départ introuvable ou indisponible" }); }
     const trip = departure.rows[0];
+    const segment = await resolveBookingSegment(
+      client, req.tenantId, trip.route_id || null,
+      typeof req.body.originStopId === "string" ? req.body.originStopId : null,
+      typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
+      { origin: selectedSegment.origin, destination: selectedSegment.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+    );
+    if (segment.error || !segment.data) {
+      await client.query("ROLLBACK");
+      return res.status(segment.error?.status || 400).json({ success: false, message: segment.error?.message || "Segment invalide" });
+    }
+    const selectedSegment = segment.data;
     if (Number(trip.fare_amount) <= 0) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Définissez le tarif de ce départ avant la vente" }); }
     const taken = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
-      [trip.id, req.tenantId]
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && $3::int4range",
+      [trip.id, req.tenantId, selectedSegment.segmentRange]
     );
     if (Number(taken.rowCount ?? 0) >= Number(trip.capacity)) {
       await client.query("ROLLBACK");
@@ -118,12 +132,12 @@ router.post("/vente", cashDeskRoles, [
       await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Place indisponible" });
     }
     const inserted = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range)
-       VALUES ($1, $2, $3, $4, $5, 'PAID', $6, '[0,)'::int4range)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range, origin_stop_id, destination_stop_id)
+       VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7::int4range, $8, $9)
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
                  amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
                  seat_number AS "seatNumber", created_at AS "createdAt"`,
-      [req.tenantId, trip.id, String(req.body.passengerName).trim(), Number(trip.fare_amount), Number(trip.company_booking_fee), seat]
+      [req.tenantId, trip.id, String(req.body.passengerName).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seat, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId]
     );
     const booking = inserted.rows[0];
     const total = Number(booking.amountTransport) + Number(booking.companyBookingFee) + Number(booking.platformFee);
