@@ -2399,25 +2399,31 @@ async function loadStopOperations() {
       return;
     }
     setStopOperationsMessage("Actualisation des opérations…");
-    const response = await fetch("/api/v1/embarquement/operations/" + encodeURIComponent(departureId) + "/" + encodeURIComponent(stopId), {
-      headers: { Authorization: "Bearer " + accessToken }
-    });
-    const result = await response.json();
+    const headers = { Authorization: "Bearer " + accessToken };
+    const [response, manifestResponse] = await Promise.all([
+      fetch("/api/v1/embarquement/operations/" + encodeURIComponent(departureId) + "/" + encodeURIComponent(stopId), { headers }),
+      fetch("/api/v1/embarquement/manifest/" + encodeURIComponent(departureId) + "?stopId=" + encodeURIComponent(stopId), { headers })
+    ]);
+    const [result, manifestResult] = await Promise.all([response.json(), manifestResponse.json()]);
     if (!response.ok) throw new Error(result.message || "Impossible de charger les opérations de cet arrêt.");
-    renderStopOperations(result.data);
+    if (!manifestResponse.ok) throw new Error(manifestResult.message || "Impossible de charger le manifeste de ce départ.");
+    renderStopOperations(result.data, manifestResult.data);
     const stop = result.data.stop;
     setStopOperationsMessage(result.data.departure.origin + " → " + result.data.departure.destination + " · " + stop.city + (stop.station ? " / " + stop.station : "") + " · Arrêt " + (stop.order + 1));
   } catch (error) {
     setStopOperationsMessage(error.message || "Erreur de chargement des opérations.", true);
   }
 }
-function renderStopOperations(data) {
+function renderStopOperations(data, manifest) {
   const summary = data.summary;
   document.querySelector("#stop-expected-descents").textContent = summary.expectedDescents;
   document.querySelector("#stop-confirmed-descents").textContent = summary.confirmedDescents;
   document.querySelector("#stop-expected-boardings").textContent = summary.expectedBoardings;
   document.querySelector("#stop-blocked-seats").textContent = summary.seatsBlockedByPreviousPassenger;
   document.querySelector("#stop-released-seats").textContent = summary.seatsConfirmedReleased;
+  document.querySelector("#stop-manifest-present").textContent = manifest.summary.present;
+  document.querySelector("#stop-manifest-expected").textContent = manifest.summary.expected;
+  document.querySelector("#stop-manifest-absent").textContent = manifest.summary.confirmedAbsences;
   const descentList = document.querySelector("#stop-descent-list");
   const boardingList = document.querySelector("#stop-boarding-list");
   descentList.replaceChildren();
@@ -2457,8 +2463,84 @@ function renderStopOperations(data) {
         openScannerDialog();
         lookupScannedTicket(passenger.ticketToken);
       });
+    if (!passenger.boardedAt) {
+      stopOperationRow(boardingList, "Absence à traiter", "Ne confirmez l’absence qu’après l’heure prévue et le délai de grâce annoncé au voyageur.", "Confirmer l’absence", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const response = await fetch("/api/v1/embarquement/absence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+            body: JSON.stringify({ bookingId: passenger.bookingId, stopId: data.stop.id })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || "Impossible de confirmer l’absence.");
+          const alternativesResponse = await fetch("/api/v1/embarquement/alternatives/" + encodeURIComponent(passenger.bookingId), {
+            headers: { Authorization: "Bearer " + accessToken }
+          });
+          const alternativesResult = await alternativesResponse.json();
+          const count = alternativesResponse.ok ? (alternativesResult.data?.alternatives?.length || 0) : 0;
+          showToast("Absence confirmée. " + (count ? count + " départ(s) compatible(s) peuvent être proposés. Aucun transfert automatique n’a été effectué." : "Aucun départ alternatif disponible pour le moment."));
+          await loadStopOperations();
+        } catch (error) {
+          showToast(error.message || "Erreur de confirmation.");
+          button.disabled = false;
+        }
+      });
+    }
   });
 }
+
+async function loadBoardingPolicy() {
+  if (!accessToken) { showToast("Connectez-vous pour consulter la politique."); return; }
+  try {
+    const response = await fetch("/api/v1/embarquement/policy", { headers: { Authorization: "Bearer " + accessToken } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger la politique.");
+    const form = document.querySelector("#boarding-policy-form");
+    const policy = result.data;
+    for (const key of ["boardingOpenMinutesBefore", "boardingDeadlineMinutesBefore", "gracePeriodMinutes", "maxRebookings", "rebookingFeeAmount", "refundPolicy", "refundPercentage"]) {
+      form.elements[key].value = policy[key];
+    }
+    form.elements.allowRebookingAfterNoShow.checked = policy.allowRebookingAfterNoShow;
+    form.elements.autoFindNextDeparture.checked = policy.autoFindNextDeparture;
+    document.querySelector("#boarding-policy-dialog").showModal();
+  } catch (error) { showToast(error.message || "Erreur de chargement de la politique."); }
+}
+
+document.querySelector("#boarding-policy-open").addEventListener("click", loadBoardingPolicy);
+document.querySelector("#boarding-policy-close").addEventListener("click", () => document.querySelector("#boarding-policy-dialog").close());
+document.querySelector("#boarding-policy-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  for (const key of ["boardingOpenMinutesBefore", "boardingDeadlineMinutesBefore", "gracePeriodMinutes", "maxRebookings", "rebookingFeeAmount", "refundPercentage"]) values[key] = Number(values[key]);
+  values.allowRebookingAfterNoShow = form.elements.allowRebookingAfterNoShow.checked;
+  values.autoFindNextDeparture = form.elements.autoFindNextDeparture.checked;
+  if (!values.allowRebookingAfterNoShow) values.maxRebookings = 0;
+  if (values.refundPolicy === "NONE") values.refundPercentage = 0;
+  if (values.refundPolicy === "FULL") values.refundPercentage = 100;
+  const submit = document.querySelector("#boarding-policy-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/embarquement/policy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify(values)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d’enregistrer la politique.");
+    document.querySelector("#boarding-policy-dialog").close();
+    showToast("Politique enregistrée. Les réservations existantes ne changent pas.");
+  } catch (error) { showToast(error.message || "Erreur d’enregistrement."); }
+  finally { submit.disabled = false; }
+});
+document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventListener("change", (event) => {
+  const percentage = document.querySelector("#boarding-policy-form").elements.refundPercentage;
+  if (event.target.value === "NONE") percentage.value = "0";
+  if (event.target.value === "FULL") percentage.value = "100";
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
