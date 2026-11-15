@@ -324,6 +324,8 @@ router.get(
         fare_amount: number;
         company_booking_fee: number;
         route_tariff_id: string | null;
+        route_id: string | null;
+        route_stops: Array<{ id: string; city: string; station: string; stopOrder: number }>;
         status: string;
         reserved_seats: string;
       }>(
