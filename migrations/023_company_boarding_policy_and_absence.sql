@@ -142,19 +142,40 @@ CREATE TABLE IF NOT EXISTS boarding_absence_events (
     FOREIGN KEY (confirmed_by, tenant_id) REFERENCES users(id, tenant_id)
 );
 
+CREATE TABLE IF NOT EXISTS stop_arrival_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  departure_id UUID NOT NULL,
+  stop_id UUID NOT NULL,
+  arrived_by UUID NOT NULL,
+  comments TEXT,
+  arrived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT stop_arrival_departure_stop_once UNIQUE (departure_id, stop_id),
+  CONSTRAINT stop_arrival_departure_tenant_fk
+    FOREIGN KEY (departure_id, tenant_id) REFERENCES departures(id, tenant_id) ON DELETE CASCADE,
+  CONSTRAINT stop_arrival_stop_tenant_fk
+    FOREIGN KEY (tenant_id, stop_id) REFERENCES route_stops(tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT stop_arrival_actor_tenant_fk
+    FOREIGN KEY (arrived_by, tenant_id) REFERENCES users(id, tenant_id)
+);
+
+CREATE INDEX IF NOT EXISTS stop_arrival_departure_stop_time_idx
+  ON stop_arrival_events (tenant_id, departure_id, stop_id, arrived_at DESC);
+
 CREATE INDEX IF NOT EXISTS boarding_absence_departure_time_idx
   ON boarding_absence_events (tenant_id, departure_id, confirmed_at DESC);
 
 ALTER TABLE company_boarding_policies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE boarding_absence_events ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events FROM PUBLIC;
+ALTER TABLE stop_arrival_events ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events FROM anon;
+    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events FROM authenticated;
+    REVOKE ALL ON TABLE company_boarding_policies, boarding_absence_events, stop_arrival_events FROM authenticated;
   END IF;
 END $$;
 
