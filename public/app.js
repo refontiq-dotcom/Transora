@@ -2369,6 +2369,7 @@ document.querySelector("#voyages-add-departure").addEventListener("click", () =>
     authDialog.showModal();
     return;
   }
+  loadDepartureRoutes();
   departureDialog.showModal();
 });
 
@@ -2797,6 +2798,34 @@ document.querySelector("#payment-export").addEventListener("click", () => {
   showToast("Liste des paiements exportée.");
 });
 
+async function loadDepartureRoutes() {
+  const select = document.querySelector("#departure-route");
+  select.replaceChildren(new Option("Trajet libre sans ligne", ""));
+  try {
+    const response = await fetch("/api/v1/reseau/routes", { headers: { Authorization: `Bearer ${accessToken}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible de charger les lignes.");
+    (result.data.routes || []).filter(route => route.active && Array.isArray(route.stops) && route.stops.length >= 2).forEach(route => {
+      const option = document.createElement("option");
+      option.value = route.id;
+      option.textContent = `${route.name} · ${route.stops[0].city} → ${route.stops.at(-1).city}`;
+      option.dataset.origin = route.stops[0].city;
+      option.dataset.destination = route.stops.at(-1).city;
+      select.append(option);
+    });
+  } catch (error) {
+    showToast(error.message || "Impossible de charger les lignes du réseau.");
+  }
+}
+
+document.querySelector("#departure-route").addEventListener("change", event => {
+  const option = event.currentTarget.selectedOptions[0];
+  if (option.value) {
+    document.querySelector('#departure-form [name="origin"]').value = option.dataset.origin || "";
+    document.querySelector('#departure-form [name="destination"]').value = option.dataset.destination || "";
+  }
+});
+
 const departureDialog = document.querySelector("#departure-dialog");
 document.querySelector("#add-departure-button").addEventListener("click", () => {
   if (!accessToken) {
@@ -2825,11 +2854,15 @@ document.querySelector("#departure-form").addEventListener("submit", async (even
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        ...values,
-        departureAt: new Date(values.departureAt).toISOString(),
-        capacity: Number(values.capacity),
-      })
+      body: JSON.stringify((() => {
+        const payload = {
+          ...values,
+          departureAt: new Date(values.departureAt).toISOString(),
+          capacity: Number(values.capacity)
+        };
+        if (!payload.routeId) delete payload.routeId;
+        return payload;
+      })())
     });
     const result = await response.json();
     if (!response.ok) {
