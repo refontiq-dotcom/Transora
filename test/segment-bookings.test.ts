@@ -199,7 +199,7 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
     body: JSON.stringify({ billetId: hold.data.bookingId, moyenPaiement: "mobile_money" })
   });
   expect(init.status).toBe(201);
-  const payment = await init.json() as { data: { transactionId: string } };
+  const payment = await init.json() as { data: { id: string } };
 
   await pool.query(
     "UPDATE bookings SET hold_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1 AND tenant_id=$2",
@@ -209,7 +209,7 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
   const confirmation = await fetch(`${baseUrl}/api/v1/paiements/confirm`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ transactionId: payment.data.transactionId, preuvePaiement: "TEST-PROOF" })
+    body: JSON.stringify({ transactionId: payment.data.id, preuvePaiement: "TEST-PROOF" })
   });
   expect(confirmation.status).toBe(409);
 
