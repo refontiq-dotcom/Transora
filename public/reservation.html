@@ -33,6 +33,9 @@
       <p class="public-subtitle">Choisissez votre départ, renseignez vos coordonnées et recevez immédiatement votre billet. Le règlement s'effectue auprès de la compagnie.</p>
       <form id="public-booking-form" class="public-form">
         <label>Départ disponible<select name="departureId" id="public-departure" required><option value="">Chargement…</option></select></label>
+        <label id="public-origin-wrap" hidden>Ville / gare de départ<select name="originStopId" id="public-origin-stop"></select></label>
+        <label id="public-destination-wrap" hidden>Ville / gare d’arrivée<select name="destinationStopId" id="public-destination-stop"></select></label>
+        <p id="public-seat-availability" class="public-message" aria-live="polite"></p>
         <label>Nom complet du passager<input name="passengerName" required minlength="2" maxlength="160" autocomplete="name"></label>
         <label>Téléphone<input name="passengerPhone" required minlength="8" maxlength="24" autocomplete="tel" placeholder="+225 07 00 00 00 00"></label>
         <button class="primary-button" type="submit" id="public-submit">Réserver et générer mon billet</button>

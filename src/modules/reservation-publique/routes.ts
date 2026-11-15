@@ -1,9 +1,9 @@
 import { NextFunction, Request, Response, Router } from "express";
-import { body, param, validationResult } from "express-validator";
+import { body, param, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import QRCode from "qrcode";
 import { pool } from "../../db/pool";
-import { resolveBookingSegment } from "../../lib/booking-segment";
+import { resolveBookingSegment, SegmentResolution } from "../../lib/booking-segment";
 
 const router = Router();
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -42,6 +42,59 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
     } catch (error) { return next(error); }
   }
 );
+
+router.get("/:publicCode/departs/:departureId/places", [
+  param("publicCode").isAlphanumeric().isLength({ min: 32, max: 32 }),
+  param("departureId").isUUID(),
+  query("originStopId").optional().isUUID(),
+  query("destinationStopId").optional().isUUID()
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const departure = await pool.query(
+      `SELECT t.id AS tenant_id, d.id, d.capacity, d.route_id, d.origin, d.destination, d.departure_at, d.fare_amount, d.company_booking_fee
+       FROM tenants t JOIN departures d ON d.tenant_id = t.id
+       WHERE t.public_code = $1 AND d.id = $2 AND d.status = 'SCHEDULED'
+         AND d.departure_at > NOW()`,
+      [req.params.publicCode, req.params.departureId]
+    );
+    if (!departure.rowCount) return res.status(404).json({ success: false, message: "Départ introuvable ou fermé à la réservation" });
+    const trip = departure.rows[0];
+    const segmentClient = await pool.connect();
+    let segment: SegmentResolution;
+    try {
+      segment = await resolveBookingSegment(
+        segmentClient, trip.tenant_id, trip.route_id || null,
+        typeof req.query.originStopId === "string" ? req.query.originStopId : null,
+        typeof req.query.destinationStopId === "string" ? req.query.destinationStopId : null,
+        { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+      );
+    } finally { segmentClient.release(); }
+    if (segment.error || !segment.data) {
+      return res.status(segment.error?.status || 400).json({ success: false, message: segment.error?.message || "Sélectionnez votre gare de départ et votre gare d'arrivée" });
+    }
+    const occupied = await pool.query(
+      `SELECT DISTINCT seat_number
+       FROM bookings
+       WHERE departure_id = $1 AND tenant_id = $2
+         AND status NOT IN ('CANCELLED', 'EXPIRED')
+         AND (status <> 'HELD' OR hold_expires_at > NOW())
+         AND seat_number IS NOT NULL
+         AND segment_range && $3::int4range
+       ORDER BY seat_number`,
+      [trip.id, trip.tenant_id, segment.data.segmentRange]
+    );
+    const taken = new Set(occupied.rows.map((row: { seat_number: number }) => Number(row.seat_number)));
+    const seats = Array.from({ length: Number(trip.capacity) }, (_, index) => ({
+      number: index + 1, available: !taken.has(index + 1)
+    }));
+    return res.json({ success: true, data: {
+      departureId: trip.id, origin: segment.data.origin, destination: segment.data.destination,
+      fareAmount: segment.data.fareAmount, companyBookingFee: segment.data.companyBookingFee,
+      capacity: Number(trip.capacity), availableCount: seats.filter(seat => seat.available).length,
+      seats
+    } });
+  } catch (error) { return next(error); }
+});
 
 router.post("/:publicCode/reservations", [
   param("publicCode").isAlphanumeric().isLength({ min: 32, max: 32 }),

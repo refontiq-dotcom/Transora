@@ -7,6 +7,9 @@ import type { AddressInfo } from "node:net";
 let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
 let tenantId: string;
+let userId: string;
+let firstSegmentBookingId: string;
+let secondSegmentBookingId: string;
 let publicCode: string;
 let departureId: string;
 let holdDepartureId: string;
@@ -33,6 +36,7 @@ beforeAll(async () => {
      VALUES ($1, 'Segment Agent', $2, 'test-hash', 'administrateur') RETURNING id`,
     [tenantId, `segment-booking-${Date.now()}@example.test`]
   );
+  userId = user.rows[0].id;
   const sessionId = `segment-booking-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1,$2,$3,$4,NOW()+INTERVAL '1 day')",
@@ -104,7 +108,7 @@ const book = async (origin: string, destination: string, passengerName: string) 
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ passengerName, originStopId: origin, destinationStopId: destination })
   });
-  return { response, body: await response.json() as { data?: { seatNumber: number; amountTransport: number }; message?: string } };
+  return { response, body: await response.json() as { data?: { id: string; seatNumber: number; amountTransport: number }; message?: string } };
 };
 
 test("un même siège peut être réutilisé sur deux segments qui ne se chevauchent pas", async () => {
@@ -112,11 +116,77 @@ test("un même siège peut être réutilisé sur deux segments qui ne se chevauc
   expect(first.response.status).toBe(201);
   expect(first.body.data?.seatNumber).toBe(1);
   expect(first.body.data?.amountTransport).toBe(5000);
+  firstSegmentBookingId = first.body.data!.id;
 
   const second = await book(middleStopId, destinationStopId, "Passager B-C");
   expect(second.response.status).toBe(201);
   expect(second.body.data?.seatNumber).toBe(1);
   expect(second.body.data?.amountTransport).toBe(6000);
+  secondSegmentBookingId = second.body.data!.id;
+});
+
+test("la réservation publique affiche les places disponibles pour le segment choisi", async () => {
+  const response = await fetch(
+    `${baseUrl}/api/public/${publicCode}/departs/${departureId}/places?originStopId=${originStopId}&destinationStopId=${middleStopId}`
+  );
+  expect(response.status).toBe(200);
+  const result = await response.json() as { data: { origin: string; destination: string; availableCount: number; seats: Array<{ number: number; available: boolean }> } };
+  expect(result.data.origin).toBe("Segment Ville A");
+  expect(result.data.destination).toBe("Segment Ville B");
+  expect(result.data.availableCount).toBe(1);
+  expect(result.data.seats[0]).toEqual({ number: 1, available: false });
+  expect(result.data.seats[1]).toEqual({ number: 2, available: true });
+});
+
+test("le contrôleur confirme la descente réelle avant d'autoriser la montée sur le même siège", async () => {
+  await pool.query("UPDATE bookings SET status='PAID' WHERE id=ANY($1::uuid[]) AND tenant_id=$2", [[firstSegmentBookingId, secondSegmentBookingId], tenantId]);
+  await pool.query(
+    `INSERT INTO payments (tenant_id, booking_id, amount_transport, platform_fee, payment_method, status, proof, confirmed_by, confirmed_at)
+     SELECT tenant_id, id, amount_transport, platform_fee, 'cash', 'CONFIRMED', 'TEST-PAID', $2, NOW()
+     FROM bookings WHERE id=ANY($1::uuid[])`,
+    [[firstSegmentBookingId, secondSegmentBookingId], userId]
+  );
+  await pool.query(
+    `INSERT INTO boarding_events (tenant_id, booking_id, departure_id, boarded_by)
+     VALUES ($1,$2,$3,$4)`,
+    [tenantId, firstSegmentBookingId, departureId, userId]
+  );
+  await pool.query("UPDATE departures SET status='BOARDING' WHERE id=$1 AND tenant_id=$2", [departureId, tenantId]);
+
+  const url = `${baseUrl}/api/v1/embarquement/operations/${departureId}/${middleStopId}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const beforeResponse = await fetch(url, { headers });
+  expect(beforeResponse.status).toBe(200);
+  const before = await beforeResponse.json() as { data: { summary: { expectedDescents: number; expectedBoardings: number; seatsBlockedByPreviousPassenger: number }; boardings: Array<{ seatBlockedByPreviousPassenger: boolean }> } };
+  expect(before.data.summary.expectedDescents).toBe(1);
+  expect(before.data.summary.expectedBoardings).toBe(1);
+  expect(before.data.summary.seatsBlockedByPreviousPassenger).toBe(1);
+  expect(before.data.boardings[0].seatBlockedByPreviousPassenger).toBe(true);
+
+  const wrongStop = await fetch(`${baseUrl}/api/v1/embarquement/operations/descendre`, {
+    method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ billetId: firstSegmentBookingId, stopId: originStopId })
+  });
+  expect(wrongStop.status).toBe(409);
+
+  const alighting = await fetch(`${baseUrl}/api/v1/embarquement/operations/descendre`, {
+    method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ billetId: firstSegmentBookingId, stopId: middleStopId })
+  });
+  expect(alighting.status).toBe(200);
+
+  const afterResponse = await fetch(url, { headers });
+  const after = await afterResponse.json() as { data: { summary: { confirmedDescents: number; seatsBlockedByPreviousPassenger: number }; boardings: Array<{ seatBlockedByPreviousPassenger: boolean }> } };
+  expect(after.data.summary.confirmedDescents).toBe(1);
+  expect(after.data.summary.seatsBlockedByPreviousPassenger).toBe(0);
+  expect(after.data.boardings[0].seatBlockedByPreviousPassenger).toBe(false);
+
+  const boarding = await fetch(`${baseUrl}/api/v1/embarquement/valider`, {
+    method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ billetId: secondSegmentBookingId })
+  });
+  expect(boarding.status).toBe(200);
+  await pool.query("UPDATE departures SET status=$3 WHERE id=$1 AND tenant_id=$2", [departureId, tenantId, "SCHEDULED"]);
 });
 
 test("un segment qui chevauche deux réservations existantes reçoit un autre siège", async () => {
