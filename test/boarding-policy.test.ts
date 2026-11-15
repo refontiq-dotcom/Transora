@@ -72,8 +72,8 @@ beforeAll(async () => {
   targetDepartureId = target.rows[0].id;
 
   const booking = await pool.query(
-    `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, platform_fee, status, seat_number, segment_range)
-     VALUES ($1,$2,'Passager absent',10000,0,100,'PAID',1,'[0,)'::int4range)
+    `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, platform_fee, status, seat_number, segment_range, boarding_policy_accepted_at)
+     VALUES ($1,$2,'Passager absent',10000,0,100,'PAID',1,'[0,)'::int4range,NOW())
      RETURNING id, ticket_token, boarding_policy_version, boarding_policy_snapshot`,
     [tenantId, sourceDepartureId]
   );
