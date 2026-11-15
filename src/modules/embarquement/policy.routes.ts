@@ -345,6 +345,14 @@ router.get("/alternatives/:bookingId", controllerRoles, [
     if (!policy.allowRebookingAfterNoShow || !policy.autoFindNextDeparture) {
       return res.json({ success: true, data: { alternatives: [], rebookingAllowed: false, message: "La politique acceptée pour ce billet ne prévoit pas de recherche automatique de report." } });
     }
+    const usedResult = await pool.query(
+      "SELECT COUNT(*)::int AS used FROM booking_rebooking_events WHERE tenant_id = $1 AND booking_id = $2",
+      [req.tenantId, booking.id]
+    );
+    const usedRebookings = Number(usedResult.rows[0].used || 0);
+    if (usedRebookings >= Number(policy.maxRebookings || 0)) {
+      return res.json({ success: true, data: { alternatives: [], rebookingAllowed: false, maxRebookings: Number(policy.maxRebookings || 0), usedRebookings, message: "Le nombre maximal de reports prévu par le billet a été atteint." } });
+    }
     const result = await pool.query(
       `SELECT d.id AS "departureId", d.origin, d.destination,
               d.departure_at AS "departureAt", d.vehicle_code AS "vehicleCode",
@@ -382,6 +390,185 @@ router.get("/alternatives/:bookingId", controllerRoles, [
       alternatives: result.rows
     } });
   } catch (error) { return next(error); }
+});
+
+// Report effectif : exige le consentement explicite du voyageur et conserve la trace de l'ancien billet.
+router.post("/rebook/:bookingId", controllerRoles, [
+  param("bookingId").isUUID(),
+  body("targetDepartureId").isUUID(),
+  body("passengerConsent").isBoolean().custom(value => value === true),
+  body("consentMethod").isIn(["IN_PERSON", "PHONE", "SMS", "WHATSAPP", "OTHER"]),
+  body("consentReference").optional().isString().trim().isLength({ max: 300 }),
+  body("feeReceipt").optional().isString().trim().isLength({ min: 2, max: 200 })
+], validate, async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.tenantId || !req.user) return res.status(401).json({ success: false, message: "Session entreprise manquante" });
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const sourceResult = await client.query(
+      `SELECT b.id, b.departure_id, b.status, b.seat_number, b.segment_range,
+              b.origin_stop_id, b.destination_stop_id, b.boarding_policy_snapshot,
+              b.amount_transport, b.company_booking_fee, b.platform_fee,
+              d.route_id, d.origin, d.destination
+       FROM bookings b
+       JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
+       WHERE b.id = $1 AND b.tenant_id = $2
+       FOR UPDATE OF b, d`,
+      [req.params.bookingId, req.tenantId]
+    );
+    if (!sourceResult.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, message: "Billet introuvable dans cette compagnie." });
+    }
+    const source = sourceResult.rows[0];
+    const policy = source.boarding_policy_snapshot || {};
+    if (source.status !== "NO_SHOW" || !policy.allowRebookingAfterNoShow) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Ce billet n'est pas éligible au report selon la politique acceptée." });
+    }
+    const used = await client.query(
+      "SELECT COUNT(*)::int AS count FROM booking_rebooking_events WHERE tenant_id=$1 AND booking_id=$2",
+      [req.tenantId, source.id]
+    );
+    if (Number(used.rows[0].count) >= Number(policy.maxRebookings || 0)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Le nombre maximal de reports autorisé a été atteint." });
+    }
+    const targetResult = await client.query(
+      `SELECT id, route_id, origin, destination, departure_at, capacity,
+              fare_amount, company_booking_fee
+       FROM departures
+       WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED' AND departure_at > NOW()
+       FOR UPDATE`,
+      [req.body.targetDepartureId, req.tenantId]
+    );
+    if (!targetResult.rowCount || source.departure_id === req.body.targetDepartureId) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, message: "Départ alternatif introuvable ou indisponible." });
+    }
+    const target = targetResult.rows[0];
+    const sameRoute = source.route_id
+      ? target.route_id === source.route_id
+      : !target.route_id && String(target.origin).toLowerCase() === String(source.origin).toLowerCase()
+        && String(target.destination).toLowerCase() === String(source.destination).toLowerCase();
+    if (!sameRoute) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Le départ proposé ne dessert pas le même itinéraire." });
+    }
+    let targetFare = Number(target.fare_amount);
+    let targetCompanyFee = Number(target.company_booking_fee);
+    if (source.route_id) {
+      const tariff = await client.query(
+        `SELECT t.fare_amount, t.company_booking_fee
+         FROM bookings b
+         JOIN route_stops ors ON ors.id = b.origin_stop_id AND ors.tenant_id = b.tenant_id
+         JOIN stations os ON os.id = ors.station_id AND os.tenant_id = ors.tenant_id
+         JOIN company_cities oc ON oc.id = os.city_id AND oc.tenant_id = os.tenant_id
+         JOIN route_stops drs ON drs.id = b.destination_stop_id AND drs.tenant_id = b.tenant_id
+         JOIN stations ds ON ds.id = drs.station_id AND ds.tenant_id = drs.tenant_id
+         JOIN company_cities dc ON dc.id = ds.city_id AND dc.tenant_id = ds.tenant_id
+         JOIN company_route_tariffs t ON t.tenant_id = b.tenant_id AND t.is_active = TRUE
+           AND lower(regexp_replace(btrim(t.origin), '[[:space:]]+', ' ', 'g')) = lower(regexp_replace(btrim(oc.name), '[[:space:]]+', ' ', 'g'))
+           AND lower(regexp_replace(btrim(t.destination), '[[:space:]]+', ' ', 'g')) = lower(regexp_replace(btrim(dc.name), '[[:space:]]+', ' ', 'g'))
+         WHERE b.id = $1 AND b.tenant_id = $2
+         ORDER BY t.updated_at DESC LIMIT 1`,
+        [source.id, req.tenantId]
+      );
+      if (!tariff.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, message: "Le tarif du segment n'est plus actif. La compagnie doit traiter ce report manuellement." });
+      }
+      targetFare = Number(tariff.rows[0].fare_amount);
+      targetCompanyFee = Number(tariff.rows[0].company_booking_fee);
+    }
+    if (targetFare !== Number(source.amount_transport) || targetCompanyFee !== Number(source.company_booking_fee)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Le tarif du nouveau départ est différent. Aucun montant ne sera modifié automatiquement; la compagnie doit proposer une solution au voyageur." });
+    }
+    const seatResult = await client.query(
+      `SELECT candidate.seat_number
+       FROM generate_series(1, $3::int) AS candidate(seat_number)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM bookings occupied
+         WHERE occupied.tenant_id = $1 AND occupied.departure_id = $2
+           AND occupied.seat_number = candidate.seat_number
+           AND occupied.status NOT IN ('CANCELLED', 'EXPIRED', 'NO_SHOW')
+           AND occupied.segment_range && $4::int4range
+       )
+       ORDER BY candidate.seat_number LIMIT 1`,
+      [req.tenantId, target.id, Number(target.capacity), source.segment_range]
+    );
+    if (!seatResult.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Aucun siège compatible n'est disponible sur ce départ." });
+    }
+    const feeAmount = Number(policy.rebookingFeeAmount || 0);
+    let sessionId: string | null = null;
+    if (feeAmount > 0) {
+      if (typeof req.body.feeReceipt !== "string" || req.body.feeReceipt.trim().length < 2) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "Le reçu de paiement des frais de report est obligatoire." });
+      }
+      const session = await client.query(
+        "SELECT id FROM guichet_sessions WHERE tenant_id=$1 AND opened_by=$2 AND status='OPEN' FOR UPDATE",
+        [req.tenantId, req.user.id]
+      );
+      if (!session.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, message: "Ouvrez votre caisse et encaissez les frais de report avant de confirmer." });
+      }
+      sessionId = session.rows[0].id;
+    }
+    const updated = await client.query(
+      `UPDATE bookings
+       SET departure_id = $3, seat_number = $4, status = 'PAID',
+           boarding_status = 'EXPECTED', hold_expires_at = NULL,
+           ticket_token = gen_random_uuid()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id AS "bookingId", ticket_token AS "ticketToken",
+                 departure_id AS "departureId", seat_number AS "seatNumber",
+                 status, passenger_name AS "passengerName"`,
+      [source.id, req.tenantId, target.id, Number(seatResult.rows[0].seat_number)]
+    );
+    await client.query(
+      `INSERT INTO booking_rebooking_events
+        (tenant_id, booking_id, previous_departure_id, new_departure_id,
+         previous_seat_number, new_seat_number, fee_amount, fee_payment_method,
+         fee_receipt, consent_method, consent_reference, confirmed_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [req.tenantId, source.id, source.departure_id, target.id, source.seat_number,
+        seatResult.rows[0].seat_number, feeAmount, feeAmount > 0 ? "cash" : null,
+        feeAmount > 0 ? String(req.body.feeReceipt).trim() : null,
+        req.body.consentMethod, req.body.consentReference || null, req.user.id]
+    );
+    if (feeAmount > 0 && sessionId) {
+      await client.query(
+        `INSERT INTO guichet_operations (tenant_id, session_id, booking_id, type, amount, payment_method, description, recorded_by)
+         VALUES ($1,$2,$3,'SALE',$4,'cash',$5,$6)`,
+        [req.tenantId, sessionId, source.id, feeAmount, "Frais de report du billet " + source.id, req.user.id]
+      );
+    }
+    await client.query(
+      `INSERT INTO audit_events (tenant_id, actor_user_id, type, subject, action, details)
+       VALUES ($1,$2,'modification','billet','Report confirmé avec consentement du voyageur',$3::jsonb)`,
+      [req.tenantId, req.user.id, JSON.stringify({
+        bookingId: source.id, previousDepartureId: source.departure_id,
+        newDepartureId: target.id, newSeatNumber: seatResult.rows[0].seat_number,
+        feeAmount, consentMethod: req.body.consentMethod
+      })]
+    );
+    await client.query("COMMIT");
+    return res.json({ success: true, data: {
+      ...updated.rows[0], departureAt: target.departure_at, vehicleCode: target.vehicle_code,
+      feeAmount, ticketUrlTokenChanged: true
+    }, message: "Report confirmé. L'ancien QR code est invalidé; transmettez le nouveau billet au voyageur." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if ((error as { code?: string }).code === "23P01" || (error as { code?: string }).code === "23505") {
+      return res.status(409).json({ success: false, message: "Le siège vient d'être attribué. Actualisez les départs alternatifs." });
+    }
+    return next(error);
+  } finally { client.release(); }
 });
 
 export default router;
