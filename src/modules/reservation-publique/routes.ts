@@ -51,7 +51,7 @@ router.get("/:publicCode/departs/:departureId/places", [
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const departure = await pool.query(
-      `SELECT t.id AS tenant_id, d.id, d.capacity, d.route_id, d.origin, d.destination, d.departure_at
+      `SELECT t.id AS tenant_id, d.id, d.capacity, d.route_id, d.origin, d.destination, d.departure_at, d.fare_amount, d.company_booking_fee
        FROM tenants t JOIN departures d ON d.tenant_id = t.id
        WHERE t.public_code = $1 AND d.id = $2 AND d.status = 'SCHEDULED'
          AND d.departure_at > NOW()`,
@@ -66,7 +66,7 @@ router.get("/:publicCode/departs/:departureId/places", [
         segmentClient, trip.tenant_id, trip.route_id || null,
         typeof req.query.originStopId === "string" ? req.query.originStopId : null,
         typeof req.query.destinationStopId === "string" ? req.query.destinationStopId : null,
-        { origin: trip.origin, destination: trip.destination, fareAmount: 0, companyBookingFee: 0 }
+        { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
       );
     } finally { segmentClient.release(); }
     if (segment.error || !segment.data) {
