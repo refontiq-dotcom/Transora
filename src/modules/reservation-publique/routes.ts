@@ -65,7 +65,7 @@ router.post("/:publicCode/reservations", [
       client, trip.tenant_id, trip.route_id || null,
       typeof req.body.originStopId === "string" ? req.body.originStopId : null,
       typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
-      { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+      { origin: selectedSegment.origin, destination: selectedSegment.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
     );
     if (segment.error || !segment.data) {
       await client.query("ROLLBACK");
@@ -77,25 +77,18 @@ router.post("/:publicCode/reservations", [
       return res.status(409).json({ success: false, message: "Ce départ n'a pas encore de tarif défini" });
     }
     const reservations = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && '[0,)'::int4range",
-      [trip.id, trip.tenant_id]
+      "SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status <> 'CANCELLED' AND segment_range && $3::int4range",
+      [trip.id, trip.tenant_id, selectedSegment.segmentRange]
     );
     const occupied = new Set(reservations.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
-    if (occupied.size >= Number(trip.capacity)) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "Ce départ est complet" });
-    }
+    if (occupied.size >= Number(trip.capacity)) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ce segment est complet" }); }
     const seatNumber = Array.from({ length: Number(trip.capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
-    if (!seatNumber) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ success: false, message: "Aucune place disponible" });
-    }
+    if (!seatNumber) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
     const bookingResult = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, '[0,)'::int4range)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::int4range,$9,$10)
        RETURNING id, ticket_token, passenger_name, passenger_phone, amount_transport, platform_fee, company_booking_fee, seat_number, status, created_at`,
-      [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(),
-        Number(trip.fare_amount), Number(trip.company_booking_fee), seatNumber]
+      [trip.tenant_id, trip.id, String(req.body.passengerName).trim(), String(req.body.passengerPhone).trim(), selectedSegment.fareAmount, selectedSegment.companyBookingFee, seatNumber, selectedSegment.segmentRange, selectedSegment.originStopId, selectedSegment.destinationStopId]
     );
     await client.query("COMMIT");
     const booking = bookingResult.rows[0];
