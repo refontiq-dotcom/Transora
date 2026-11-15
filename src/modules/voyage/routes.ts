@@ -49,6 +49,19 @@ router.post(
 
     try {
       const { origin, destination, departureAt, vehicleCode, capacity, status, routeId } = req.body;
+      if (routeId) {
+        const route = await pool.query(
+          `SELECT r.id,
+             (SELECT c.name FROM route_stops x JOIN stations s ON s.id=x.station_id AND s.tenant_id=x.tenant_id JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id WHERE x.route_id=r.id AND x.tenant_id=r.tenant_id ORDER BY x.stop_order ASC LIMIT 1) AS route_origin,
+             (SELECT c.name FROM route_stops x JOIN stations s ON s.id=x.station_id AND s.tenant_id=x.tenant_id JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id WHERE x.route_id=r.id AND x.tenant_id=r.tenant_id ORDER BY x.stop_order DESC LIMIT 1) AS route_destination
+           FROM transport_routes r WHERE r.id=$1 AND r.tenant_id=$2 AND r.is_active=TRUE`,
+          [routeId, tenantId]
+        );
+        if (!route.rowCount) return res.status(404).json({ success: false, message: "Ligne introuvable ou inactive dans votre compagnie" });
+        if (String(route.rows[0].route_origin).toLowerCase() !== String(origin).trim().toLowerCase() || String(route.rows[0].route_destination).toLowerCase() !== String(destination).trim().toLowerCase()) {
+          return res.status(400).json({ success: false, message: "Les extrémités du départ doivent correspondre à celles de la ligne" });
+        }
+      }
       const tariff = await pool.query<{ id: string; fare_amount: number; company_booking_fee: number }>(
         `SELECT id, fare_amount, company_booking_fee
          FROM company_route_tariffs
