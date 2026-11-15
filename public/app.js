@@ -2415,6 +2415,22 @@ async function loadStopOperations() {
   }
 }
 function renderStopOperations(data, manifest) {
+  const arrivalButton = document.querySelector("#stop-arrival-confirm");
+  arrivalButton.hidden = Number(data.stop.order) === 0 || Boolean(manifest.departure.actualArrivalAt);
+  arrivalButton.onclick = async () => {
+    arrivalButton.disabled = true;
+    try {
+      const response = await fetch("/api/v1/embarquement/arrival", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+        body: JSON.stringify({ departureId: data.departure.id, stopId: data.stop.id })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Impossible d’enregistrer l’arrivée du car.");
+      showToast("Arrivée réelle enregistrée. Le délai de grâce commence maintenant.");
+      await loadStopOperations();
+    } catch (error) { showToast(error.message || "Erreur d’enregistrement."); arrivalButton.disabled = false; }
+  };
   const summary = data.summary;
   document.querySelector("#stop-expected-descents").textContent = summary.expectedDescents;
   document.querySelector("#stop-confirmed-descents").textContent = summary.confirmedDescents;
