@@ -3,7 +3,7 @@ import { body, param, query, validationResult } from "express-validator";
 import { PoolClient } from "pg";
 import QRCode from "qrcode";
 import { pool } from "../../db/pool";
-import { resolveBookingSegment } from "../../lib/booking-segment";
+import { resolveBookingSegment, SegmentResolution } from "../../lib/booking-segment";
 
 const router = Router();
 const validate = (req: Request, res: Response, next: NextFunction) => {
@@ -60,7 +60,7 @@ router.get("/:publicCode/departs/:departureId/places", [
     if (!departure.rowCount) return res.status(404).json({ success: false, message: "Départ introuvable ou fermé à la réservation" });
     const trip = departure.rows[0];
     const segmentClient = await pool.connect();
-    let segment;
+    let segment: SegmentResolution;
     try {
       segment = await resolveBookingSegment(
         segmentClient, trip.tenant_id, trip.route_id || null,
