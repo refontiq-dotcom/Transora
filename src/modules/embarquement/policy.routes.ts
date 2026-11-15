@@ -393,7 +393,7 @@ router.get("/alternatives/:bookingId", controllerRoles, [
 });
 
 // Report effectif : exige le consentement explicite du voyageur et conserve la trace de l'ancien billet.
-router.post("/rebook/:bookingId", controllerRoles, [
+router.post("/rebook/:bookingId", authorize(["administrateur", "responsable_exploitation", "agent_guichet", "caissier"]), [
   param("bookingId").isUUID(),
   body("targetDepartureId").isUUID(),
   body("passengerConsent").isBoolean().custom(value => value === true),
@@ -435,7 +435,7 @@ router.post("/rebook/:bookingId", controllerRoles, [
       return res.status(409).json({ success: false, message: "Le nombre maximal de reports autorisé a été atteint." });
     }
     const targetResult = await client.query(
-      `SELECT id, route_id, origin, destination, departure_at, capacity,
+      `SELECT id, route_id, origin, destination, departure_at, vehicle_code, capacity,
               fare_amount, company_booking_fee
        FROM departures
        WHERE id = $1 AND tenant_id = $2 AND status = 'SCHEDULED' AND departure_at > NOW()
