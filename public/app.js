@@ -2333,7 +2333,7 @@ function setStopOperationsMessage(message, error = false) {
 }
 function stopOperationRow(container, title, details, label, handler) {
   const row = document.createElement("article");
-  row.className = "courier-list-item";
+  row.className = "stop-operation-row";
   const copy = document.createElement("div");
   const heading = document.createElement("strong");
   heading.textContent = title;
@@ -2480,7 +2480,7 @@ function showCurrentView() {
   document.querySelector("#personnel-page").hidden = !isPersonnel;
   document.querySelector("#stop-operations-page").hidden = !isStopOperations;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : isStopOperations ? "Suivi des arrêts" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
