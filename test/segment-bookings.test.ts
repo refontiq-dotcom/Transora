@@ -234,6 +234,19 @@ test("une réservation publique bloque temporairement un siège puis le libère 
   expect(expired.rows[0].status).toBe("EXPIRED");
 });
 
+test("la réservation publique affiche les places disponibles pour le segment choisi", async () => {
+  const response = await fetch(
+    `${baseUrl}/api/public/${publicCode}/departs/${departureId}/places?originStopId=${originStopId}&destinationStopId=${middleStopId}`
+  );
+  expect(response.status).toBe(200);
+  const result = await response.json() as { data: { origin: string; destination: string; availableCount: number; seats: Array<{ number: number; available: boolean }> } };
+  expect(result.data.origin).toBe("Segment Ville A");
+  expect(result.data.destination).toBe("Segment Ville B");
+  expect(result.data.availableCount).toBe(1);
+  expect(result.data.seats[0]).toEqual({ number: 1, available: false });
+  expect(result.data.seats[1]).toEqual({ number: 2, available: true });
+});
+
 test("un paiement ne peut pas confirmer un hold expiré", async () => {
   const response = await fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
     method: "POST",
