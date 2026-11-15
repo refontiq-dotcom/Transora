@@ -36,7 +36,7 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
       if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
       return res.json({ success: true, data: {
         companyName: tenant.rows[0].name,
-        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats) || Boolean(row.route_id))
+        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats) || Boolean(row.routeId))
           .map(row => ({ ...row, availableSeats: Number(row.capacity) - Number(row.reservedSeats) }))
       } });
     } catch (error) { return next(error); }
