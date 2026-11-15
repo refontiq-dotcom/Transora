@@ -218,6 +218,17 @@ ALTER TABLE bookings ADD CONSTRAINT bookings_seat_segment_no_overlap
   EXCLUDE USING gist (departure_id WITH =, seat_number WITH =, segment_range WITH &&)
   WHERE (status <> ALL (ARRAY['CANCELLED'::text, 'EXPIRED'::text, 'NO_SHOW'::text]));
 
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS boarding_status TEXT NOT NULL DEFAULT 'EXPECTED';
+
+UPDATE bookings b
+SET boarding_status = CASE
+  WHEN b.status = 'NO_SHOW' THEN 'NO_SHOW'
+  WHEN EXISTS (SELECT 1 FROM alighting_events ae WHERE ae.booking_id = b.id AND ae.tenant_id = b.tenant_id) THEN 'OFFBOARDED'
+  WHEN EXISTS (SELECT 1 FROM boarding_events be WHERE be.booking_id = b.id AND be.tenant_id = b.tenant_id) THEN 'BOARDED'
+  ELSE 'EXPECTED'
+END;
+
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_boarding_status_check;
 ALTER TABLE bookings ADD CONSTRAINT bookings_boarding_status_check
   CHECK (boarding_status = ANY (ARRAY['EXPECTED'::text, 'BOARDED'::text, 'OFFBOARDED'::text, 'NO_SHOW'::text]));
