@@ -153,6 +153,7 @@ router.post("/descendre", controllerRoles, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "La descente de ce passager a déjà été confirmée" });
     }
+    await client.query("UPDATE bookings SET boarding_status='OFFBOARDED' WHERE id=$1 AND tenant_id=$2", [ticket.id, req.tenantId]);
     await client.query("COMMIT");
     return res.json({ success: true, data: {
       bookingId: ticket.id, ...inserted.rows[0], seatReleased: true
