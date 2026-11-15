@@ -169,7 +169,7 @@ router.patch("/:id/approve", managers, [param("id").isUUID()], validate,
       }
       const session = await client.query(
         `SELECT id FROM guichet_sessions WHERE tenant_id=$1 AND status='OPEN' ORDER BY opened_at DESC LIMIT 1 FOR UPDATE`,
-        [req.tenantId, req.user.id]
+        [req.tenantId]
       );
       if (!session.rowCount) {
         await client.query("ROLLBACK");
