@@ -117,3 +117,8 @@ test("un départ lié à une ligne refuse une réservation sans gares de segment
   });
   expect(response.status).toBe(400);
 });
+
+test("un segment dont les arrêts sont inversés est refusé", async () => {
+  const invalid = await book(destinationStopId, originStopId, "Ordre invalide");
+  expect(invalid.response.status).toBe(400);
+});
