@@ -270,6 +270,10 @@ router.post("/absence", controllerRoles, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Départ retardé ou annulé : un problème imputable à la compagnie ne peut pas être traité comme une absence du voyageur." });
     }
+    if (!(stopId && Number(booking.stop_order) > 0) && !["DEPARTED", "IN_TRANSIT"].includes(booking.departure_status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "L’absence à la gare de départ ne peut être confirmée qu’après le départ réel du car." });
+    }
     if (booking.origin_stop_id && booking.origin_stop_id !== stopId) {
       await client.query("ROLLBACK");
       return res.status(400).json({ success: false, message: "Sélectionnez l'arrêt de départ indiqué sur le billet." });
