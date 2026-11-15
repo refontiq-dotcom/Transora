@@ -79,6 +79,8 @@ beforeAll(async () => {
   );
   bookingId = booking.rows[0].id;
   originalTicketToken = booking.rows[0].ticket_token;
+  await pool.query("UPDATE bookings SET boarding_policy_accepted_at = NOW(), boarding_policy_accepted_by = $2 WHERE id = $1", [bookingId, userId]);
+  await pool.query("UPDATE departures SET status = 'DEPARTED' WHERE id = $1", [sourceDepartureId]);
   expect(booking.rows[0].boarding_policy_snapshot.gracePeriodMinutes).toBe(0);
 
   // A later policy change must not alter the terms accepted by this booking.
@@ -90,8 +92,8 @@ beforeAll(async () => {
   expect(laterPolicy.status).toBe(200);
 
   await pool.query(
-    `INSERT INTO payments (tenant_id, booking_id, amount_transport, company_booking_fee, platform_fee, payment_method, status, proof, confirmed_by, confirmed_at)
-     VALUES ($1,$2,10000,0,100,'cash','CONFIRMED','TEST-PAID',$3,NOW())`,
+    `INSERT INTO payments (tenant_id, booking_id, amount_transport, platform_fee, payment_method, status, proof, confirmed_by, confirmed_at)
+     VALUES ($1,$2,10000,100,'cash','CONFIRMED','TEST-PAID',$3,NOW())`,
     [tenantId, bookingId, userId]
   );
 });
