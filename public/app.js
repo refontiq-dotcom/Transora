@@ -1598,6 +1598,39 @@ document.querySelector("#tariff-rows").addEventListener("click", async (event) =
   } finally { button.disabled = false; }
 });
 
+function updateGuichetSegmentFields() {
+  const departure = document.querySelector("#guichet-departure").selectedOptions[0];
+  const originWrap = document.querySelector("#guichet-origin-wrap");
+  const destinationWrap = document.querySelector("#guichet-destination-wrap");
+  const originSelect = document.querySelector("#guichet-origin-stop");
+  const destinationSelect = document.querySelector("#guichet-destination-stop");
+  let stops = [];
+  try { stops = JSON.parse(departure?.dataset.routeStops || "[]"); } catch { stops = []; }
+  const hasStops = Array.isArray(stops) && stops.length >= 2;
+  originWrap.hidden = !hasStops;
+  destinationWrap.hidden = !hasStops;
+  if (hasStops) {
+    const options = stops.map(stop => {
+      const option = document.createElement("option");
+      option.value = stop.id;
+      option.textContent = stop.city === stop.station ? stop.city : `${stop.city} · ${stop.station}`;
+      return option;
+    });
+    originSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.selectedIndex = 1;
+  } else {
+    originSelect.replaceChildren();
+    destinationSelect.replaceChildren();
+  }
+  const selected = departure;
+  document.querySelector("#guichet-fare").textContent = hasStops
+    ? "Le tarif exact du segment sera appliqué automatiquement selon le barème de votre compagnie."
+    : selected
+      ? `Transport : ${formatFcfa(selected.dataset.fare)} · Frais compagnie : ${formatFcfa(selected.dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
+      : "Aucun départ disponible pour la vente.";
+}
+
 async function loadGuichet() {
   const token = accessToken;
   if (!token) {
@@ -1638,28 +1671,24 @@ async function loadGuichet() {
     const select = document.querySelector("#guichet-departure");
     const departures = departuresResult.data.departures || [];
     select.replaceChildren();
-    departures.filter(item => item.status === "SCHEDULED" && item.availableSeats > 0).forEach(item => {
+    departures.filter(item => item.status === "SCHEDULED" && (item.availableSeats > 0 || item.routeId)).forEach(item => {
       const option = document.createElement("option");
       option.value = item.id;
       option.dataset.fare = String(item.fareAmount || 0);
       option.dataset.companyFee = String(item.companyBookingFee || 0);
+      option.dataset.routeStops = JSON.stringify(item.routeStops || []);
       option.textContent = `${item.origin} → ${item.destination} · ${new Date(item.departureAt).toLocaleString("fr-FR")} · ${formatFcfa(item.fareAmount + (item.companyBookingFee || 0) + 100)}`;
       select.append(option);
     });
-    document.querySelector("#guichet-fare").textContent = select.selectedOptions[0]
-      ? `Transport : ${formatFcfa(select.selectedOptions[0].dataset.fare)} · Frais compagnie : ${formatFcfa(select.selectedOptions[0].dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
-      : "Aucun départ disponible pour la vente.";
+    updateGuichetSegmentFields();
   } catch (error) {
     document.querySelector("#guichet-session-state").textContent = error.message || "Erreur de chargement du guichet.";
   }
 }
 
-document.querySelector("#guichet-departure").addEventListener("change", () => {
-  const selected = document.querySelector("#guichet-departure").selectedOptions[0];
-  document.querySelector("#guichet-fare").textContent = selected
-    ? `Transport : ${formatFcfa(selected.dataset.fare)} · Frais compagnie : ${formatFcfa(selected.dataset.companyFee)} · Frais TRANSORA : 100 FCFA`
-    : "Aucun départ disponible pour la vente.";
-});
+document.querySelector("#guichet-departure").addEventListener("change", updateGuichetSegmentFields);
+document.querySelector("#guichet-origin-stop").addEventListener("change", updateGuichetSegmentFields);
+document.querySelector("#guichet-destination-stop").addEventListener("change", updateGuichetSegmentFields);
 
 document.querySelector("#guichet-open-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1690,7 +1719,12 @@ document.querySelector("#guichet-sale-form").addEventListener("submit", async (e
     const response = await fetch("/api/v1/guichet/vente", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ departureId: values.departureId, passengerName: values.passengerName })
+      body: JSON.stringify({
+        departureId: values.departureId,
+        passengerName: values.passengerName,
+        ...(values.originStopId ? { originStopId: values.originStopId } : {}),
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
+      })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer la vente.");
