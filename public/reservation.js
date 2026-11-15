@@ -72,6 +72,7 @@ function updateDestinationStops() {
   currentPublicSeats = [];
   renderPublicSeats([]);
   document.querySelector("#public-seat-availability").textContent = "";
+  updatePublicSubmitState();
 }
 function renderPublicSeats(seats) {
   const wrap = document.querySelector("#public-seats-wrap");
