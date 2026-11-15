@@ -328,7 +328,11 @@ router.get(
         reserved_seats: string;
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
-                d.capacity, d.fare_amount, d.company_booking_fee, d.route_tariff_id, d.status,
+                d.capacity, d.fare_amount, d.company_booking_fee, d.route_tariff_id, d.status, d.route_id,
+                COALESCE((SELECT json_agg(json_build_object('id', rs.id, 'city', c.name, 'station', s.name, 'stopOrder', rs.stop_order) ORDER BY rs.stop_order)
+                  FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
+                  JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
+                  WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS route_stops,
                 COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
@@ -361,6 +365,8 @@ router.get(
               fareAmount: Number(departure.fare_amount),
               companyBookingFee: Number(departure.company_booking_fee),
               routeTariffId: departure.route_tariff_id,
+              routeId: departure.route_id,
+              routeStops: departure.route_stops,
               reservedSeats,
               availableSeats: Math.max(0, departure.capacity - reservedSeats),
               occupancyRate: departure.capacity === 0
