@@ -238,7 +238,7 @@ router.post("/absence", controllerRoles, [
     const result = await client.query(
       `SELECT b.id, b.departure_id, b.status AS booking_status,
               b.boarding_policy_version, b.boarding_policy_snapshot, b.boarding_policy_accepted_at,
-              b.origin_stop_id, b.seat_number, d.departure_at, d.status AS departure_status,
+              b.origin_stop_id, b.seat_number, d.departure_at, d.actual_departed_at, d.status AS departure_status,
               COALESCE(rs.duration_from_origin_minutes, 0) AS stop_duration_minutes,
               rs.stop_order,
               sae.arrived_at AS actual_arrival_at,
@@ -289,13 +289,18 @@ router.post("/absence", controllerRoles, [
     }
     const snapshot = booking.boarding_policy_snapshot || {};
     const graceMinutes = Math.max(0, Math.min(180, Number(snapshot.gracePeriodMinutes ?? 15)));
-    if (stopId && Number(booking.stop_order) > 0 && !booking.actual_arrival_at) {
+    const isIntermediateStop = Boolean(stopId && Number(booking.stop_order) > 0);
+    if (isIntermediateStop && !booking.actual_arrival_at) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Le car doit d’abord être déclaré arrivé à cet arrêt. Le délai de grâce commencera à l’heure réelle d’arrivée." });
     }
-    const scheduledAt = stopId && Number(booking.stop_order) > 0
+    if (!isIntermediateStop && !booking.actual_departed_at) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "L’heure réelle de départ du car n’est pas enregistrée. L’absence ne peut pas encore être confirmée." });
+    }
+    const scheduledAt = isIntermediateStop
       ? new Date(booking.actual_arrival_at)
-      : new Date(new Date(booking.departure_at).getTime() + Number(booking.stop_duration_minutes || 0) * 60000);
+      : new Date(booking.actual_departed_at);
     const eligibleAt = new Date(scheduledAt.getTime() + graceMinutes * 60000);
     if (Date.now() < eligibleAt.getTime()) {
       await client.query("ROLLBACK");
