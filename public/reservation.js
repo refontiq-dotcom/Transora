@@ -144,7 +144,7 @@ async function loadDepartures() {
   if (boardingPolicy) {
     const refund = boardingPolicy.refundPolicy === "FULL" ? "Remboursement intégral prévu après absence." : boardingPolicy.refundPolicy === "PARTIAL" ? "Remboursement de " + boardingPolicy.refundPercentage + "% prévu après absence." : "Aucun remboursement n’est prévu après absence selon cette politique.";
     const rebooking = boardingPolicy.allowRebookingAfterNoShow ? "Report possible jusqu’à " + boardingPolicy.maxRebookings + " fois" + (Number(boardingPolicy.rebookingFeeAmount) ? " avec des frais de " + money(boardingPolicy.rebookingFeeAmount) + "." : " sans frais.") : "Aucun report n’est prévu après absence.";
-    policySummary.textContent = "Présentez-vous au moins " + boardingPolicy.boardingOpenMinutesBefore + " minutes avant le départ. Délai de grâce après l’heure prévue : " + boardingPolicy.gracePeriodMinutes + " minutes. " + rebooking + " " + refund;
+    policySummary.textContent = "L’embarquement ouvre " + boardingPolicy.boardingOpenMinutesBefore + " minutes avant le départ. Présentez-vous au plus tard " + boardingPolicy.boardingDeadlineMinutesBefore + " minutes avant l’heure prévue. Délai de grâce après l’heure prévue ou l’arrivée réelle du car : " + boardingPolicy.gracePeriodMinutes + " minutes. " + rebooking + " " + refund;
   } else policySummary.textContent = "Les conditions d’embarquement seront communiquées par la compagnie.";
   for (const departure of publicDepartures) {
     const option = document.createElement("option");
