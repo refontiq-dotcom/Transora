@@ -21,6 +21,17 @@
     .public-ticket img{width:220px;max-width:100%;height:auto;justify-self:center}
     .public-ticket p{margin:0;line-height:1.5}
     .public-message{margin-top:14px;color:#607168}
+    .public-seat-section{display:grid;gap:10px;padding:16px;border:1px solid #e2e9e4;border-radius:14px;background:#fbfdfb}
+    .public-seat-section h3{margin:0;font-size:15px}
+    .public-seat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+    .public-seat{min-height:46px;border:1px solid #cbd9d0;border-radius:10px;background:#fff;color:#173d2b;font:inherit;font-weight:700}
+    .public-seat:disabled{background:#edf1ee;color:#9aa79f;border-color:#e1e7e3;cursor:not-allowed;text-decoration:line-through}
+    .public-seat.is-selected{background:#176b49;color:#fff;border-color:#176b49;box-shadow:0 0 0 2px #176b4930}
+    .public-seat-legend{display:flex;gap:14px;flex-wrap:wrap;color:#607168;font-size:12px}
+    .public-seat-legend span{display:inline-flex;align-items:center;gap:6px}
+    .public-seat-legend i{width:10px;height:10px;border-radius:3px;border:1px solid #cbd9d0;background:#fff}
+    .public-seat-legend .occupied-key{background:#edf1ee}
+    .public-seat-legend .selected-key{background:#176b49;border-color:#176b49}
     .public-error{color:#a52c2c}
     @media print{body{background:#fff}.public-booking{margin:0;width:100%}.public-card{box-shadow:none;border:0}.public-form,.public-message,.public-print,.public-subtitle{display:none!important}.public-ticket{border:1px solid #aaa}}
   </style>
@@ -30,16 +41,23 @@
     <section class="public-card">
       <div class="public-brand">TRANSORA</div>
       <h1 id="public-title">Réserver votre voyage</h1>
-      <p class="public-subtitle">Choisissez votre départ, renseignez vos coordonnées et recevez immédiatement votre billet. Le règlement s'effectue auprès de la compagnie.</p>
+      <p class="public-subtitle">Choisissez votre trajet et votre siège, renseignez vos coordonnées puis bloquez votre place pendant 15 minutes. Le règlement s’effectue auprès de la compagnie.</p>
       <form id="public-booking-form" class="public-form">
         <label>Départ disponible<select name="departureId" id="public-departure" required><option value="">Chargement…</option></select></label>
         <label id="public-origin-wrap" hidden>Ville / gare de départ<select name="originStopId" id="public-origin-stop"></select></label>
         <label id="public-destination-wrap" hidden>Ville / gare d’arrivée<select name="destinationStopId" id="public-destination-stop"></select></label>
         <p id="public-seat-availability" class="public-message" aria-live="polite"></p>
+        <section id="public-seats-wrap" class="public-seat-section" hidden aria-labelledby="public-seats-title">
+          <h3 id="public-seats-title">Choisissez votre siège</h3>
+          <div id="public-seats" class="public-seat-grid" role="group" aria-label="Places disponibles"></div>
+          <div class="public-seat-legend" aria-label="Légende des sièges">
+            <span><i></i> Disponible</span><span><i class="selected-key"></i> Votre choix</span><span><i class="occupied-key"></i> Indisponible</span>
+          </div>
+        </section>
         <label>Nom complet du passager<input name="passengerName" required minlength="2" maxlength="160" autocomplete="name"></label>
         <label>Téléphone<input name="passengerPhone" required minlength="8" maxlength="24" autocomplete="tel" placeholder="+225 07 00 00 00 00"></label>
         <section class="public-policy" aria-labelledby="public-policy-title"><h3 id="public-policy-title">Conditions d’embarquement de la compagnie</h3><p id="public-policy-summary">Chargement des conditions…</p><label class="public-policy-accept"><input type="checkbox" id="public-policy-accepted" name="policyAccepted" required> J’ai lu et j’accepte ces conditions pour cette réservation.</label></section>
-        <button class="primary-button" type="submit" id="public-submit" disabled>Réserver et générer mon billet</button>
+        <button class="primary-button" type="submit" id="public-submit" disabled>Bloquer ma place pendant 15 min</button>
       </form>
       <p id="public-message" class="public-message" role="status" aria-live="polite"></p>
       <section id="public-ticket" class="public-ticket" hidden>
