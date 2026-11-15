@@ -49,7 +49,7 @@ beforeAll(async () => {
     [tenantId]
   );
   const stations = await pool.query(
-    "INSERT INTO stations (tenant_id,city_id,name,city) VALUES ($1,$2,'Gare A','Segment Ville A'),($1,$3,'Gare B','Segment Ville B'),($1,$4,'Gare C','Segment Ville C') RETURNING id,name",
+    "INSERT INTO stations (tenant_id,city_id,name) VALUES ($1,$2,'Gare A'),($1,$3,'Gare B'),($1,$4,'Gare C') RETURNING id,name",
     [tenantId, cities.rows[0].id, cities.rows[1].id, cities.rows[2].id]
   );
   const route = await pool.query(
@@ -228,7 +228,8 @@ test("une réservation publique bloque temporairement un siège puis le libère 
       policyAccepted: true,
       originStopId,
       destinationStopId,
-      amountTransport: 1
+      amountTransport: 1,
+      seatNumber: 2
     })
   });
 
@@ -236,9 +237,12 @@ test("une réservation publique bloque temporairement un siège puis le libère 
   expect(firstResponse.status).toBe(201);
   const first = await firstResponse.json() as { data: { bookingId: string; seatNumber: number; transportAmount: number; bookingStatus: string; holdExpiresAt: string | null } };
   expect(first.data.bookingStatus).toBe("HELD");
-  expect(first.data.seatNumber).toBe(1);
+  expect(first.data.seatNumber).toBe(2);
   expect(first.data.transportAmount).toBe(10000);
   expect(first.data.holdExpiresAt).toBeTruthy();
+
+  const duplicateSeatResponse = await createHold();
+  expect(duplicateSeatResponse.status).toBe(409);
 
   await pool.query(
     "UPDATE bookings SET hold_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1 AND tenant_id=$2",
@@ -248,7 +252,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
   const secondResponse = await createHold();
   expect(secondResponse.status).toBe(201);
   const second = await secondResponse.json() as { data: { bookingId: string; seatNumber: number; bookingStatus: string } };
-  expect(second.data.seatNumber).toBe(1);
+  expect(second.data.seatNumber).toBe(2);
   expect(second.data.bookingStatus).toBe("HELD");
 
   const expired = await pool.query("SELECT status FROM bookings WHERE id=$1", [first.data.bookingId]);
