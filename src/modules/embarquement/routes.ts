@@ -148,6 +148,7 @@ router.post("/valider", controllerRoles, [
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Ce billet a déjà été utilisé pour l'embarquement" });
     }
+    await client.query("UPDATE bookings SET boarding_status='BOARDED' WHERE id=$1 AND tenant_id=$2", [ticket.id, req.tenantId]);
     await client.query("COMMIT");
     return res.json({ success: true, data: { billetId: ticket.id, ...inserted.rows[0], statut: "BOARDED" }, message: "Embarquement validé" });
   } catch (error) {
