@@ -65,7 +65,7 @@ router.post("/:publicCode/reservations", [
       client, trip.tenant_id, trip.route_id || null,
       typeof req.body.originStopId === "string" ? req.body.originStopId : null,
       typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
-      { origin: selectedSegment.origin, destination: selectedSegment.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+      { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
     );
     if (segment.error || !segment.data) {
       await client.query("ROLLBACK");
@@ -99,7 +99,7 @@ router.post("/:publicCode/reservations", [
     return res.status(201).json({ success: true, data: {
       ticketToken: booking.ticket_token, bookingId: booking.id,
       companyName: trip.company_name, passengerName: booking.passenger_name,
-      passengerPhone: booking.passenger_phone, origin: trip.origin, destination: trip.destination,
+      passengerPhone: booking.passenger_phone, origin: selectedSegment.origin, destination: selectedSegment.destination,
       departureAt: trip.departure_at, vehicleCode: trip.vehicle_code, seatNumber: booking.seat_number,
       transportAmount: Number(booking.amount_transport),
       companyBookingFee: Number(booking.company_booking_fee),
