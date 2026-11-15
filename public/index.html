@@ -673,6 +673,11 @@
               <label id="guichet-destination-wrap" hidden>Gare d’arrivée<select name="destinationStopId" id="guichet-destination-stop"></select></label>
               <label>Nom du passager<input name="passengerName" minlength="2" maxlength="160" required></label>
               <p class="auth-description" id="guichet-fare"></p>
+              <section class="panel" id="guichet-policy-notice" style="padding:14px;display:grid;gap:8px">
+                <strong>Conditions de voyage de la compagnie</strong>
+                <p class="auth-description" id="guichet-policy-summary">Chargement des conditions…</p>
+                <label class="checkbox-line"><input type="checkbox" id="guichet-policy-accepted" required> Les conditions ont été expliquées au passager et il les accepte avant le paiement.</label>
+              </section>
               <button class="primary-button" type="submit" id="guichet-sale-submit">Encaisser et générer le billet</button>
             </form>
             <form id="guichet-close-form" class="auth-form" style="max-width:420px" hidden>
