@@ -422,7 +422,7 @@ function renderVoyages() {
     bookingButton.dataset.departureId = departure.id;
     bookingButton.textContent = "Réserver";
     bookingButton.disabled = departure.status !== "SCHEDULED"
-      || departure.availableSeats < 1
+      || (!departure.routeId && departure.availableSeats < 1)
       || new Date(departure.departureAt) <= new Date();
     const tariffButton = document.createElement("button");
     tariffButton.className = "voyage-action";
