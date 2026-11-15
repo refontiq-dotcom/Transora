@@ -25,6 +25,33 @@ CREATE TABLE IF NOT EXISTS stations (
     FOREIGN KEY (tenant_id, city_id) REFERENCES company_cities(tenant_id, id) ON DELETE RESTRICT
 );
 
+-- Upgrade the legacy stations table in place (older deployments stored city as text).
+ALTER TABLE stations
+  ADD COLUMN IF NOT EXISTS city_id UUID,
+  ADD COLUMN IF NOT EXISTS address TEXT,
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+INSERT INTO company_cities (tenant_id, name)
+SELECT DISTINCT tenant_id, btrim(city)
+FROM stations
+WHERE city IS NOT NULL AND length(btrim(city)) BETWEEN 2 AND 100
+ON CONFLICT DO NOTHING;
+
+UPDATE stations AS s
+SET city_id = c.id
+FROM company_cities AS c
+WHERE c.tenant_id = s.tenant_id
+  AND lower(regexp_replace(btrim(c.name), '[[:space:]]+', ' ', 'g')) =
+      lower(regexp_replace(btrim(s.city), '[[:space:]]+', ' ', 'g'))
+  AND s.city_id IS NULL;
+
+ALTER TABLE stations ALTER COLUMN city_id SET NOT NULL;
+ALTER TABLE stations ADD CONSTRAINT stations_tenant_id_id_unique UNIQUE (tenant_id, id);
+
+ALTER TABLE stations
+  ADD CONSTRAINT stations_city_same_tenant_fk
+  FOREIGN KEY (tenant_id, city_id) REFERENCES company_cities(tenant_id, id) ON DELETE RESTRICT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS stations_name_city_unique
   ON stations (tenant_id, city_id, lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g')));
 CREATE UNIQUE INDEX IF NOT EXISTS stations_code_unique
