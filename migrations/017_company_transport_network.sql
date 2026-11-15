@@ -57,7 +57,16 @@ END
 $legacy_stations$;
 
 ALTER TABLE stations ALTER COLUMN city_id SET NOT NULL;
-ALTER TABLE stations ADD CONSTRAINT stations_tenant_id_id_unique UNIQUE (tenant_id, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'stations_tenant_id_id_unique'
+      AND conrelid = 'public.stations'::regclass
+  ) THEN
+    ALTER TABLE stations ADD CONSTRAINT stations_tenant_id_id_unique UNIQUE (tenant_id, id);
+  END IF;
+END $$;
 
 DO $station_city_fk$
 BEGIN

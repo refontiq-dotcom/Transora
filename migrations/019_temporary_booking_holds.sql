@@ -3,12 +3,29 @@
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS hold_expires_at TIMESTAMPTZ;
 
-ALTER TABLE bookings
-  DROP CONSTRAINT IF EXISTS bookings_status_check;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bookings_status_check'
+      AND conrelid = 'public.bookings'::regclass
+  ) THEN
+    ALTER TABLE bookings DROP CONSTRAINT bookings_status_check;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bookings_status_check'
+      AND conrelid = 'public.bookings'::regclass
+  ) THEN
+    ALTER TABLE bookings
+      ADD CONSTRAINT bookings_status_check
+      CHECK (status IN ('RESERVED', 'HELD', 'PAID', 'ISSUED', 'BOARDED', 'USED', 'CANCELLED', 'REFUNDED', 'NO_SHOW', 'EXPIRED'));
+  END IF;
+END $$;
 
 ALTER TABLE bookings
-  ADD CONSTRAINT bookings_status_check
-  CHECK (status IN ('RESERVED', 'HELD', 'PAID', 'ISSUED', 'BOARDED', 'USED', 'CANCELLED', 'REFUNDED', 'NO_SHOW', 'EXPIRED'));
+  DROP CONSTRAINT IF EXISTS bookings_hold_expiry_check;
 
 ALTER TABLE bookings
   ADD CONSTRAINT bookings_hold_expiry_check
@@ -16,14 +33,37 @@ ALTER TABLE bookings
 
 -- Les réservations expirées libèrent le siège ; les holds actifs continuent
 -- de participer à l'exclusion de chevauchement par segment.
-ALTER TABLE bookings
-  DROP CONSTRAINT IF EXISTS bookings_seat_segment_no_overlap,
-  DROP CONSTRAINT IF EXISTS exclude_overlapping_seats;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bookings_seat_segment_no_overlap'
+      AND conrelid = 'public.bookings'::regclass
+  ) THEN
+    ALTER TABLE bookings DROP CONSTRAINT bookings_seat_segment_no_overlap;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'exclude_overlapping_seats'
+      AND conrelid = 'public.bookings'::regclass
+  ) THEN
+    ALTER TABLE bookings DROP CONSTRAINT exclude_overlapping_seats;
+  END IF;
+END $$;
 
-ALTER TABLE bookings
-  ADD CONSTRAINT bookings_seat_segment_no_overlap
-  EXCLUDE USING gist (departure_id WITH =, seat_number WITH =, segment_range WITH &&)
-  WHERE (status NOT IN ('CANCELLED', 'EXPIRED'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bookings_seat_segment_no_overlap'
+      AND conrelid = 'public.bookings'::regclass
+  ) THEN
+    ALTER TABLE bookings
+      ADD CONSTRAINT bookings_seat_segment_no_overlap
+      EXCLUDE USING gist (departure_id WITH =, seat_number WITH =, segment_range WITH &&)
+      WHERE (status NOT IN ('CANCELLED', 'EXPIRED'));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS bookings_active_holds_expiry_idx
   ON bookings (departure_id, hold_expires_at)

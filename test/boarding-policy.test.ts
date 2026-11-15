@@ -35,7 +35,7 @@ beforeAll(async () => {
   const sessionId = `boarding-policy-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1,$2,$3,$4,NOW()+INTERVAL '1 day')",
-    [sessionId, userId, tenantId, "b".repeat(64)]
+    [sessionId, userId, tenantId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   token = createAccessToken({ id: userId, email: "boarding-policy@example.test", role: "administrateur", tenantId, sessionId });
 

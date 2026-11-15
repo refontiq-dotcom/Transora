@@ -49,7 +49,7 @@ beforeAll(async () => {
     [tenantId]
   );
   const stations = await pool.query(
-    "INSERT INTO stations (tenant_id,city_id,name) VALUES ($1,$2,'Gare A'),($1,$3,'Gare B'),($1,$4,'Gare C') RETURNING id,name",
+    "INSERT INTO stations (tenant_id,city_id,name,city) VALUES ($1,$2,'Gare A','Segment Ville A'),($1,$3,'Gare B','Segment Ville B'),($1,$4,'Gare C','Segment Ville C') RETURNING id,name",
     [tenantId, cities.rows[0].id, cities.rows[1].id, cities.rows[2].id]
   );
   const route = await pool.query(

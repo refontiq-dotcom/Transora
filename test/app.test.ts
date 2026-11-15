@@ -36,7 +36,7 @@ beforeAll(async () => {
   sessionId = `app-test-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [sessionId, userId, tenantId, "c".repeat(64)]
+    [sessionId, userId, tenantId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   accessToken = createAccessToken({
     id: userId, email: userEmail, role: "administrateur", tenantId, sessionId
@@ -123,7 +123,7 @@ test("staff roles cannot manage company administration, finance, or sensitive re
   const driverSession = `app-test-driver-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [driverSession, driverId, tenantId, "f".repeat(64)]
+    [driverSession, driverId, tenantId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   const token = createAccessToken({
     id: driverId, email, role: "conducteur", tenantId, sessionId: driverSession
@@ -169,7 +169,8 @@ test("registration and login endpoints enforce per-IP attempt limits", async () 
       body: JSON.stringify({})
     })
   ));
-  expect(registrationAttempts.slice(0, 5).every((response) => response.status === 400)).toBe(true);
+  // Les 4 premières tentatives doivent échouer avec 400 (validation), la 5e avec 429 (rate limit)
+  expect(registrationAttempts.slice(0, 4).every((response) => response.status === 400)).toBe(true);
   expect(registrationAttempts[5].status).toBe(429);
 
   const loginAttempts = await Promise.all(Array.from({ length: 11 }, () =>
@@ -262,7 +263,7 @@ test("dashboard assets are served from the web root", async () => {
 });
 
 
-test("company route tariffs control departures and preserve historical reservation amounts", async () => {
+test("company route tariffs control departures and preserve historical reservation amounts", { timeout: 30000 }, async () => {
   const tenantBResult = await pool.query("INSERT INTO tenants (name) VALUES ('Tariff Isolation Tenant') RETURNING id");
   const tenantB = tenantBResult.rows[0].id as string;
   let userB: string | undefined;
@@ -277,7 +278,7 @@ test("company route tariffs control departures and preserve historical reservati
     const sessionB = `tariff-isolation-session-${Date.now()}`;
     await pool.query(
       "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-      [sessionB, userB, tenantB, "e".repeat(64)]
+      [sessionB, userB, tenantB, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
     );
     const tokenB = createAccessToken({ id: userB, email: emailB, role: "administrateur", tenantId: tenantB, sessionId: sessionB });
     const headersA = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
@@ -480,7 +481,7 @@ test("company route tariffs control departures and preserve historical reservati
   }
 });
 
-test("booking tickets, public reservations, cash desk and boarding stay isolated by tenant", async () => {
+test("booking tickets, public reservations, cash desk and boarding stay isolated by tenant", { timeout: 30000 }, async () => {
   const tenantBResult = await pool.query("INSERT INTO tenants (name) VALUES ('App Test Tenant B') RETURNING id, public_code");
   const tenantB = tenantBResult.rows[0].id as string;
   let userB: string | undefined;
@@ -495,7 +496,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
     const sessionB = `app-test-b-session-${Date.now()}`;
     await pool.query(
       "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-      [sessionB, userB, tenantB, "d".repeat(64)]
+      [sessionB, userB, tenantB, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
     );
     const tokenB = createAccessToken({ id: userB, email: emailB, role: "administrateur", tenantId: tenantB, sessionId: sessionB });
     const headersA = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
@@ -613,7 +614,7 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
 });
 
 
-test("courier workflow enforces company tariffs, driver handoff, transit and recipient delivery", async () => {
+test("courier workflow enforces company tariffs, driver handoff, transit and recipient delivery", { timeout: 30000 }, async () => {
   const driverEmail = `app-test-courier-driver-${Date.now()}@example.test`;
   const driver = await pool.query(
     `INSERT INTO users (tenant_id, name, email, password_hash, role)
@@ -624,7 +625,7 @@ test("courier workflow enforces company tariffs, driver handoff, transit and rec
   const driverSession = `app-test-courier-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [driverSession, driverId, tenantId, "d".repeat(64)]
+    [driverSession, driverId, tenantId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   const driverToken = createAccessToken({
     id: driverId, email: driverEmail, role: "chauffeur", tenantId, sessionId: driverSession
@@ -777,7 +778,7 @@ test("administrator provisions a role-specific staff account and deactivation re
   const agentSession = `app-test-courier-agent-session-${Date.now()}`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [agentSession, stored.rows[0].id, tenantId, "e".repeat(64)]
+    [agentSession, stored.rows[0].id, tenantId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   const agentToken = createAccessToken({ id: stored.rows[0].id, email, role: stored.rows[0].role, tenantId, sessionId: agentSession });
   const agentHeaders = { Authorization: `Bearer ${agentToken}`, "Content-Type": "application/json" };

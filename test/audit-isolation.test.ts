@@ -56,11 +56,11 @@ beforeAll(async () => {
   sessionBId = `audit-session-${Date.now()}-b`;
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [sessionAId, userAId, tenantAId, "a".repeat(64)]
+    [sessionAId, userAId, tenantAId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
   await pool.query(
     "INSERT INTO user_sessions (id, user_id, tenant_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')",
-    [sessionBId, userBId, tenantBId, "b".repeat(64)]
+    [sessionBId, userBId, tenantBId, (Date.now().toString(36) + Math.random().toString(36).slice(2, 10).toUpperCase() + "d".repeat(44))]
   );
 
   // Les JWT utilisent des utilisateurs réellement présents en base.
