@@ -386,9 +386,10 @@ router.get("/alternatives/:bookingId", controllerRoles, [
          AND d.status = 'SCHEDULED' AND d.departure_at > NOW()
          AND (($4::uuid IS NOT NULL AND d.route_id = $4)
            OR ($4::uuid IS NULL AND d.route_id IS NULL
-             AND lower(d.origin) = lower($5) AND lower(d.destination) = lower($6)))
+             AND lower(d.origin) = lower($5) AND lower(d.destination) = lower($6)
+             AND d.fare_amount = $7 AND d.company_booking_fee = $8))
        ORDER BY d.departure_at ASC LIMIT 10`,
-      [req.tenantId, booking.departure_id, booking.segment_range, booking.route_id, booking.origin, booking.destination]
+      [req.tenantId, booking.departure_id, booking.segment_range, booking.route_id, booking.origin, booking.destination, booking.amount_transport, booking.company_booking_fee]
     );
     return res.json({ success: true, data: {
       rebookingAllowed: true,
