@@ -4,7 +4,9 @@
 Audit dépôt, stack, architecture, données, auth/RBAC, CI/CD, sécurité, observabilité, API, dette et plan de migration.
 
 ## Phase 1 — SaaS core
-Tenant, entreprises, utilisateurs, rôles, stations, agences, routes, arrêts, véhicules, chauffeurs.
+Tenant, entreprises, utilisateurs, rôles, villes et gares par compagnie, lignes et arrêts ordonnés, véhicules, chauffeurs.
+
+**Fondation réseau livrée dans le dépôt :** API authentifiée `/api/v1/reseau` pour villes, gares et lignes avec arrêts ordonnés ; isolation par tenant ; validation des gares actives, des extrémités, des doublons, des distances et des durées. Migration `017_company_transport_network.sql` versionnée (non appliquée en production).
 
 ## Phase 2 — Trip / Segment / Seat Engine
 Départs, arrêts ordonnés, segments, plans de sièges, disponibilité, holds, concurrence, états.
