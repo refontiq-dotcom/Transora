@@ -2417,6 +2417,7 @@ function renderStopOperations(data) {
   document.querySelector("#stop-confirmed-descents").textContent = summary.confirmedDescents;
   document.querySelector("#stop-expected-boardings").textContent = summary.expectedBoardings;
   document.querySelector("#stop-blocked-seats").textContent = summary.seatsBlockedByPreviousPassenger;
+  document.querySelector("#stop-released-seats").textContent = summary.seatsConfirmedReleased;
   const descentList = document.querySelector("#stop-descent-list");
   const boardingList = document.querySelector("#stop-boarding-list");
   descentList.replaceChildren();
