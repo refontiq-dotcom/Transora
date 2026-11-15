@@ -58,7 +58,7 @@ beforeAll(async () => {
 
   const source = await pool.query(
     `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, company_booking_fee, status)
-     VALUES ($1,'Ville Test A','Ville Test B',NOW()-INTERVAL '10 minutes','BUS-ABSENT',2,10000,0,'BOARDING')
+     VALUES ($1,'Ville Test A','Ville Test B',NOW()-INTERVAL '10 minutes','BUS-ABSENT',2,10000,0,'DEPARTED')
      RETURNING id`,
     [tenantId]
   );
