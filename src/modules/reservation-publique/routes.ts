@@ -18,13 +18,13 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
       const result = await pool.query(
         `SELECT t.name AS "companyName", d.id, d.origin, d.destination,
                 d.departure_at AS "departureAt", d.vehicle_code AS "vehicleCode",
-                d.capacity, d.fare_amount AS "fareAmount",
+                d.capacity, d.route_id AS "routeId", d.fare_amount AS "fareAmount",
                 COALESCE((SELECT json_agg(json_build_object('id', rs.id, 'city', c.name, 'station', s.name, 'stopOrder', rs.stop_order) ORDER BY rs.stop_order)
                   FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
                   JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
                   WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS "routeStops",
                 d.company_booking_fee AS "companyBookingFee",
-                COUNT(b.id) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
+                COUNT(DISTINCT b.seat_number) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
          FROM tenants t JOIN departures d ON d.tenant_id = t.id
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE t.public_code = $1 AND d.status = 'SCHEDULED'
@@ -36,7 +36,7 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
       if (!tenant.rowCount) return res.status(404).json({ success: false, message: "Lien de réservation introuvable" });
       return res.json({ success: true, data: {
         companyName: tenant.rows[0].name,
-        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats))
+        departures: result.rows.filter(row => Number(row.capacity) > Number(row.reservedSeats) || Boolean(row.route_id))
           .map(row => ({ ...row, availableSeats: Number(row.capacity) - Number(row.reservedSeats) }))
       } });
     } catch (error) { return next(error); }
