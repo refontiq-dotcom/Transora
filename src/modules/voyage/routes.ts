@@ -210,7 +210,7 @@ router.post(
         segmentRange = "[" + Number(stops.rows[0].stop_order) + "," + Number(stops.rows[1].stop_order) + ")";
       } else if (fareAmount <= 0) { await client.query("ROLLBACK"); transactionStarted = false; return res.status(409).json({ success: false, message: "Le tarif de ce départ doit être configuré avant la réservation" }); }
       const taken = await client.query<{ seat_number: number }>(
-        `SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL AND segment_range && $3::int4range`,
+        `SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status NOT IN ('CANCELLED', 'EXPIRED') AND (status <> 'HELD' OR hold_expires_at > NOW()) AND seat_number IS NOT NULL AND segment_range && $3::int4range`,
         [id, tenantId, segmentRange]
       );
       const occupied = new Set(taken.rows.map(row => Number(row.seat_number)));
@@ -335,7 +335,7 @@ router.get(
                   FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
                   JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
                   WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS route_stops,
-                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
+                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW())) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE d.tenant_id = $1
@@ -417,7 +417,7 @@ router.get(
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
                 d.capacity, d.status,
-                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
+                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW())) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE d.tenant_id = $1
@@ -427,7 +427,7 @@ router.get(
            AND ($3::text IS NULL OR LOWER(d.destination) = LOWER($3))
            AND ($4::date IS NULL OR d.departure_at::date = $4::date)
          GROUP BY d.id
-         HAVING d.capacity - COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) >= $5
+         HAVING d.capacity - COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW())) >= $5
          ORDER BY d.departure_at
          LIMIT 100`,
         [
@@ -500,7 +500,7 @@ router.get(
       }>(
         `SELECT d.id, d.origin, d.destination, d.departure_at, d.vehicle_code,
                 d.capacity, d.status,
-                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID')) AS reserved_seats
+                COUNT(b.id) FILTER (WHERE b.status IN ('RESERVED', 'PAID') OR (b.status = 'HELD' AND b.hold_expires_at > NOW())) AS reserved_seats
          FROM departures d
          LEFT JOIN bookings b ON b.departure_id = d.id AND b.tenant_id = d.tenant_id
          WHERE d.id = $1 AND d.tenant_id = $2
