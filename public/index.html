@@ -694,6 +694,8 @@
         <h2>Réserver une place</h2>
         <p class="auth-description" id="booking-trip-description"></p>
         <label>Nom du passager<input name="passengerName" required maxlength="160"></label>
+        <label id="booking-origin-wrap" hidden>Gare de départ<select name="originStopId" id="booking-origin-stop"></select></label>
+        <label id="booking-destination-wrap" hidden>Gare d’arrivée<select name="destinationStopId" id="booking-destination-stop"></select></label>
         <p class="auth-description" id="booking-fare">Tarif fixé par la compagnie pour ce départ.</p>
         <button class="primary-button auth-submit" type="submit" id="booking-submit"><span>Créer la réservation</span></button>
       </form>
