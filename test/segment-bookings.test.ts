@@ -186,6 +186,7 @@ test("le contrôleur confirme la descente réelle avant d'autoriser la montée s
     body: JSON.stringify({ billetId: secondSegmentBookingId })
   });
   expect(boarding.status).toBe(200);
+  await pool.query("UPDATE departures SET status=$3 WHERE id=$1 AND tenant_id=$2", [departureId, tenantId, "SCHEDULED"]);
 });
 
 test("un segment qui chevauche deux réservations existantes reçoit un autre siège", async () => {
