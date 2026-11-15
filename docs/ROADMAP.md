@@ -9,10 +9,10 @@ Tenant, entreprises, utilisateurs, rôles, villes et gares par compagnie, lignes
 **Fondation réseau livrée dans le dépôt :** API authentifiée `/api/v1/reseau` pour villes, gares et lignes avec arrêts ordonnés ; isolation par tenant ; validation des gares actives, des extrémités, des doublons, des distances et des durées. Migration `017_company_transport_network.sql` versionnée (non appliquée en production).
 
 ## Phase 2 — Trip / Segment / Seat Engine
-Départs rattachés aux lignes de compagnie ; billets avec arrêts de départ/arrivée ; plages de segments semi-ouvertes ; disponibilité et attribution de sièges par segment ; tarifs par segment ; ventes internes, publiques et guichet synchronisées. Les réservations historiques restent en mode trajet complet. Les holds temporaires avant paiement et l'interface publique de recherche segmentée restent à finaliser.
+Départs rattachés aux lignes de compagnie ; billets avec arrêts de départ/arrivée ; plages de segments semi-ouvertes ; disponibilité et attribution de sièges par segment ; tarifs par segment ; ventes internes, publiques et guichet synchronisées. Les réservations historiques restent en mode trajet complet. Les holds temporaires de 15 minutes sont maintenant créés pour les réservations publiques ; les holds expirés libèrent le siège, y compris lors d'une nouvelle attribution. La recherche publique segmentée et la disponibilité filtrent les holds expirés.
 
 ## Phase 3 — Booking / Ticket / Payment
-Réservation, billet, QR, paiement, frais 100 FCFA, annulation, remboursement, audit, canaux multiples.
+Réservation, billet, QR, paiement, frais 100 FCFA, annulation, remboursement, audit, canaux multiples. Le cycle interne de paiement vérifie désormais l'expiration du hold avant confirmation ; les intégrations des prestataires, webhooks signés et remboursements restent à finaliser.
 
 ## Phase 4 — Guichet / Caisse / Embarquement
 Vente physique, sessions de caisse, rapprochement, manifestes, scan, suivi par arrêt.
