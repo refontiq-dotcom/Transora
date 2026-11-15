@@ -108,6 +108,7 @@ router.post("/:publicCode/reservations", [
   body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/),
   body("originStopId").optional().isUUID(),
   body("destinationStopId").optional().isUUID(),
+  body("seatNumber").optional().isInt({ min: 1, max: 200 }),
   body("policyAccepted").custom(value => value === true || value === "true")
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   const client: PoolClient = await pool.connect();
@@ -147,7 +148,16 @@ router.post("/:publicCode/reservations", [
     );
     const occupied = new Set(reservations.rows.map((row: { seat_number: number | null }) => Number(row.seat_number)).filter(Boolean));
     if (occupied.size >= Number(trip.capacity)) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Ce segment est complet" }); }
-    const seatNumber = Array.from({ length: Number(trip.capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
+    const requestedSeat = req.body.seatNumber === undefined ? null : Number(req.body.seatNumber);
+    if (requestedSeat !== null && requestedSeat > Number(trip.capacity)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, message: "Le numéro de siège sélectionné est invalide" });
+    }
+    if (requestedSeat !== null && occupied.has(requestedSeat)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Cette place est déjà occupée. Choisissez-en une autre." });
+    }
+    const seatNumber = requestedSeat ?? Array.from({ length: Number(trip.capacity) }, (_, index) => index + 1).find(seat => !occupied.has(seat));
     if (!seatNumber) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Aucune place disponible sur ce segment" }); }
     const bookingResult = await client.query(
       `INSERT INTO bookings (tenant_id, departure_id, passenger_name, passenger_phone, amount_transport, company_booking_fee, seat_number, segment_range, origin_stop_id, destination_stop_id, status, hold_expires_at, boarding_policy_accepted_at)
