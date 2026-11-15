@@ -308,7 +308,7 @@ router.post("/absence", controllerRoles, [
     }
     const inserted = await client.query(
       `INSERT INTO boarding_absence_events
-        (tenant_id, booking_id, departure_id, stop_id, scheduled_at, grace_period_minutes, policy_version, confirmed_by, comments)
+        (tenant_id, booking_id, departure_id, stop_id, grace_reference_at, grace_period_minutes, policy_version, confirmed_by, comments)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (booking_id, departure_id) DO NOTHING
        RETURNING id, confirmed_at AS "confirmedAt"`,
