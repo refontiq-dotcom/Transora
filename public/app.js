@@ -2497,10 +2497,20 @@ function renderStopOperations(data, manifest) {
             headers: { Authorization: "Bearer " + accessToken }
           });
           const alternativesResult = await alternativesResponse.json();
-          const alternatives = alternativesResponse.ok ? (alternativesResult.data?.alternatives || []) : [];
-          showToast("Absence confirmée. " + (alternatives.length ? alternatives.length + " départ(s) compatible(s) trouvé(s)." : "Aucun départ alternatif disponible pour le moment."));
+          const alternativeData = alternativesResponse.ok ? alternativesResult.data : null;
+          const alternatives = alternativeData?.alternatives || [];
+          const refundText = alternativeData?.refundPolicy === "FULL"
+            ? "Remboursement intégral prévu."
+            : alternativeData?.refundPolicy === "PARTIAL"
+              ? "Remboursement de " + alternativeData.refundPercentage + "% prévu."
+              : "Aucun remboursement prévu après absence.";
+          if (alternativeData && !alternativeData.rebookingAllowed) {
+            showToast("Absence confirmée. " + alternativeData.message + " " + refundText + " Le traitement financier reste à la compagnie.");
+          } else {
+            showToast("Absence confirmée. " + (alternatives.length ? alternatives.length + " départ(s) compatible(s) trouvé(s)." : "Aucun départ alternatif disponible pour le moment.") + " " + refundText);
+          }
           await loadStopOperations();
-          if (alternatives.length) openRebookingDialog(passenger.bookingId, alternativesResult.data);
+          if (alternatives.length) openRebookingDialog(passenger.bookingId, alternativeData);
         } catch (error) {
           showToast(error.message || "Erreur de confirmation.");
           button.disabled = false;
