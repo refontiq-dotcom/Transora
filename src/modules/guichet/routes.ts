@@ -132,7 +132,7 @@ router.post("/vente", cashDeskRoles, [
       await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Place indisponible" });
     }
     const inserted = await client.query(
-      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range, origin_stop_id, destination_stop_id, origin_stop_id, destination_stop_id)
+      `INSERT INTO bookings (tenant_id, departure_id, passenger_name, amount_transport, company_booking_fee, status, seat_number, segment_range, origin_stop_id, destination_stop_id)
        VALUES ($1, $2, $3, $4, $5, 'PAID', $6, $7::int4range, $8, $9)
        RETURNING id, ticket_token AS "ticketToken", passenger_name AS "passengerName",
                  amount_transport AS "amountTransport", platform_fee AS "platformFee", company_booking_fee AS "companyBookingFee",
