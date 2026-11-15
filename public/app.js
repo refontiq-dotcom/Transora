@@ -1660,7 +1660,7 @@ async function loadGuichet() {
   }
   try {
     const headers = { Authorization: `Bearer ${token}` };
-    const [sessionResponse, departuresResponse] = await Promise.all([
+    const [sessionResponse, departuresResponse, policyResponse] = await Promise.all([
       fetch("/api/v1/guichet/session/current", { headers }),
       fetch("/api/v1/voyages/departures", { headers }),
       fetch("/api/v1/embarquement/policy", { headers })
