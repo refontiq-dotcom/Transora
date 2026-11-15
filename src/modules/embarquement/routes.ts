@@ -69,8 +69,8 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
         : ticket.statutDepart === "CANCELLED" ? "Ce départ a été annulé."
         : ticket.seatBlockedByPreviousPassenger ? "Le passager précédent n’a pas encore été confirmé comme descendu de ce siège."
         : !ticket.boardingWindowOpen ? "La période d’embarquement définie par la compagnie n’est pas ouverte ou est terminée."
-        : ticket.stopOrder === 0 && ticket.statutDepart !== "BOARDING" ? "L’embarquement à la gare de départ n’est pas ouvert."
-        : ticket.stopOrder > 0 && !["DEPARTED", "IN_TRANSIT"].includes(ticket.statutDepart) ? "Le car n’est pas encore arrivé à cet arrêt ou n’a pas commencé son trajet."
+        : Number(ticket.stopOrder) === 0 && ticket.statutDepart !== "BOARDING" ? "L’embarquement à la gare de départ n’est pas ouvert."
+        : Number(ticket.stopOrder) > 0 && !["DEPARTED", "IN_TRANSIT"].includes(ticket.statutDepart) ? "Le car n’est pas encore arrivé à cet arrêt ou n’a pas commencé son trajet."
         : null;
       return res.json({ success: true, data: { ...ticket, motif } });
     } catch (error) { return next(error); }
