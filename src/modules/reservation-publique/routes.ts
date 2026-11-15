@@ -50,7 +50,7 @@ router.post("/:publicCode/reservations", [
     await client.query("BEGIN");
     const departure = await client.query(
       `SELECT t.id AS tenant_id, t.name AS company_name, d.id, d.origin, d.destination,
-              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount, d.company_booking_fee
+              d.departure_at, d.vehicle_code, d.capacity, d.fare_amount, d.company_booking_fee, d.route_id
        FROM tenants t JOIN departures d ON d.tenant_id = t.id
        WHERE t.public_code = $1 AND d.id = $2 AND d.status = 'SCHEDULED'
          AND d.departure_at > NOW() FOR UPDATE OF d`,
@@ -61,6 +61,17 @@ router.post("/:publicCode/reservations", [
       return res.status(404).json({ success: false, message: "Départ indisponible pour cette compagnie" });
     }
     const trip = departure.rows[0];
+    const segment = await resolveBookingSegment(
+      client, trip.tenant_id, trip.route_id || null,
+      typeof req.body.originStopId === "string" ? req.body.originStopId : null,
+      typeof req.body.destinationStopId === "string" ? req.body.destinationStopId : null,
+      { origin: trip.origin, destination: trip.destination, fareAmount: Number(trip.fare_amount), companyBookingFee: Number(trip.company_booking_fee) }
+    );
+    if (segment.error || !segment.data) {
+      await client.query("ROLLBACK");
+      return res.status(segment.error?.status || 400).json({ success: false, message: segment.error?.message || "Segment invalide" });
+    }
+    const selectedSegment = segment.data;
     if (Number(trip.fare_amount) <= 0) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Ce départ n'a pas encore de tarif défini" });
