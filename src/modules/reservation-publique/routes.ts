@@ -19,6 +19,10 @@ router.get("/:publicCode/departs", [param("publicCode").isAlphanumeric().isLengt
         `SELECT t.name AS "companyName", d.id, d.origin, d.destination,
                 d.departure_at AS "departureAt", d.vehicle_code AS "vehicleCode",
                 d.capacity, d.fare_amount AS "fareAmount",
+                COALESCE((SELECT json_agg(json_build_object('id', rs.id, 'city', c.name, 'station', s.name, 'stopOrder', rs.stop_order) ORDER BY rs.stop_order)
+                  FROM route_stops rs JOIN stations s ON s.id=rs.station_id AND s.tenant_id=rs.tenant_id
+                  JOIN company_cities c ON c.id=s.city_id AND c.tenant_id=s.tenant_id
+                  WHERE rs.route_id=d.route_id AND rs.tenant_id=d.tenant_id), '[]'::json) AS "routeStops",
                 d.company_booking_fee AS "companyBookingFee",
                 COUNT(b.id) FILTER (WHERE b.status <> 'CANCELLED')::int AS "reservedSeats"
          FROM tenants t JOIN departures d ON d.tenant_id = t.id
@@ -43,7 +47,9 @@ router.post("/:publicCode/reservations", [
   param("publicCode").isAlphanumeric().isLength({ min: 32, max: 32 }),
   body("departureId").isUUID(),
   body("passengerName").isString().trim().isLength({ min: 2, max: 160 }),
-  body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/)
+  body("passengerPhone").isString().trim().matches(/^[+0-9().\s-]{8,24}$/),
+  body("originStopId").optional().isUUID(),
+  body("destinationStopId").optional().isUUID()
 ], validate, async (req: Request, res: Response, next: NextFunction) => {
   const client: PoolClient = await pool.connect();
   try {
