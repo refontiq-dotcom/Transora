@@ -17,6 +17,7 @@ function showMessage(value, error = false) {
 function displayTicket(ticket) {
   const isHold = ticket.bookingStatus === "HELD";
   document.querySelector("#public-title").textContent = isHold ? "Votre place est bloquée temporairement" : "Réservation enregistrée";
+  document.querySelector("#public-ticket h2").textContent = isHold ? "Votre réservation temporaire" : "Votre billet";
   document.querySelector(".public-subtitle").textContent = isHold
     ? "Vous avez 15 minutes pour finaliser le paiement auprès de la compagnie. Après ce délai, la place sera automatiquement remise à disposition."
     : "Conservez ce billet. L'embarquement est autorisé uniquement après confirmation du paiement.";
