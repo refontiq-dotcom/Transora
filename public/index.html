@@ -774,6 +774,20 @@
         <button class="primary-button auth-submit" type="submit" id="payment-submit">Confirmer le paiement</button>
       </form>
     </dialog>
+    <dialog class="auth-dialog" id="rebooking-dialog">
+      <form class="auth-form" id="rebooking-form">
+        <button class="dialog-close" id="rebooking-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">REPORT AVEC ACCORD DU VOYAGEUR</p>
+        <h2>Choisir un nouveau départ</h2>
+        <p class="auth-description" id="rebooking-description">Aucun changement ne sera fait sans accord explicite du voyageur.</p>
+        <label>Départ compatible<select name="targetDepartureId" required></select></label>
+        <label>Comment le voyageur a-t-il donné son accord ?<select name="consentMethod" required><option value="IN_PERSON">En personne</option><option value="PHONE">Par téléphone</option><option value="SMS">Par SMS</option><option value="WHATSAPP">Par WhatsApp</option><option value="OTHER">Autre moyen</option></select></label>
+        <label>Référence de l’accord (facultatif)<input name="consentReference" maxlength="300" placeholder="Ex. message ou référence d’appel"></label>
+        <label id="rebooking-fee-wrap" hidden>Référence du reçu des frais de report<input name="feeReceipt" maxlength="200"></label>
+        <label class="checkbox-line"><input name="passengerConsent" type="checkbox" required> Le voyageur a explicitement accepté ce nouveau départ.</label>
+        <button class="primary-button auth-submit" type="submit" id="rebooking-submit">Confirmer le report et créer le nouveau billet</button>
+      </form>
+    </dialog>
     <dialog class="auth-dialog" id="boarding-policy-dialog">
       <form class="auth-form" id="boarding-policy-form">
         <button class="dialog-close" id="boarding-policy-close" type="button" aria-label="Fermer">×</button>
