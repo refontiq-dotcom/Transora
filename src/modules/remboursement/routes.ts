@@ -168,7 +168,7 @@ router.patch("/:id/approve", managers, [param("id").isUUID()], validate,
         return res.json({ success: true, data: pending.rows[0], message: "Approuvé. Le paiement en ligne reste en attente : aucun remboursement n'est déclaré effectué sans confirmation du prestataire." });
       }
       const session = await client.query(
-        `SELECT id FROM guichet_sessions WHERE tenant_id=$1 AND opened_by=$2 AND status='OPEN' FOR UPDATE`,
+        `SELECT id FROM guichet_sessions WHERE tenant_id=$1 AND status='OPEN' ORDER BY opened_at DESC LIMIT 1 FOR UPDATE`,
         [req.tenantId, req.user.id]
       );
       if (!session.rowCount) {
