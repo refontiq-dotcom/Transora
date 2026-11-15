@@ -26,7 +26,7 @@ const encryptionKey = (): Buffer => {
   return key;
 };
 
-const encryptCredentials = (credentials: Record<string, unknown>) => {
+export const encryptPaymentCredentials = (credentials: Record<string, unknown>): Buffer => {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const plaintext = Buffer.from(JSON.stringify(credentials), "utf8");
@@ -87,7 +87,7 @@ router.put("/", adminOnly, [
   }
 
   try {
-    const encrypted = credentials === undefined ? null : encryptCredentials(credentials as Record<string, unknown>);
+    const encrypted = credentials === undefined ? null : encryptPaymentCredentials(credentials as Record<string, unknown>);
     const result = await pool.query(
       `INSERT INTO tenant_payment_settings
          (tenant_id, provider, environment, merchant_account_ref, enabled, allowed_methods,
