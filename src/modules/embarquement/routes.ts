@@ -24,11 +24,29 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 d.status AS "statutDepart", t.name AS "compagnie",
                 COALESCE(p.status, 'NOT_INITIATED') AS "statutPaiement",
                 be.boarded_at AS "embarqueLe",
+                EXISTS (
+                  SELECT 1 FROM bookings previous
+                  JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
+                  LEFT JOIN alighting_events previous_alighting ON previous_alighting.booking_id = previous.id AND previous_alighting.tenant_id = previous.tenant_id
+                  WHERE previous.tenant_id = b.tenant_id AND previous.departure_id = b.departure_id
+                    AND previous.seat_number = b.seat_number
+                    AND upper(previous.segment_range) <= lower(b.segment_range)
+                    AND previous_alighting.id IS NULL
+                ) AS "seatBlockedByPreviousPassenger",
                 (b.status = 'PAID' AND p.status = 'CONFIRMED'
                   AND b.status <> 'CANCELLED' AND d.status <> 'CANCELLED'
                   AND d.status = 'BOARDING'
                   AND d.departure_at > NOW() - INTERVAL '2 hours'
-                  AND be.id IS NULL) AS "peutEmbarquer"
+                  AND be.id IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM bookings previous
+                    JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
+                    LEFT JOIN alighting_events previous_alighting ON previous_alighting.booking_id = previous.id AND previous_alighting.tenant_id = previous.tenant_id
+                    WHERE previous.tenant_id = b.tenant_id AND previous.departure_id = b.departure_id
+                      AND previous.seat_number = b.seat_number
+                      AND upper(previous.segment_range) <= lower(b.segment_range)
+                      AND previous_alighting.id IS NULL
+                  )) AS "peutEmbarquer"
          FROM bookings b
          JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
          JOIN tenants t ON t.id = b.tenant_id
@@ -42,6 +60,7 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
       const motif = ticket.embarqueLe ? "Ce billet a déjà été utilisé."
         : ticket.statutReservation !== "PAID" || ticket.statutPaiement !== "CONFIRMED" ? "Le règlement de ce billet n'est pas confirmé."
         : ticket.statutDepart === "CANCELLED" ? "Ce départ a été annulé."
+        : ticket.seatBlockedByPreviousPassenger ? "Le passager précédent n’a pas encore été confirmé comme descendu de ce siège."
         : ticket.statutDepart !== "BOARDING" ? "L’embarquement n’est pas encore ouvert."
         : new Date(ticket.departLe).getTime() <= Date.now() - 2 * 60 * 60 * 1000 ? "L'heure de départ est dépassée."
         : null;
@@ -61,7 +80,16 @@ router.post("/valider", controllerRoles, [
     await client.query("BEGIN");
     const result = await client.query(
       `SELECT b.id, b.status AS booking_status, d.id AS departure_id,
-              d.status AS departure_status, d.departure_at,
+              d.status AS departure_status, d.departure_at, b.seat_number,
+              EXISTS (
+                SELECT 1 FROM bookings previous
+                JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
+                LEFT JOIN alighting_events previous_alighting ON previous_alighting.booking_id = previous.id AND previous_alighting.tenant_id = previous.tenant_id
+                WHERE previous.tenant_id = b.tenant_id AND previous.departure_id = b.departure_id
+                  AND previous.seat_number = b.seat_number
+                  AND upper(previous.segment_range) <= lower(b.segment_range)
+                  AND previous_alighting.id IS NULL
+              ) AS seat_blocked,
               p.status AS payment_status
        FROM bookings b
        JOIN departures d ON d.id = b.departure_id AND d.tenant_id = b.tenant_id
@@ -75,6 +103,10 @@ router.post("/valider", controllerRoles, [
     if (ticket.booking_status !== "PAID" || ticket.payment_status !== "CONFIRMED") {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, message: "Embarquement refusé : paiement non confirmé" });
+    }
+    if (ticket.seat_blocked) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, message: "Embarquement refusé : le passager précédent n’a pas encore été confirmé comme descendu de ce siège." });
     }
     if (ticket.departure_status !== "BOARDING") {
       await client.query("ROLLBACK");
