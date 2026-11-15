@@ -565,6 +565,12 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
 
 
 /* Service courrier */
+.stop-operation-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
+.stop-operation-row:last-child { border-bottom:0; }
+.stop-operation-row strong { display:block; color:var(--ink); font-size:13px; }
+.stop-operation-row p { margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.5; }
+.stop-operation-row .secondary-button { flex:0 0 auto; }
+@media (max-width:640px) { .stop-operation-row { align-items:flex-start; flex-direction:column; } .stop-operation-row .secondary-button { width:100%; } }
 .courier-page { display: grid; gap: 18px; }
 .courier-page[hidden], .courier-form[hidden], #courier-login-message[hidden], #courier-empty[hidden], #courier-tariff-empty[hidden], #courier-tracking-result[hidden] { display: none; }
 .courier-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 16px; }
