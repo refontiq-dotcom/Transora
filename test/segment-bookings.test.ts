@@ -49,11 +49,12 @@ beforeAll(async () => {
     "INSERT INTO transport_routes (tenant_id,name,origin_station_id,destination_station_id) VALUES ($1,'Ligne segment test',$2,$3) RETURNING id",
     [tenantId, stations.rows[0].id, stations.rows[2].id]
   );
-  const stops = await pool.query(
+  await pool.query(
     `INSERT INTO route_stops (tenant_id,route_id,station_id,stop_order,distance_from_origin_km,duration_from_origin_minutes)
-     VALUES ($1,$2,$3,0,0,0),($1,$2,$4,1,150,120),($1,$2,$5,2,300,240) RETURNING id,stop_order`,
+     VALUES ($1,$2,$3,0,0,0),($1,$2,$4,1,150,120),($1,$2,$5,2,300,240)`,
     [tenantId, route.rows[0].id, stations.rows[0].id, stations.rows[1].id, stations.rows[2].id]
   );
+  const stops = await pool.query("SELECT id, stop_order FROM route_stops WHERE tenant_id=$1 AND route_id=$2 ORDER BY stop_order", [tenantId, route.rows[0].id]);
   originStopId = stops.rows[0].id;
   middleStopId = stops.rows[1].id;
   destinationStopId = stops.rows[2].id;
