@@ -51,14 +51,14 @@ ALTER TABLE departures
   ADD COLUMN IF NOT EXISTS actual_departed_at TIMESTAMPTZ;
 
 CREATE OR REPLACE FUNCTION stamp_departure_actual_departure()
-RETURNS TRIGGER LANGUAGE plpgsql AS $
+RETURNS TRIGGER LANGUAGE plpgsql AS $fn$
 BEGIN
   IF NEW.status = 'DEPARTED' AND NEW.actual_departed_at IS NULL THEN
     NEW.actual_departed_at := NOW();
   END IF;
   RETURN NEW;
 END;
-$;
+$fn$;
 
 DROP TRIGGER IF EXISTS departures_stamp_actual_departure_insert ON departures;
 CREATE TRIGGER departures_stamp_actual_departure_insert
