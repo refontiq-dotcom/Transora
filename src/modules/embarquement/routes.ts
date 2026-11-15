@@ -25,8 +25,11 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 COALESCE(rs.stop_order, 0) AS "stopOrder",
                 COALESCE(p.status, 'NOT_INITIATED') AS "statutPaiement",
                 be.boarded_at AS "embarqueLe",
-                (NOW() >= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
-                 AND NOW() <= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute') AS "boardingWindowOpen",
+                ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                  AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+                 OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                  AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                  AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute')) AS "boardingWindowOpen",
                 EXISTS (
                   SELECT 1 FROM bookings previous
                   JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
@@ -38,10 +41,11 @@ router.get("/scan/:billetId", controllerRoles, [param("billetId").isUUID()], val
                 ) AS "seatBlockedByPreviousPassenger",
                 (b.status = 'PAID' AND p.status = 'CONFIRMED'
                   AND b.status <> 'CANCELLED' AND d.status <> 'CANCELLED'
-                  AND ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING')
-                    OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL))
-                  AND NOW() >= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
-                  AND NOW() <= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute'
+                  AND ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                    AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+                    OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                    AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                    AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute'))
                   AND be.id IS NULL
                   AND NOT EXISTS (
                     SELECT 1 FROM bookings previous
@@ -92,8 +96,11 @@ router.post("/valider", controllerRoles, [
               COALESCE(rs.stop_order, 0) AS stop_order,
               sae.arrived_at AS actual_arrival_at,
               b.boarding_policy_snapshot,
-              (NOW() >= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
-               AND NOW() <= COALESCE(sae.arrived_at, d.departure_at + COALESCE(rs.duration_from_origin_minutes, 0) * INTERVAL '1 minute') + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute') AS boarding_window_open,
+              ((COALESCE(rs.stop_order, 0) = 0 AND d.status = 'BOARDING'
+                AND NOW() >= d.departure_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute')
+               OR (COALESCE(rs.stop_order, 0) > 0 AND d.status IN ('DEPARTED', 'IN_TRANSIT') AND sae.id IS NOT NULL
+                AND NOW() >= sae.arrived_at - COALESCE((b.boarding_policy_snapshot->>'boardingOpenMinutesBefore')::int, 60) * INTERVAL '1 minute'
+                AND NOW() <= sae.arrived_at + COALESCE((b.boarding_policy_snapshot->>'gracePeriodMinutes')::int, 15) * INTERVAL '1 minute')) AS boarding_window_open,
               EXISTS (
                 SELECT 1 FROM bookings previous
                 JOIN boarding_events previous_boarding ON previous_boarding.booking_id = previous.id AND previous_boarding.tenant_id = previous.tenant_id
