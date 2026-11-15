@@ -629,7 +629,7 @@
         <div class="content" id="stop-operations-page" hidden>
           <section class="page-heading">
             <div><p class="eyebrow">CONTRÔLE À CHAQUE ARRÊT</p><h1>Suivi des montées et descentes</h1><p class="subheading">Préparez l'arrivée à chaque gare, confirmez les descentes réelles et vérifiez les passagers qui doivent monter.</p></div>
-            <button class="secondary-button" id="stop-operations-refresh" type="button">Actualiser</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary-button" id="boarding-policy-open" type="button">Politique de la compagnie</button><button class="secondary-button" id="stop-operations-refresh" type="button">Actualiser</button></div>
           </section>
           <section class="panel" style="padding:22px;display:grid;gap:14px">
             <div class="auth-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
@@ -644,6 +644,9 @@
             <article class="voyage-summary-card"><span>Passagers attendus à la montée</span><strong id="stop-expected-boardings">—</strong></article>
             <article class="voyage-summary-card"><span>Sièges bloqués en attente de descente</span><strong id="stop-blocked-seats">—</strong></article>
             <article class="voyage-summary-card"><span>Sièges libérés à cet arrêt</span><strong id="stop-released-seats">—</strong></article>
+            <article class="voyage-summary-card"><span>Passagers présents</span><strong id="stop-manifest-present">—</strong></article>
+            <article class="voyage-summary-card"><span>Passagers encore attendus</span><strong id="stop-manifest-expected">—</strong></article>
+            <article class="voyage-summary-card"><span>Absences confirmées</span><strong id="stop-manifest-absent">—</strong></article>
           </section>
           <section class="panel" style="padding:22px">
             <div class="panel-heading"><div><h2>Passagers qui doivent descendre</h2><p>La place n'est considérée comme libérée qu'après confirmation réelle.</p></div></div>
@@ -769,6 +772,24 @@
         <label>Référence ou preuve de règlement<input name="preuvePaiement" required maxlength="500" placeholder="Ex. numéro de reçu ou référence de transaction"></label>
         <p class="payment-proof-note">La confirmation marque la réservation comme payée. Vérifiez le règlement avant de confirmer.</p>
         <button class="primary-button auth-submit" type="submit" id="payment-submit">Confirmer le paiement</button>
+      </form>
+    </dialog>
+    <dialog class="auth-dialog" id="boarding-policy-dialog">
+      <form class="auth-form" id="boarding-policy-form">
+        <button class="dialog-close" id="boarding-policy-close" type="button" aria-label="Fermer">×</button>
+        <p class="eyebrow">RÈGLES DE LA COMPAGNIE</p>
+        <h2>Politique d’embarquement</h2>
+        <p class="auth-description">Ces règles s’appliquent aux nouvelles réservations. Les billets déjà créés conservent la version acceptée au moment de l’achat.</p>
+        <label>Ouverture de l’embarquement (minutes avant le départ)<input name="boardingOpenMinutesBefore" type="number" min="0" max="360" required></label>
+        <label>Délai limite indicatif (minutes avant le départ)<input name="boardingDeadlineMinutesBefore" type="number" min="0" max="60" required></label>
+        <label>Délai de grâce après l’heure prévue (minutes)<input name="gracePeriodMinutes" type="number" min="0" max="180" required></label>
+        <label class="checkbox-line"><input name="allowRebookingAfterNoShow" type="checkbox"> Autoriser un report après une absence confirmée</label>
+        <label>Nombre maximal de reports<input name="maxRebookings" type="number" min="0" max="5" required></label>
+        <label>Frais de report (FCFA)<input name="rebookingFeeAmount" type="number" min="0" max="1000000" required></label>
+        <label>Règle de remboursement après absence<select name="refundPolicy" required><option value="NONE">Aucun remboursement</option><option value="PARTIAL">Remboursement partiel</option><option value="FULL">Remboursement intégral</option></select></label>
+        <label>Pourcentage remboursé<input name="refundPercentage" type="number" min="0" max="100" required></label>
+        <label class="checkbox-line"><input name="autoFindNextDeparture" type="checkbox"> Rechercher automatiquement des départs compatibles à proposer</label>
+        <button class="primary-button auth-submit" type="submit" id="boarding-policy-save">Enregistrer la politique</button>
       </form>
     </dialog>
     <dialog class="auth-dialog scanner-dialog" id="scanner-dialog">
