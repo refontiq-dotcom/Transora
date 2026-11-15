@@ -75,7 +75,7 @@ beforeAll(async () => {
   );
   const departure = await pool.query(
     `INSERT INTO departures (tenant_id,origin,destination,departure_at,vehicle_code,capacity,fare_amount,company_booking_fee,route_id)
-     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '2 days','SEG-TEST',2,10000,300,$2) RETURNING id`,
+     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '30 minutes','SEG-TEST',2,10000,300,$2) RETURNING id`,
     [tenantId, route.rows[0].id]
   );
   departureId = departure.rows[0].id;
