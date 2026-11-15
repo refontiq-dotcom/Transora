@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { decryptPaymentCredentials, encryptPaymentCredentials } from "../src/modules/paiement/settings.routes";
 
 const previousKey = process.env.PAYMENT_CREDENTIALS_ENCRYPTION_KEY;
-const testKey = Buffer.from("transora-payment-encryption-key-32").toString("base64");
+const testKey = Buffer.alloc(32, "k").toString("base64");
 
 afterEach(() => {
   if (previousKey === undefined) delete process.env.PAYMENT_CREDENTIALS_ENCRYPTION_KEY;
