@@ -142,7 +142,7 @@ test("un segment dont les arrêts sont inversés est refusé", async () => {
 
 
 test("une réservation publique bloque temporairement un siège puis le libère à expiration", async () => {
-  const createHold = async () => fetch(`\u0024{baseUrl}/api/public/\u0024{publicCode}/reservations`, {
+  const createHold = async () => fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -179,7 +179,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
 });
 
 test("un paiement ne peut pas confirmer un hold expiré", async () => {
-  const response = await fetch(`\u0024{baseUrl}/api/public/\u0024{publicCode}/reservations`, {
+  const response = await fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -193,9 +193,9 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
   expect(response.status).toBe(201);
   const hold = await response.json() as { data: { bookingId: string } };
 
-  const init = await fetch(`\u0024{baseUrl}/api/v1/paiements/init`, {
+  const init = await fetch(`${baseUrl}/api/v1/paiements/init`, {
     method: "POST",
-    headers: { Authorization: `Bearer \u0024{token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ billetId: hold.data.bookingId, moyenPaiement: "mobile_money" })
   });
   expect(init.status).toBe(201);
@@ -206,9 +206,9 @@ test("un paiement ne peut pas confirmer un hold expiré", async () => {
     [hold.data.bookingId, tenantId]
   );
 
-  const confirmation = await fetch(`\u0024{baseUrl}/api/v1/paiements/confirm`, {
+  const confirmation = await fetch(`${baseUrl}/api/v1/paiements/confirm`, {
     method: "POST",
-    headers: { Authorization: `Bearer \u0024{token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ transactionId: payment.data.transactionId, preuvePaiement: "TEST-PROOF" })
   });
   expect(confirmation.status).toBe(409);
