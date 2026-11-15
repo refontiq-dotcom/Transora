@@ -33,6 +33,8 @@ let scannerAnimationFrame;
 let scannerDetector;
 let scannerLastFrameAt = 0;
 let scannerDetecting = false;
+let activeRebookingBookingId = null;
+let activeRebookingFeeAmount = 0;
 
 localStorage.removeItem("transora_token");
 let accessToken = null;
@@ -2495,9 +2497,10 @@ function renderStopOperations(data, manifest) {
             headers: { Authorization: "Bearer " + accessToken }
           });
           const alternativesResult = await alternativesResponse.json();
-          const count = alternativesResponse.ok ? (alternativesResult.data?.alternatives?.length || 0) : 0;
-          showToast("Absence confirmée. " + (count ? count + " départ(s) compatible(s) peuvent être proposés. Aucun transfert automatique n’a été effectué." : "Aucun départ alternatif disponible pour le moment."));
+          const alternatives = alternativesResponse.ok ? (alternativesResult.data?.alternatives || []) : [];
+          showToast("Absence confirmée. " + (alternatives.length ? alternatives.length + " départ(s) compatible(s) trouvé(s)." : "Aucun départ alternatif disponible pour le moment."));
           await loadStopOperations();
+          if (alternatives.length) openRebookingDialog(passenger.bookingId, alternativesResult.data);
         } catch (error) {
           showToast(error.message || "Erreur de confirmation.");
           button.disabled = false;
@@ -2506,6 +2509,56 @@ function renderStopOperations(data, manifest) {
     }
   });
 }
+
+function openRebookingDialog(bookingId, data) {
+  activeRebookingBookingId = bookingId;
+  activeRebookingFeeAmount = Number(data.rebookingFeeAmount || 0);
+  const form = document.querySelector("#rebooking-form");
+  const select = form.elements.targetDepartureId;
+  select.replaceChildren();
+  data.alternatives.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.departureId;
+    option.textContent = new Date(item.departureAt).toLocaleString("fr-FR") + " · " + item.origin + " → " + item.destination + " · " + item.vehicleCode + " · siège " + item.suggestedSeat;
+    select.append(option);
+  });
+  const feeWrap = document.querySelector("#rebooking-fee-wrap");
+  feeWrap.hidden = activeRebookingFeeAmount <= 0;
+  form.elements.feeReceipt.required = activeRebookingFeeAmount > 0;
+  document.querySelector("#rebooking-description").textContent =
+    "Le voyageur doit accepter le nouveau départ. " +
+    (activeRebookingFeeAmount > 0 ? "Frais de report : " + formatFcfa(activeRebookingFeeAmount) + ". Encaissement en espèces via une caisse ouverte obligatoire." : "Aucun frais de report prévu pour ce billet.") +
+    " Le tarif du nouveau trajet doit rester identique; sinon le report est bloqué pour éviter toute modification de prix non consentie.";
+  document.querySelector("#rebooking-dialog").showModal();
+}
+
+document.querySelector("#rebooking-close").addEventListener("click", () => document.querySelector("#rebooking-dialog").close());
+document.querySelector("#rebooking-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!activeRebookingBookingId) return;
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  values.passengerConsent = form.elements.passengerConsent.checked;
+  const submit = document.querySelector("#rebooking-submit");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/embarquement/rebook/" + encodeURIComponent(activeRebookingBookingId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify(values)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Le report n’a pas pu être confirmé.");
+    document.querySelector("#rebooking-dialog").close();
+    showToast("Report confirmé. L’ancien QR code est invalidé; imprimez ou transmettez le nouveau billet.");
+    const bookingId = activeRebookingBookingId;
+    activeRebookingBookingId = null;
+    await loadStopOperations();
+    openTicket(bookingId);
+  } catch (error) {
+    showToast(error.message || "Erreur pendant le report.");
+  } finally { submit.disabled = false; }
+});
 
 async function loadBoardingPolicy() {
   if (!accessToken) { showToast("Connectez-vous pour consulter la politique."); return; }
