@@ -7,7 +7,9 @@ import type { AddressInfo } from "node:net";
 let server: ReturnType<typeof app.listen>;
 let baseUrl: string;
 let tenantId: string;
+let publicCode: string;
 let departureId: string;
+let holdDepartureId: string;
 let originStopId: string;
 let middleStopId: string;
 let destinationStopId: string;
@@ -23,8 +25,9 @@ beforeAll(async () => {
   });
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-  const tenant = await pool.query("INSERT INTO tenants (name) VALUES ('Segment Booking Test') RETURNING id");
+  const tenant = await pool.query("INSERT INTO tenants (name) VALUES ('Segment Booking Test') RETURNING id, public_code");
   tenantId = tenant.rows[0].id;
+  publicCode = tenant.rows[0].public_code;
   const user = await pool.query(
     `INSERT INTO users (tenant_id, name, email, password_hash, role)
      VALUES ($1, 'Segment Agent', $2, 'test-hash', 'administrateur') RETURNING id`,
@@ -72,6 +75,12 @@ beforeAll(async () => {
     [tenantId, route.rows[0].id]
   );
   departureId = departure.rows[0].id;
+  const holdDeparture = await pool.query(
+    `INSERT INTO departures (tenant_id,origin,destination,departure_at,vehicle_code,capacity,fare_amount,company_booking_fee,route_id)
+     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '3 days','HOLD-TEST',2,10000,300,$2) RETURNING id`,
+    [tenantId, route.rows[0].id]
+  );
+  holdDepartureId = holdDeparture.rows[0].id;
 });
 
 afterAll(async () => {
@@ -129,4 +138,86 @@ test("un départ lié à une ligne refuse une réservation sans gares de segment
 test("un segment dont les arrêts sont inversés est refusé", async () => {
   const invalid = await book(destinationStopId, originStopId, "Ordre invalide");
   expect(invalid.response.status).toBe(400);
+});
+
+
+test("une réservation publique bloque temporairement un siège puis le libère à expiration", async () => {
+  const createHold = async () => fetch(`\u0024{baseUrl}/api/public/\u0024{publicCode}/reservations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      departureId: holdDepartureId,
+      passengerName: "Client temporaire",
+      passengerPhone: "+2250700000000",
+      originStopId,
+      destinationStopId,
+      amountTransport: 1
+    })
+  });
+
+  const firstResponse = await createHold();
+  expect(firstResponse.status).toBe(201);
+  const first = await firstResponse.json() as { data: { bookingId: string; seatNumber: number; transportAmount: number; bookingStatus: string; holdExpiresAt: string | null } };
+  expect(first.data.bookingStatus).toBe("HELD");
+  expect(first.data.seatNumber).toBe(1);
+  expect(first.data.transportAmount).toBe(10000);
+  expect(first.data.holdExpiresAt).toBeTruthy();
+
+  await pool.query(
+    "UPDATE bookings SET hold_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1 AND tenant_id=$2",
+    [first.data.bookingId, tenantId]
+  );
+
+  const secondResponse = await createHold();
+  expect(secondResponse.status).toBe(201);
+  const second = await secondResponse.json() as { data: { bookingId: string; seatNumber: number; bookingStatus: string } };
+  expect(second.data.seatNumber).toBe(1);
+  expect(second.data.bookingStatus).toBe("HELD");
+
+  const expired = await pool.query("SELECT status FROM bookings WHERE id=$1", [first.data.bookingId]);
+  expect(expired.rows[0].status).toBe("EXPIRED");
+});
+
+test("un paiement ne peut pas confirmer un hold expiré", async () => {
+  const response = await fetch(`\u0024{baseUrl}/api/public/\u0024{publicCode}/reservations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      departureId: holdDepartureId,
+      passengerName: "Client paiement expiré",
+      passengerPhone: "+2250700000001",
+      originStopId,
+      destinationStopId
+    })
+  });
+  expect(response.status).toBe(201);
+  const hold = await response.json() as { data: { bookingId: string } };
+
+  const init = await fetch(`\u0024{baseUrl}/api/v1/paiements/init`, {
+    method: "POST",
+    headers: { Authorization: `Bearer \u0024{token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ billetId: hold.data.bookingId, moyenPaiement: "mobile_money" })
+  });
+  expect(init.status).toBe(201);
+  const payment = await init.json() as { data: { transactionId: string } };
+
+  await pool.query(
+    "UPDATE bookings SET hold_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1 AND tenant_id=$2",
+    [hold.data.bookingId, tenantId]
+  );
+
+  const confirmation = await fetch(`\u0024{baseUrl}/api/v1/paiements/confirm`, {
+    method: "POST",
+    headers: { Authorization: `Bearer \u0024{token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ transactionId: payment.data.transactionId, preuvePaiement: "TEST-PROOF" })
+  });
+  expect(confirmation.status).toBe(409);
+
+  const state = await pool.query(
+    `SELECT b.status AS booking_status, p.status AS payment_status
+     FROM bookings b JOIN payments p ON p.booking_id=b.id
+     WHERE b.id=$1 AND b.tenant_id=$2`,
+    [hold.data.bookingId, tenantId]
+  );
+  expect(state.rows[0]).toEqual({ booking_status: "EXPIRED", payment_status: "CANCELLED" });
 });
