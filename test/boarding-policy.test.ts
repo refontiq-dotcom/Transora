@@ -105,14 +105,31 @@ afterAll(async () => {
 
 const headers = () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
 
-test("la vente au guichet exige la confirmation de présentation et d’acceptation des conditions", async () => {
+test("un client présent au guichet achète son billet sans acceptation distante redondante", async () => {
+  await pool.query(
+    `INSERT INTO guichet_sessions (tenant_id, opened_by, opening_amount)
+     VALUES ($1, $2, 0)`,
+    [tenantId, userId]
+  );
+  const departure = await pool.query(
+    `INSERT INTO departures (tenant_id, origin, destination, departure_at, vehicle_code, capacity, fare_amount, status)
+     VALUES ($1, 'Ville Guichet A', 'Ville Guichet B', NOW() + INTERVAL '2 hours', 'BUS-GUICHET', 10, 5000, 'SCHEDULED')
+     RETURNING id`,
+    [tenantId]
+  );
   const response = await fetch(`${baseUrl}/api/v1/guichet/vente`, {
     method: "POST", headers: headers(),
-    body: JSON.stringify({ departureId: "00000000-0000-0000-0000-000000000001", passengerName: "Client Test" })
+    body: JSON.stringify({ departureId: departure.rows[0].id, passengerName: "Client Présent" })
   });
-  expect(response.status).toBe(400);
-  const result = await response.json() as { errors: Array<{ path?: string; param?: string }> };
-  expect(result.errors.some(error => error.path === "policyAccepted" || error.param === "policyAccepted")).toBe(true);
+  expect(response.status).toBe(201);
+  const result = await response.json() as { data: { id: string } };
+  const booking = await pool.query(
+    "SELECT boarding_policy_snapshot, boarding_policy_accepted_at, boarding_policy_accepted_by FROM bookings WHERE id=$1 AND tenant_id=$2",
+    [result.data.id, tenantId]
+  );
+  expect(booking.rows[0].boarding_policy_snapshot).toBeTruthy();
+  expect(booking.rows[0].boarding_policy_accepted_at).toBeNull();
+  expect(booking.rows[0].boarding_policy_accepted_by).toBeNull();
 });
 
 test("la compagnie configure sa politique et les billets conservent leur version", async () => {
