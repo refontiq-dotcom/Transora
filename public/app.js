@@ -2406,6 +2406,34 @@ async function updateDepartureStatus(departureId, nextStatus) {
   } catch (error) { showToast(error.message || "Erreur de mise à jour du départ."); }
 }
 
+function populateBookingStops(departure) {
+  const originWrap = document.querySelector("#booking-origin-wrap");
+  const destinationWrap = document.querySelector("#booking-destination-wrap");
+  const originSelect = document.querySelector("#booking-origin-stop");
+  const destinationSelect = document.querySelector("#booking-destination-stop");
+  const stops = Array.isArray(departure.routeStops) ? departure.routeStops : [];
+  const hasStops = stops.length >= 2;
+  originWrap.hidden = !hasStops;
+  destinationWrap.hidden = !hasStops;
+  if (hasStops) {
+    const options = stops.map(stop => {
+      const option = document.createElement("option");
+      option.value = stop.id;
+      option.textContent = stop.city === stop.station ? stop.city : `${stop.city} · ${stop.station}`;
+      return option;
+    });
+    originSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.replaceChildren(...options.map(option => option.cloneNode(true)));
+    destinationSelect.selectedIndex = 1;
+  } else {
+    originSelect.replaceChildren();
+    destinationSelect.replaceChildren();
+  }
+  document.querySelector("#booking-fare").textContent = hasStops
+    ? "Le tarif du segment sera appliqué automatiquement selon le barème de votre compagnie. Le siège est attribué selon les portions déjà réservées."
+    : `Transport : ${formatFcfa(departure.fareAmount || 0)} · Frais compagnie : ${formatFcfa(departure.companyBookingFee || 0)} · Frais TRANSORA : 100 FCFA · Siège attribué automatiquement`;
+}
+
 document.querySelector("#voyage-rows").addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-departure-id]");
   if (!button || button.disabled) return;
@@ -2438,7 +2466,7 @@ document.querySelector("#voyage-rows").addEventListener("click", async (event) =
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(selectedDeparture.departureAt))}`;
-  document.querySelector("#booking-fare").textContent = `Transport : ${formatFcfa(selectedDeparture.fareAmount || 0)} · Frais compagnie : ${formatFcfa(selectedDeparture.companyBookingFee || 0)} · Frais TRANSORA : 100 FCFA · Siège attribué automatiquement`;
+  populateBookingStops(selectedDeparture);
   document.querySelector("#booking-dialog").showModal();
 });
 
@@ -2504,7 +2532,9 @@ document.querySelector("#booking-form").addEventListener("submit", async (event)
         Authorization: `Bearer ${accessToken}`
       },
       body: JSON.stringify({
-        passengerName: values.passengerName
+        passengerName: values.passengerName,
+        ...(values.originStopId ? { originStopId: values.originStopId } : {}),
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
       })
     });
     const result = await response.json();
