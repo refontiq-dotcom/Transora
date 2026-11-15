@@ -241,6 +241,26 @@ test("une réservation publique bloque temporairement un siège puis le libère 
   expect(first.data.transportAmount).toBe(10000);
   expect(first.data.holdExpiresAt).toBeTruthy();
 
+  const departureDate = await pool.query(
+    "SELECT departure_at::date::text AS selected_date FROM departures WHERE id=$1 AND tenant_id=$2",
+    [holdDepartureId, tenantId]
+  );
+  const headers = { Authorization: `Bearer ${token}` };
+  const dashboardResponse = await fetch(
+    `${baseUrl}/api/v1/dashboard?date=${departureDate.rows[0].selected_date}`,
+    { headers }
+  );
+  expect(dashboardResponse.status).toBe(200);
+  const dashboard = await dashboardResponse.json() as { data: { metrics: { reservedSeatsToday: number } } };
+  expect(dashboard.data.metrics.reservedSeatsToday).toBeGreaterThanOrEqual(1);
+
+  const paymentListResponse = await fetch(`${baseUrl}/api/v1/paiements`, { headers });
+  expect(paymentListResponse.status).toBe(200);
+  const paymentList = await paymentListResponse.json() as { data: { paiements: Array<{ billetId: string; statut: string; statutRéservation: string }> } };
+  expect(paymentList.data.paiements).toEqual(expect.arrayContaining([
+    expect.objectContaining({ billetId: first.data.bookingId, statut: "NOT_INITIATED", statutRéservation: "HELD" })
+  ]));
+
   const duplicateSeatResponse = await createHold();
   expect(duplicateSeatResponse.status).toBe(409);
 
