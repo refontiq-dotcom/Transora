@@ -590,8 +590,10 @@ test("booking tickets, public reservations, cash desk and boarding stay isolated
       body: JSON.stringify({ departureId: publicDepartureId, passengerName: "Client Web", passengerPhone: "+2250700000000" })
     });
     expect(publicBooking.status).toBe(201);
-    const publicBody = await publicBooking.json() as { data: { ticketToken: string; qrCode: string; paymentStatus: string } };
-    expect(publicBody.data.qrCode).toMatch(/^data:image\/png;base64,/);
+    const publicBody = await publicBooking.json() as { data: { ticketToken: string; qrCode: string | null; paymentStatus: string; bookingStatus: string; holdExpiresAt: string } };
+    expect(publicBody.data.qrCode).toBeNull();
+    expect(publicBody.data.bookingStatus).toBe("HELD");
+    expect(new Date(publicBody.data.holdExpiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(publicBody.data.paymentStatus).toBe("NOT_INITIATED");
 
     const publicTicket = await fetch(`${baseUrl}/api/public/${publicCodeA}/ticket/${publicBody.data.ticketToken}`);

@@ -118,7 +118,7 @@ router.post("/vente", cashDeskRoles, [
     const selectedSegment = segment.data;
     if (Number(trip.fare_amount) <= 0) { await client.query("ROLLBACK"); return res.status(409).json({ success: false, message: "Définissez le tarif de ce départ avant la vente" }); }
     const taken = await client.query(
-      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status <> 'CANCELLED' AND segment_range && $3::int4range",
+      "SELECT seat_number FROM bookings WHERE departure_id = $1 AND tenant_id = $2 AND status NOT IN ('CANCELLED', 'EXPIRED') AND (status <> 'HELD' OR hold_expires_at > NOW()) AND segment_range && $3::int4range",
       [trip.id, req.tenantId, selectedSegment.segmentRange]
     );
     if (Number(taken.rowCount ?? 0) >= Number(trip.capacity)) {

@@ -41,7 +41,7 @@ router.get("/availability", [
     }
 
     const occupied = await pool.query(
-      "SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status <> 'CANCELLED' AND seat_number IS NOT NULL AND segment_range && $3::int4range",
+      "SELECT seat_number FROM bookings WHERE departure_id=$1 AND tenant_id=$2 AND status NOT IN ('CANCELLED', 'EXPIRED') AND (status <> 'HELD' OR hold_expires_at > NOW()) AND seat_number IS NOT NULL AND segment_range && $3::int4range",
       [req.query.trajetId, req.tenantId, segmentRange]
     );
     const taken = new Set(occupied.rows.map((row: { seat_number: number }) => Number(row.seat_number)));
@@ -66,7 +66,7 @@ router.post("/réserver", assignSeat, [
     const booking = await client.query(
       `SELECT b.id, b.departure_id, d.capacity
        FROM bookings b JOIN departures d ON d.id=b.departure_id AND d.tenant_id=b.tenant_id
-       WHERE b.id=$1 AND b.tenant_id=$2 AND b.status <> 'CANCELLED'
+       WHERE b.id=$1 AND b.tenant_id=$2 AND b.status NOT IN ('CANCELLED', 'EXPIRED') AND (b.status <> 'HELD' OR b.hold_expires_at > NOW())
        FOR UPDATE OF d,b`,
       [req.body.billetId, req.tenantId]
     );
