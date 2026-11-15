@@ -158,6 +158,11 @@ BEGIN
   END IF;
 END $$;
 
+ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_seat_segment_no_overlap;
+ALTER TABLE bookings ADD CONSTRAINT bookings_seat_segment_no_overlap
+  EXCLUDE USING gist (departure_id WITH =, seat_number WITH =, segment_range WITH &&)
+  WHERE (status <> ALL (ARRAY['CANCELLED'::text, 'EXPIRED'::text, 'NO_SHOW'::text]));
+
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_boarding_status_check;
 ALTER TABLE bookings ADD CONSTRAINT bookings_boarding_status_check
   CHECK (boarding_status = ANY (ARRAY['EXPECTED'::text, 'BOARDED'::text, 'OFFBOARDED'::text, 'NO_SHOW'::text]));
