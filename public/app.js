@@ -8,6 +8,32 @@ const authForm = document.querySelector("#auth-form");
 const authToggle = document.querySelector("#auth-toggle");
 let isRegistration = false;
 let toastTimer;
+
+function initModuleIllustrations() {
+  const visuals = {
+    "tariffs-page": ["Tarifs", '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 7.5 12 12l8-4.5"/>'],
+    "voyages-page": ["Voyages", '<path d="M4 16.5 5.5 9a2 2 0 0 1 2-1.6h9a2 2 0 0 1 2 1.6l1.5 7.5z"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19M8 11h8"/><circle cx="8" cy="13.5" r=".8"/><circle cx="16" cy="13.5" r=".8"/>'],
+    "fleet-page": ["Flotte", '<path d="m3 8 9-5 9 5-9 5z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/>'],
+    "payments-page": ["Paiements", '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/><path d="m15 14 2 2 3-4"/>'],
+    "reports-page": ["Rapports", '<path d="M4 20V5m0 15h17"/><path d="m7 15 4-4 3 2 5-7"/><path d="M17 6h2v2"/>'],
+    "personnel-page": ["Équipe", '<circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M17 8a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 4"/>'],
+    "courier-page": ["Courrier", '<path d="m3 7 9-4 9 4v10l-9 4-9-4z"/><path d="m3 7 9 4 9-4M12 11v10M7.5 5l9 4"/>'],
+    "stop-operations-page": ["Arrêts", '<path d="M4 19h16M6 16l3-8 3 5 3-9 3 12"/><circle cx="9" cy="8" r="1"/><circle cx="15" cy="4" r="1"/>'],
+    "guichet-page": ["Guichet", '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><path d="m14 17 2 2 3-3"/>']
+  };
+  Object.entries(visuals).forEach(([pageId, [label, paths]]) => {
+    const page = document.getElementById(pageId);
+    const heading = page?.querySelector(".page-heading");
+    if (!heading || heading.querySelector(".module-illustration")) return;
+    const visual = document.createElement("div");
+    visual.className = "module-illustration";
+    visual.setAttribute("aria-hidden", "true");
+    visual.innerHTML = '<span class="module-illustration-glow"></span><svg viewBox="0 0 24 24">' + paths + '</svg><small>' + label + '</small>';
+    heading.insertBefore(visual, heading.children[1] || null);
+  });
+}
+initModuleIllustrations();
+
 let voyageDepartures = [];
 let companyTariffs = [];
 let selectedDeparture;
@@ -73,10 +99,20 @@ window.fetch = async (input, init = {}) => {
 };
 
 function showToast(message) {
-  toast.textContent = message;
+  const text = String(message || "Opération terminée");
+  const isError = /(erreur|impossible|échec|invalide|introuvable|indisponible|refus|déjà)/i.test(text);
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = isError ? "!" : "✓";
+  const copy = document.createElement("span");
+  copy.className = "toast-copy";
+  copy.textContent = text;
+  toast.replaceChildren(icon, copy);
+  toast.classList.toggle("toast-error", isError);
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3200);
+  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3600);
 }
 
 function setTicketImage(selector, source) {
@@ -1601,6 +1637,8 @@ document.querySelector("#tariff-rows").addEventListener("click", async (event) =
 });
 
 function updateGuichetSegmentFields() {
+  const seatInput = document.querySelector("#guichet-seat-number");
+  if (seatInput) seatInput.value = "";
   const departure = document.querySelector("#guichet-departure").selectedOptions[0];
   const originWrap = document.querySelector("#guichet-origin-wrap");
   const destinationWrap = document.querySelector("#guichet-destination-wrap");
@@ -1725,7 +1763,8 @@ document.querySelector("#guichet-sale-form").addEventListener("submit", async (e
         departureId: values.departureId,
         passengerName: values.passengerName,
         ...(values.originStopId ? { originStopId: values.originStopId } : {}),
-        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {}),
+        ...(values.seatNumber ? { seatNumber: Number(values.seatNumber) } : {})
       })
     });
     const result = await response.json();
