@@ -1,14 +1,29 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+import { tmpdir } from "os";
+import { writeFileSync } from "fs";
+import { join } from "path";
 
 export type DatabaseConnectionMode = "application" | "migration";
 
 /**
- * Resolve Supabase CA certificate path for database connections.
- * Uses SUPABASE_DB_CA_CERT_PATH when available (local dev).
- * Throws on migration if no cert path is configured.
+ * Resolve Supabase CA certificate for database connections.
+ * Supports two modes:
+ *   - SUPABASE_DB_CA_CERT (raw PEM content) — used in serverless/Vercel where filesystem writes are ephemeral.
+ *   - SUPABASE_DB_CA_CERT_PATH (file path) — used in local development and migrations.
+ * Returns the absolute file path to be used with pg driver's sslrootcert parameter.
  */
 function resolveCertificatePath(mode: DatabaseConnectionMode): string | undefined {
+  // Priority 1: raw certificate content (Vercel/serverless friendly)
+  const rawCert = process.env.SUPABASE_DB_CA_CERT;
+  if (rawCert && rawCert.trim().length > 0) {
+    const tmpCertPath = join(tmpdir(), `transora-ca-${Date.now()}.crt`);
+    writeFileSync(tmpCertPath, rawCert.trim(), { mode: 0o600 });
+    return tmpCertPath;
+  }
+
+  // Priority 2: certificate file path (local dev / migrations)
   const certPath = process.env.SUPABASE_DB_CA_CERT_PATH;
   if (certPath) {
     const absolute = resolve(certPath);
@@ -21,11 +36,11 @@ function resolveCertificatePath(mode: DatabaseConnectionMode): string | undefine
     return absolute;
   }
 
-  // For migrations, a certificate path is required for remote databases
+  // For migrations without any certificate configured, throw a clear error
   if (mode === "migration") {
     throw new Error(
       "Télécharge le certificat racine dans Supabase > Settings > Database > SSL Configuration, " +
-      "puis définis SUPABASE_DB_CA_CERT_PATH dans .env avant la migration."
+      "puis définis SUPABASE_DB_CA_CERT (contenu brut) ou SUPABASE_DB_CA_CERT_PATH (chemin) avant la migration."
     );
   }
 
