@@ -757,3 +757,54 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
 @media (prefers-reduced-motion: reduce) {
   .module-illustration svg, .module-illustration-glow, .toast-icon { animation: none !important; }
 }
+
+
+/* Paramètres de l'entreprise */
+.settings-page { display: grid; align-content: start; gap: 16px; }
+.settings-panel { padding: 22px; }
+.settings-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; margin-top: 16px; }
+.settings-form label { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.settings-form input, .settings-form select, .settings-booking-link input {
+  width: 100%; min-width: 0; min-height: 43px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink);
+}
+.settings-form button { min-height: 43px; }
+.settings-booking-link { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.settings-booking-link button { flex: 0 0 auto; min-height: 43px; }
+.settings-message { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.settings-payment-warning { margin: 15px 0 0; padding: 12px 14px; border: 1px solid #f0dfbd; border-radius: 9px; background: #fffaf0; color: #77521d; font-size: 12px; line-height: 1.55; }
+.settings-payment-form { grid-template-columns: minmax(160px, .7fr) minmax(0, 1.3fr) auto; }
+.settings-payment-list { display: grid; gap: 9px; margin-top: 16px; }
+.settings-payment-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfa; }
+.settings-payment-item strong { color: var(--ink); font-size: 13px; }
+.settings-payment-item p { grid-column: 1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-payment-status { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #8a5a18; font-size: 11px; font-weight: 700; text-align: right; }
+@media (max-width: 680px) {
+  .settings-panel { padding: 16px; }
+  .settings-form, .settings-payment-form { grid-template-columns: 1fr; }
+  .settings-form button { width: 100%; justify-content: center; }
+  .settings-booking-link { align-items: stretch; flex-direction: column; }
+  .settings-booking-link button { width: 100%; }
+  .settings-payment-item { grid-template-columns: 1fr; }
+  .settings-payment-item p, .settings-payment-status { grid-column: 1; grid-row: auto; text-align: left; }
+}
+
+/* Service courrier : fiches mobiles sans défilement horizontal */
+@media (max-width: 760px) {
+  .courier-page, .courier-page .panel, .courier-page .table-wrap { min-width: 0; max-width: 100%; }
+  .courier-list-panel .table-wrap { overflow: visible; }
+  .courier-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0 10px; }
+  .courier-table thead { display: none; }
+  .courier-table tbody { display: grid; gap: 10px; }
+  .courier-table tbody tr { display: grid; gap: 0; padding: 8px 13px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 3px 12px rgba(16, 48, 27, .045); }
+  .courier-table tbody td { display: grid; grid-template-columns: minmax(94px, .7fr) minmax(0, 1.3fr); align-items: start; gap: 10px; min-width: 0; padding: 9px 0; border-bottom: 1px solid #edf1ed; overflow-wrap: anywhere; white-space: normal; }
+  .courier-table tbody td::before { content: attr(data-label); color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .035em; }
+  .courier-table tbody td:last-child { border-bottom: 0; }
+  .courier-table tbody td.courier-actions { display: grid; grid-template-columns: minmax(94px, .7fr) minmax(0, 1.3fr); min-width: 0; }
+  .courier-actions { min-width: 0; }
+  .courier-actions .secondary-button { min-height: 36px; max-width: 100%; white-space: normal; }
+  .courier-form { grid-template-columns: minmax(0, 1fr); }
+  .courier-toolbar { padding: 16px 16px 10px; }
+  .courier-tracking-form { padding-right: 16px; padding-left: 16px; }
+  .courier-tracking-result { margin-right: 16px; margin-left: 16px; overflow-wrap: anywhere; }
+}
