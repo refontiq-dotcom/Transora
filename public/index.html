@@ -630,6 +630,58 @@
           </section>
           <footer class="page-footer"><span>Chaque colis est suivi de la réception à la remise au destinataire.</span><span>TRANSORA · Service courrier</span></footer>
         </div>
+        <div class="content settings-page" id="settings-page" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">CONFIGURATION DE L'ENTREPRISE</p>
+              <h1>Paramètres</h1>
+              <p class="subheading">Retrouvez ici les informations générales et les réglages communs de votre compagnie.</p>
+            </div>
+            <button class="secondary-button" id="settings-refresh" type="button">Actualiser</button>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-heading"><div><h2>Informations de l'entreprise</h2><p>Le nom affiché dans votre espace de gestion.</p></div></div>
+            <form id="settings-company-form" class="settings-form">
+              <label>Nom de l'entreprise<input id="settings-company-name" name="name" minlength="2" maxlength="160" required></label>
+              <button class="primary-button" id="settings-company-save" type="submit">Enregistrer</button>
+            </form>
+            <p class="settings-message" id="settings-company-message" role="status"></p>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-heading"><div><h2>Réservation en ligne</h2><p>Partagez le lien public de réservation propre à votre compagnie.</p></div></div>
+            <div class="settings-booking-link">
+              <input id="settings-booking-url" type="url" readonly aria-label="Lien public de réservation">
+              <button class="secondary-button" id="settings-copy-booking" type="button">Copier le lien</button>
+            </div>
+            <p class="settings-message">Ce lien permet à vos clients de consulter les départs publiés et de commencer une réservation.</p>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-heading"><div><h2>Préparation des paiements</h2><p>Enregistrez les références marchandes de votre entreprise, sans activer l'encaissement en ligne.</p></div></div>
+            <p class="settings-payment-warning"><strong>Important :</strong> les intégrations opérateurs ne sont pas encore mises en service. Toute configuration enregistrée ici reste désactivée et ne permet pas de recevoir des paiements en ligne.</p>
+            <form id="settings-payment-form" class="settings-form settings-payment-form">
+              <label>Prestataire
+                <select name="provider" required>
+                  <option value="orange_money">Orange Money</option>
+                  <option value="mtn_momo">MTN Mobile Money</option>
+                  <option value="moov_money">Moov Money</option>
+                  <option value="wave">Wave</option>
+                  <option value="card">Carte bancaire</option>
+                  <option value="bank_transfer">Virement bancaire</option>
+                </select>
+              </label>
+              <label>Référence du compte marchand (facultatif)<input name="merchantAccountRef" maxlength="180" placeholder="Référence fournie par votre prestataire"></label>
+              <button class="primary-button" id="settings-payment-save" type="submit">Enregistrer en mode préparation</button>
+            </form>
+            <p class="settings-message" id="settings-payment-message" role="status"></p>
+            <div class="settings-payment-list" id="settings-payment-list">
+              <p class="settings-message">Connectez-vous pour consulter les configurations existantes.</p>
+            </div>
+          </section>
+          <footer class="page-footer"><span>Les réglages sont isolés par compagnie.</span><span>TRANSORA · Paramètres</span></footer>
+        </div>
         <div class="content" id="stop-operations-page" hidden>
           <section class="page-heading">
             <div><p class="eyebrow">CONTRÔLE À CHAQUE ARRÊT</p><h1>Suivi des montées et descentes</h1><p class="subheading">Préparez l'arrivée à chaque gare, confirmez les descentes réelles et vérifiez les passagers qui doivent monter.</p></div>
