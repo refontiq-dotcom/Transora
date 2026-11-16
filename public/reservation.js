@@ -74,6 +74,9 @@ function updateDestinationStops() {
   document.querySelector("#public-seat-availability").textContent = "";
   updatePublicSubmitState();
 }
+function selectedSeatMode() {
+  return document.querySelector('input[name="seatMode"]:checked')?.value || "auto";
+}
 function renderPublicSeats(seats) {
   const wrap = document.querySelector("#public-seats-wrap");
   const grid = document.querySelector("#public-seats");
@@ -83,16 +86,20 @@ function renderPublicSeats(seats) {
     return;
   }
   wrap.hidden = false;
-  seats.forEach((seat) => {
+  seats.forEach((seat, index) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "public-seat";
     button.textContent = String(seat.number);
     button.disabled = !seat.available;
+    button.style.gridColumn = String([1, 2, 4, 5][index % 4]);
+    button.style.gridRow = String(Math.floor(index / 4) + 1);
     button.classList.toggle("is-selected", seat.number === selectedSeatNumber);
     button.setAttribute("aria-pressed", String(seat.number === selectedSeatNumber));
-    button.setAttribute("aria-label", "Place " + seat.number + ", " + (seat.available ? "disponible" : "indisponible"));
+    button.setAttribute("aria-label", "Place " + seat.number + ", " + (seat.available ? "libre" : "déjà prise"));
+    button.title = seat.available ? "Place " + seat.number + " disponible" : "Place " + seat.number + " déjà prise";
     button.addEventListener("click", () => {
+      document.querySelector('input[name="seatMode"][value="manual"]').checked = true;
       selectedSeatNumber = seat.number;
       renderPublicSeats(currentPublicSeats);
       updatePublicSubmitState();
@@ -104,9 +111,11 @@ function updatePublicSubmitState() {
   const departure = selectedDeparture();
   const hasSegment = !departure?.routeStops?.length
     || (document.querySelector("#public-origin-stop").value && document.querySelector("#public-destination-stop").value);
-  const seatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
+  const hasAvailableSeat = currentPublicSeats.some(seat => seat.available);
+  const manualSeatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
+  const seatIsValid = selectedSeatMode() === "auto" ? hasAvailableSeat : manualSeatIsAvailable;
   document.querySelector("#public-submit").disabled =
-    !departure || !hasSegment || !seatIsAvailable || !policyAccepted.checked;
+    !departure || !hasSegment || !seatIsValid || !policyAccepted.checked;
 }
 async function refreshPublicSeatAvailability() {
   const departure = selectedDeparture();
@@ -143,6 +152,7 @@ async function refreshPublicSeatAvailability() {
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
     currentPublicSeats = result.data.seats || [];
     selectedSeatNumber = null;
+    document.querySelector('input[name="seatMode"][value="auto"]').checked = true;
     renderPublicSeats(currentPublicSeats);
     target.textContent = result.data.availableCount + " place(s) disponible(s) sur ce trajet · " +
       money(result.data.fareAmount) + " de transport + " + money(result.data.companyBookingFee) +
@@ -221,6 +231,11 @@ select.addEventListener("change", configurePublicStops);
 document.querySelector("#public-origin-stop").addEventListener("change", () => { updateDestinationStops(); });
 document.querySelector("#public-destination-stop").addEventListener("change", refreshPublicSeatAvailability);
 policyAccepted.addEventListener("change", updatePublicSubmitState);
+document.querySelectorAll('input[name="seatMode"]').forEach(input => input.addEventListener("change", () => {
+  if (selectedSeatMode() === "auto") selectedSeatNumber = null;
+  renderPublicSeats(currentPublicSeats);
+  updatePublicSubmitState();
+}));
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const submit = document.querySelector("#public-submit");
@@ -229,7 +244,8 @@ form.addEventListener("submit", async (event) => {
   try {
     const values = Object.fromEntries(new FormData(form).entries());
     values.policyAccepted = policyAccepted.checked;
-    values.seatNumber = selectedSeatNumber;
+    if (selectedSeatMode() === "manual") values.seatNumber = selectedSeatNumber;
+    else delete values.seatNumber;
     const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values)
     });
