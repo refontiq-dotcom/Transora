@@ -808,3 +808,5 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
   .courier-tracking-form { padding-right: 16px; padding-left: 16px; }
   .courier-tracking-result { margin-right: 16px; margin-left: 16px; overflow-wrap: anywhere; }
 }
+
+.settings-page[hidden], #settings-company-save[hidden], #settings-payment-form[hidden] { display: none !important; }
