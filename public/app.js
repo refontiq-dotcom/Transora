@@ -1501,8 +1501,38 @@ document.querySelector("#dashboard-date").addEventListener("change", loadDashboa
 document.querySelector("#period-select").addEventListener("change", loadDashboard);
 document.querySelector("#dashboard-refresh").addEventListener("click", loadDashboard);
 
+const mobileMenuButton = document.querySelector("#mobile-menu-button");
+const mobileNavBackdrop = document.querySelector("#mobile-nav-backdrop");
+const appSidebar = document.querySelector("#app-sidebar");
+
+function closeMobileNavigation() {
+  appSidebar.classList.remove("mobile-open");
+  mobileNavBackdrop.hidden = true;
+  mobileMenuButton.setAttribute("aria-expanded", "false");
+  mobileMenuButton.setAttribute("aria-label", "Ouvrir le menu");
+  document.body.classList.remove("mobile-nav-open");
+}
+
+function toggleMobileNavigation() {
+  const shouldOpen = !appSidebar.classList.contains("mobile-open");
+  appSidebar.classList.toggle("mobile-open", shouldOpen);
+  mobileNavBackdrop.hidden = !shouldOpen;
+  mobileMenuButton.setAttribute("aria-expanded", String(shouldOpen));
+  mobileMenuButton.setAttribute("aria-label", shouldOpen ? "Fermer le menu" : "Ouvrir le menu");
+  document.body.classList.toggle("mobile-nav-open", shouldOpen);
+}
+
+mobileMenuButton.addEventListener("click", toggleMobileNavigation);
+mobileNavBackdrop.addEventListener("click", closeMobileNavigation);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMobileNavigation();
+});
+
 document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", () => window.setTimeout(showCurrentView, 0));
+  link.addEventListener("click", () => {
+    closeMobileNavigation();
+    window.setTimeout(showCurrentView, 0);
+  });
 });
 
 function resetTariffForm() {
