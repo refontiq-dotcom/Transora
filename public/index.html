@@ -104,10 +104,6 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4"/></svg>
               <i></i>
             </button>
-            <button class="primary-button" id="export-button" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 18v3h14v-3"/></svg>
-              <span>Exporter le rapport</span>
-            </button>
           </div>
         </header>
 
@@ -153,6 +149,7 @@
                 <div><h2>Départs de la journée</h2><p>Suivi des trajets à la date sélectionnée</p></div>
                 <div class="departure-actions">
                   <a class="text-link" href="#voyages">Voir tous les voyages <span>→</span></a>
+                  <button class="secondary-button" id="overview-export" type="button">Exporter CSV</button>
                   <button class="text-link add-departure-button" id="add-departure-button" type="button">+ Ajouter</button>
                 </div>
               </div>
@@ -282,6 +279,7 @@
               <p class="subheading">Programmez les départs, suivez le remplissage et gérez les réservations.</p>
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="secondary-button" id="voyages-export" type="button">Exporter CSV</button>
               <button class="secondary-button" id="voyage-copy-link" type="button">Copier le lien de réservation</button>
               <button class="primary-button" id="voyages-add-departure" type="button"><span>+ Nouveau départ</span></button>
             </div>
@@ -335,7 +333,10 @@
               <h1>Flotte</h1>
               <p class="subheading">Suivez vos véhicules, leur capacité et leur disponibilité.</p>
             </div>
-            <button class="primary-button" id="fleet-add-vehicle" type="button"><span>+ Ajouter un véhicule</span></button>
+            <div class="fleet-heading-actions">
+              <button class="secondary-button" id="fleet-export" type="button">Exporter CSV</button>
+              <button class="primary-button" id="fleet-add-vehicle" type="button"><span>+ Ajouter un véhicule</span></button>
+            </div>
           </section>
 
           <section class="fleet-summary" aria-label="Résumé de la flotte">
