@@ -2701,6 +2701,174 @@ document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventLi
 let settingsLoadPromise = null;
 let settingsPaymentConfigurations = [];
 
+const IS_SBTA_DEMO = new URLSearchParams(window.location.search).get("demo") === "sbta";
+const BRANDING_STORAGE_KEY = IS_SBTA_DEMO ? "transora_company_branding_sbta_demo" : "transora_company_branding";
+const SBTA_BRANDING_PRESET = { primary: "#16864b", secondary: "#76529a", accent: "#b64d68" };
+const TRANSORA_BRANDING_DEFAULT = { primary: "#2e9c50", secondary: "#103a28", accent: "#52b968", companyName: "", logo: "" };
+const DEFAULT_BRANDING = IS_SBTA_DEMO
+  ? { ...SBTA_BRANDING_PRESET, companyName: "SBTA", logo: "" }
+  : { ...TRANSORA_BRANDING_DEFAULT };
+let pendingBrandLogo = null;
+
+function readCompanyBranding() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BRANDING_STORAGE_KEY) || "null");
+    if (!saved || typeof saved !== "object") return { ...DEFAULT_BRANDING };
+    return {
+      primary: /^#[0-9a-f]{6}$/i.test(saved.primary || "") ? saved.primary : DEFAULT_BRANDING.primary,
+      secondary: /^#[0-9a-f]{6}$/i.test(saved.secondary || "") ? saved.secondary : DEFAULT_BRANDING.secondary,
+      accent: /^#[0-9a-f]{6}$/i.test(saved.accent || "") ? saved.accent : DEFAULT_BRANDING.accent,
+      companyName: typeof saved.companyName === "string" ? saved.companyName.slice(0, 160) : "",
+      logo: typeof saved.logo === "string" && saved.logo.startsWith("data:image/") ? saved.logo : ""
+    };
+  } catch { return { ...DEFAULT_BRANDING }; }
+}
+function setBrandingColorInput(id, value) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  input.value = value;
+  const code = input.parentElement.querySelector("code");
+  if (code) code.textContent = value.toUpperCase();
+}
+function applyCompanyBranding() {
+  const branding = readCompanyBranding();
+  const root = document.documentElement;
+  root.style.setProperty("--brand-primary", branding.primary);
+  root.style.setProperty("--brand-secondary", branding.secondary);
+  root.style.setProperty("--brand-accent", branding.accent);
+  root.style.setProperty("--green", branding.primary);
+  root.style.setProperty("--green-bright", branding.accent);
+  root.style.setProperty("--forest", branding.secondary);
+  root.style.setProperty("--forest-soft", branding.primary);
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute("content", branding.secondary);
+  const companyName = branding.companyName || document.querySelector("#settings-company-name")?.value || "Mon entreprise";
+  const avatar = document.querySelector("#workspace-brand-avatar");
+  const workspaceName = document.querySelector("#workspace-brand-name");
+  if (workspaceName) workspaceName.textContent = companyName;
+  if (avatar) {
+    avatar.replaceChildren();
+    if (branding.logo) {
+      const image = document.createElement("img");
+      image.src = branding.logo;
+      image.alt = "";
+      avatar.append(image);
+      avatar.classList.add("has-company-logo");
+    } else {
+      avatar.textContent = companyName.slice(0, 1).toUpperCase();
+      avatar.classList.remove("has-company-logo");
+    }
+  }
+  const dashboard = document.querySelector("#dashboard-company-brand");
+  const dashboardName = document.querySelector("#dashboard-company-name");
+  const dashboardLogo = document.querySelector("#dashboard-company-logo");
+  if (dashboard && dashboardName && dashboardLogo) {
+    dashboard.hidden = !branding.companyName && !branding.logo;
+    dashboardName.textContent = companyName;
+    dashboardLogo.replaceChildren();
+    if (branding.logo) {
+      const image = document.createElement("img");
+      image.src = branding.logo;
+      image.alt = "Logo " + companyName;
+      dashboardLogo.append(image);
+    } else dashboardLogo.textContent = companyName.toUpperCase().slice(0, 4);
+  }
+}
+function renderBrandingSettings() {
+  const branding = readCompanyBranding();
+  setBrandingColorInput("branding-primary", branding.primary);
+  setBrandingColorInput("branding-secondary", branding.secondary);
+  setBrandingColorInput("branding-accent", branding.accent);
+  const name = branding.companyName || document.querySelector("#settings-company-name")?.value || "Votre compagnie";
+  const namePreview = document.querySelector("#settings-branding-name-preview");
+  const logoPreview = document.querySelector("#settings-branding-logo-preview");
+  if (namePreview) namePreview.textContent = name;
+  if (logoPreview) {
+    logoPreview.replaceChildren();
+    if (branding.logo) {
+      const image = document.createElement("img");
+      image.src = branding.logo;
+      image.alt = "Aperçu du logo";
+      logoPreview.append(image);
+    } else logoPreview.textContent = name.toUpperCase().slice(0, 4);
+  }
+  applyCompanyBranding();
+}
+function saveCompanyBranding(overrides = {}) {
+  const previous = readCompanyBranding();
+  const branding = { ...previous, ...overrides };
+  localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(branding));
+  renderBrandingSettings();
+}
+function applySbtaBrandingPreset() {
+  setBrandingColorInput("branding-primary", SBTA_BRANDING_PRESET.primary);
+  setBrandingColorInput("branding-secondary", SBTA_BRANDING_PRESET.secondary);
+  setBrandingColorInput("branding-accent", SBTA_BRANDING_PRESET.accent);
+  document.querySelector("#settings-branding-message").textContent = "Palette SBTA sélectionnée. Enregistrez pour l'appliquer au tableau de bord.";
+}
+["branding-primary", "branding-secondary", "branding-accent"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", (event) => {
+    const code = event.currentTarget.parentElement.querySelector("code");
+    if (code) code.textContent = event.currentTarget.value.toUpperCase();
+  });
+});
+document.querySelector("#settings-branding-sbta").addEventListener("click", applySbtaBrandingPreset);
+document.querySelector("#branding-logo-file").addEventListener("change", (event) => {
+  const file = event.currentTarget.files?.[0];
+  if (!file) return;
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 1.2 * 1024 * 1024) {
+    event.currentTarget.value = "";
+    document.querySelector("#settings-branding-message").textContent = "Choisissez une image PNG, JPG ou WebP de 1,2 Mo maximum.";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingBrandLogo = String(reader.result || "");
+    const preview = document.querySelector("#settings-branding-logo-preview");
+    preview.replaceChildren();
+    const image = document.createElement("img");
+    image.src = pendingBrandLogo;
+    image.alt = "Aperçu du logo";
+    preview.append(image);
+  };
+  reader.onerror = () => { pendingBrandLogo = null; document.querySelector("#settings-branding-message").textContent = "Impossible de lire ce fichier image."; };
+  reader.readAsDataURL(file);
+});
+document.querySelector("#settings-branding-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const companyName = document.querySelector("#settings-company-name").value.trim();
+  const previous = readCompanyBranding();
+  try {
+    saveCompanyBranding({
+      primary: document.querySelector("#branding-primary").value,
+      secondary: document.querySelector("#branding-secondary").value,
+      accent: document.querySelector("#branding-accent").value,
+      companyName,
+      logo: pendingBrandLogo || previous.logo
+    });
+    pendingBrandLogo = null;
+    document.querySelector("#branding-logo-file").value = "";
+    document.querySelector("#settings-branding-message").textContent = "Identité visuelle appliquée au tableau de bord.";
+    showToast("Identité visuelle enregistrée dans ce navigateur.");
+  } catch {
+    document.querySelector("#settings-branding-message").textContent = "Le stockage du navigateur est saturé. Utilisez un logo plus léger.";
+  }
+});
+document.querySelector("#settings-branding-reset").addEventListener("click", () => {
+  localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(TRANSORA_BRANDING_DEFAULT));
+  pendingBrandLogo = null;
+  document.querySelector("#branding-logo-file").value = "";
+  renderBrandingSettings();
+  document.querySelector("#settings-branding-message").textContent = "Palette Transora restaurée.";
+});
+document.querySelector("#settings-branding-remove-logo").addEventListener("click", () => {
+  pendingBrandLogo = null;
+  document.querySelector("#branding-logo-file").value = "";
+  saveCompanyBranding({ logo: "" });
+  document.querySelector("#settings-branding-message").textContent = "Logo retiré.";
+});
+renderBrandingSettings();
+
 function settingsCanAdminister() {
   try { return JSON.parse(localStorage.getItem("transora_user") || "{}").role === "administrateur"; }
   catch { return false; }
@@ -2753,6 +2921,9 @@ async function loadSettings() {
     const paymentResult = await paymentResponse.json();
     if (!tenantResponse.ok) throw new Error(tenantResult.message || "Impossible de charger les informations de l'entreprise.");
     document.querySelector("#settings-company-name").value = tenantResult.data.name || "";
+    const savedBranding = readCompanyBranding();
+    if (!savedBranding.companyName) saveCompanyBranding({ companyName: tenantResult.data.name || "" });
+    renderBrandingSettings();
     document.querySelector("#settings-booking-url").value =
       new URL(tenantResult.data.publicBookingUrl, window.location.origin).toString();
     document.querySelector("#settings-company-save").hidden = !settingsCanAdminister();

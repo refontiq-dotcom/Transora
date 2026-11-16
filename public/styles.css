@@ -1,9 +1,15 @@
 :root {
   color-scheme: light;
-  --forest: #09271b;
-  --forest-soft: #103a28;
-  --green: #2e9c50;
-  --green-bright: #52b968;
+  --brand-primary: #2e9c50;
+  --brand-secondary: #103a28;
+  --brand-accent: #52b968;
+  --brand-primary-soft: color-mix(in srgb, var(--brand-primary) 10%, white);
+  --brand-secondary-soft: color-mix(in srgb, var(--brand-secondary) 10%, white);
+  --brand-primary-border: color-mix(in srgb, var(--brand-primary) 24%, white);
+  --forest: var(--brand-secondary);
+  --forest-soft: var(--brand-primary);
+  --green: var(--brand-primary);
+  --green-bright: var(--brand-accent);
   --ink: #17241d;
   --muted: #88938d;
   --line: #e9eee9;
@@ -35,8 +41,8 @@ button { cursor: pointer; }
   overflow-y: auto;
   color: #eaf3eb;
   background:
-    radial-gradient(ellipse at 2% 2%, rgba(52, 141, 75, .2), transparent 34%),
-    linear-gradient(160deg, #0d2d1f 0%, #071d14 75%);
+    radial-gradient(ellipse at 2% 2%, color-mix(in srgb, var(--green) 24%, transparent), transparent 34%),
+    linear-gradient(160deg, color-mix(in srgb, var(--forest) 82%, #173b2a) 0%, color-mix(in srgb, var(--forest) 58%, #071d14) 75%);
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 21px;
 }
@@ -773,6 +779,40 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
 }
 
 
+/* Identité visuelle de la compagnie */
+.branding-preview { display:flex; align-items:center; gap:14px; margin-top:16px; padding:15px; border:1px solid var(--line); border-radius:13px; background:linear-gradient(120deg, color-mix(in srgb, var(--green) 8%, #fff), #fff 70%); }
+.branding-preview-logo { width:58px; height:58px; flex:0 0 58px; display:grid; place-items:center; overflow:hidden; border-radius:12px; background:var(--green); color:#fff; font:800 15px Manrope,sans-serif; }
+.branding-preview-logo img, .dashboard-company-logo img, .workspace-avatar img { width:100%; height:100%; object-fit:contain; display:block; }
+.branding-preview strong { color:var(--ink); font:800 16px Manrope,sans-serif; }
+.branding-preview p { margin:4px 0 0; color:var(--muted); font-size:11px; }
+.branding-preset-row { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; padding:14px 0; border-bottom:1px solid var(--line); }
+.branding-preset-row strong { color:var(--ink); font-size:13px; }
+.branding-preset-row p { margin:4px 0 0; color:var(--muted); font-size:11px; }
+.branding-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; margin-top:16px; }
+.branding-form label { display:grid; align-content:start; gap:8px; color:var(--ink); font-size:12px; font-weight:650; }
+.branding-color-field { display:flex; align-items:center; gap:9px; min-height:44px; padding:5px 9px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+.branding-color-field input { width:34px; height:30px; padding:0; border:0; background:transparent; cursor:pointer; }
+.branding-color-field code { color:var(--muted); font-size:11px; }
+.branding-upload-label { grid-column:1/-1; }
+.branding-upload-label input { width:100%; padding:10px; border:1px dashed #cbd6cd; border-radius:9px; background:#fbfcfb; }
+.branding-upload-label small { color:var(--muted); font-size:10px; font-weight:400; }
+.branding-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:9px; }
+.branding-actions button { min-height:43px; }
+.branding-storage-note { margin:8px 0 0; padding:10px 12px; border-left:3px solid var(--brand-accent); background:#f7f8f7; color:var(--muted); font-size:11px; line-height:1.5; }
+.workspace-avatar.has-company-logo { overflow:hidden; padding:0; background:#fff; }
+.dashboard-company-brand { display:flex; align-items:center; gap:9px; margin-top:14px; width:max-content; max-width:100%; padding:8px 11px 8px 8px; border:1px solid var(--line); border-radius:11px; background:#fff; box-shadow:0 5px 16px rgba(18,40,24,.045); }
+.dashboard-company-brand[hidden] { display:none !important; }
+.dashboard-company-logo { width:35px; height:35px; flex:0 0 35px; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:var(--green); color:#fff; font-size:10px; font-weight:800; }
+.dashboard-company-brand strong { color:var(--ink); font-size:12px; }
+.dashboard-company-brand small { color:var(--muted); font-size:8px; font-weight:800; letter-spacing:.08em; }
+@media (max-width:680px) {
+  .branding-preset-row { align-items:stretch; flex-direction:column; }
+  .branding-preset-row button { width:100%; }
+  .branding-form { grid-template-columns:1fr; }
+  .branding-upload-label, .branding-actions { grid-column:1; }
+  .branding-actions { display:grid; }
+  .branding-actions button { width:100%; }
+}
 /* Paramètres de l'entreprise */
 .settings-page { display: grid; align-content: start; gap: 16px; }
 .settings-panel { padding: 22px; }
@@ -905,3 +945,51 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
     flex: 1 1 140px;
   }
 }
+
+
+/* Thème de marque global : toutes les pages de gestion suivent les couleurs choisies. */
+.brand-mark i { background: var(--brand-accent); }
+.workspace-avatar { background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 18%, white), var(--brand-primary)); color: #fff; }
+.nav-link.active { box-shadow: inset 2px 0 var(--brand-accent); }
+.primary-button { background: var(--brand-secondary); }
+.primary-button:hover { background: color-mix(in srgb, var(--brand-secondary) 82%, #111); }
+.featured-card { background: linear-gradient(130deg, color-mix(in srgb, var(--brand-secondary) 78%, #101018), color-mix(in srgb, var(--brand-secondary) 58%, #080910) 82%); border-color: var(--brand-secondary); }
+.soft-icon { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.metric-icon.soft-icon { color: var(--brand-primary); }
+.mini-bars i, .green-spark path { background: var(--brand-primary); stroke: var(--brand-primary); }
+.legend-bar, .bar-group i { background: color-mix(in srgb, var(--brand-primary) 24%, white); }
+.legend-line, .bar-group i:nth-child(2), .bar-group:nth-child(4) i:nth-child(2) { background: var(--brand-primary); }
+.line-stroke, .chart-line circle { stroke: var(--brand-primary); }
+#line-fill stop { stop-color: var(--brand-primary); }
+.donut-value, .occupancy-legend i:not(.legend-light):not(.legend-yellow) { stroke: var(--brand-primary); background: var(--brand-primary); }
+.insight-dot { background: var(--brand-primary); }
+.text-link, .secondary-button, .voyage-action, .fleet-action, .payment-action, .auth-toggle { color: var(--brand-primary); }
+.secondary-button, .voyage-action, .fleet-action, .payment-action { border-color: var(--brand-primary-border); background: var(--brand-primary-soft); }
+.secondary-button:hover { background: color-mix(in srgb, var(--brand-primary) 16%, white); }
+.route-marker:not(.marker-gold):not(.marker-blue):not(.marker-purple) { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.capacity-track i { background: var(--brand-primary); }
+.report-net-card { background: var(--brand-primary-soft); border-color: var(--brand-primary-border); }
+.report-type { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.auth-form input:focus, .auth-form select:focus, .scanner-input-row input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 14%, transparent); }
+.network-card { color: var(--brand-secondary); background: color-mix(in srgb, var(--brand-primary) 5%, white); border-color: var(--brand-primary-border); }
+.network-card::before, .network-card::after { border-color: color-mix(in srgb, var(--brand-secondary) 18%, transparent); }
+.network-heading p, .network-heading h2, .network-map text { color: var(--brand-secondary); fill: var(--brand-secondary); }
+.map-shape { fill: color-mix(in srgb, var(--brand-primary) 12%, transparent); stroke: color-mix(in srgb, var(--brand-primary) 38%, transparent); }
+.map-road { stroke: color-mix(in srgb, var(--brand-secondary) 32%, transparent); }
+.route-glow { stroke: color-mix(in srgb, var(--brand-accent) 28%, transparent); }
+.route-line { stroke: var(--brand-primary); }
+.map-point { fill: var(--brand-accent); }
+.small-point { fill: var(--brand-secondary); }
+.mobile-brand { color: var(--brand-secondary); }
+.module-illustration { border-color: var(--brand-primary-border); background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 7%, white), color-mix(in srgb, var(--brand-secondary) 12%, white)); color: var(--brand-secondary); }
+.module-illustration small { color: var(--brand-secondary); }
+.module-illustration-glow { background: color-mix(in srgb, var(--brand-accent) 42%, white); }
+.branding-preview { background: linear-gradient(120deg, color-mix(in srgb, var(--brand-primary) 9%, white), color-mix(in srgb, var(--brand-secondary) 5%, white) 70%); }
+.branding-preview-logo, .dashboard-company-logo { background: var(--brand-primary); }
+.branding-storage-note { border-left-color: var(--brand-accent); }
+.workspace-avatar.has-company-logo { background: white; }
+
+.search-result-type { color: var(--brand-primary); }
+.nav-count { color: #fff; background: color-mix(in srgb, var(--brand-accent) 72%, var(--brand-secondary)); }
+.sidebar-scanner { color: color-mix(in srgb, var(--brand-accent) 48%, white); }
+.toast:not(.toast-error) { background: var(--brand-secondary); }
