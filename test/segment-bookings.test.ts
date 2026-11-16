@@ -218,7 +218,7 @@ test("un segment dont les arrêts sont inversés est refusé", async () => {
 
 
 test("une réservation publique bloque temporairement un siège puis le libère à expiration", async () => {
-  const createHold = async () => fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
+  const createHold = async (seatNumber?: number) => fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -229,11 +229,11 @@ test("une réservation publique bloque temporairement un siège puis le libère 
       originStopId,
       destinationStopId,
       amountTransport: 1,
-      seatNumber: 2
+      ...(seatNumber === undefined ? {} : { seatNumber })
     })
   });
 
-  const firstResponse = await createHold();
+  const firstResponse = await createHold(2);
   expect(firstResponse.status).toBe(201);
   const first = await firstResponse.json() as { data: { bookingId: string; seatNumber: number; transportAmount: number; bookingStatus: string; holdExpiresAt: string | null } };
   expect(first.data.bookingStatus).toBe("HELD");
@@ -261,7 +261,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
     expect.objectContaining({ billetId: first.data.bookingId, statut: "NOT_INITIATED", statutRéservation: "HELD" })
   ]));
 
-  const duplicateSeatResponse = await createHold();
+  const duplicateSeatResponse = await createHold(2);
   expect(duplicateSeatResponse.status).toBe(409);
 
   await pool.query(
@@ -272,7 +272,7 @@ test("une réservation publique bloque temporairement un siège puis le libère 
   const secondResponse = await createHold();
   expect(secondResponse.status).toBe(201);
   const second = await secondResponse.json() as { data: { bookingId: string; seatNumber: number; bookingStatus: string } };
-  expect(second.data.seatNumber).toBe(2);
+  expect(second.data.seatNumber).toBe(1);
   expect(second.data.bookingStatus).toBe("HELD");
 
   const expired = await pool.query("SELECT status FROM bookings WHERE id=$1", [first.data.bookingId]);
