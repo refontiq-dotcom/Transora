@@ -89,6 +89,9 @@ kbd { color: #8d9f93; font: 10px "DM Sans", sans-serif; }
 .profile-copy small { color: #8fa094; font-size: 9px; }
 .more-button { padding: 0 5px; color: #8d9c91; background: transparent; border: 0; font-size: 20px; line-height: 1; }
 
+.mobile-menu-button { display: none; }
+.mobile-nav-backdrop { display: none; }
+
 .main-content { grid-column: 2; min-width: 0; height: calc(100vh - 20px); min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #fbfcfa; border: 1px solid #e8ede8; border-radius: 21px; }
 .topbar { height: 66px; flex: 0 0 66px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 30px; border-bottom: 1px solid #eef1ed; }
 .breadcrumbs { color: #99a19b; font-size: 11px; }
