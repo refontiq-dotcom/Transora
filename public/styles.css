@@ -810,3 +810,14 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
 }
 
 .settings-page[hidden], #settings-company-save[hidden], #settings-payment-form[hidden] { display: none !important; }
+
+@media (max-width: 760px) {
+  .courier-tariff-panel .table-wrap { overflow: visible; }
+  .courier-tariff-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0 10px; }
+  .courier-tariff-table thead { display: none; }
+  .courier-tariff-table tbody { display: grid; gap: 10px; }
+  .courier-tariff-table tbody tr { display: grid; padding: 8px 13px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .courier-tariff-table tbody td { display: grid; grid-template-columns: minmax(94px, .7fr) minmax(0, 1.3fr); gap: 10px; min-width: 0; padding: 9px 0; border-bottom: 1px solid #edf1ed; overflow-wrap: anywhere; white-space: normal; }
+  .courier-tariff-table tbody td::before { content: attr(data-label); color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .courier-tariff-table tbody td:last-child { border-bottom: 0; }
+}
