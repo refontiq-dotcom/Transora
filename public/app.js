@@ -2078,14 +2078,19 @@ function renderCourier() {
     tracking.textContent = parcel.trackingCode;
     const recipient = document.createElement("small");
     recipient.textContent = parcel.recipientName;
+    identity.dataset.label = "Suivi / destinataire";
     identity.append(tracking, document.createElement("br"), recipient);
     const route = document.createElement("td");
+    route.dataset.label = "Trajet";
     route.textContent = parcel.origin + " → " + parcel.destination;
     const amount = document.createElement("td");
+    amount.dataset.label = "Prix";
     amount.textContent = formatFcfa(parcel.amountFcfa);
     const status = document.createElement("td");
+    status.dataset.label = "État";
     status.textContent = courierStatusLabels[parcel.status] || parcel.status;
     const actions = document.createElement("td");
+    actions.dataset.label = "Actions";
     actions.className = "courier-actions";
     if (parcel.status === "EN_ATTENTE_PAIEMENT" && courierHasRole("administrateur", "caissier")) {
       actions.append(courierButton("Encaisser", "pay", parcel.id));
@@ -2688,6 +2693,143 @@ document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventLi
   if (event.target.value === "FULL") percentage.value = "100";
 });
 
+
+let settingsLoadPromise = null;
+let settingsPaymentConfigurations = [];
+
+function settingsCanAdminister() {
+  try { return JSON.parse(localStorage.getItem("transora_user") || "{}").role === "administrateur"; }
+  catch { return false; }
+}
+function renderSettingsPayments() {
+  const target = document.querySelector("#settings-payment-list");
+  target.replaceChildren();
+  if (!settingsPaymentConfigurations.length) {
+    const empty = document.createElement("p");
+    empty.className = "settings-message";
+    empty.textContent = "Aucune configuration de paiement enregistrée.";
+    target.append(empty);
+    return;
+  }
+  settingsPaymentConfigurations.forEach((configuration) => {
+    const item = document.createElement("article");
+    item.className = "settings-payment-item";
+    const heading = document.createElement("strong");
+    const providerNames = {
+      orange_money: "Orange Money", mtn_momo: "MTN Mobile Money",
+      moov_money: "Moov Money", wave: "Wave", card: "Carte bancaire",
+      bank_transfer: "Virement bancaire"
+    };
+    heading.textContent = providerNames[configuration.provider] || configuration.provider;
+    const details = document.createElement("p");
+    details.textContent =
+      (configuration.merchant_account_ref ? "Référence : " + configuration.merchant_account_ref + " · " : "") +
+      "Environnement : " + (configuration.environment === "live" ? "Production" : "Test") +
+      " · Identifiants : " + (configuration.credentials_configured ? "enregistrés" : "non renseignés");
+    const status = document.createElement("span");
+    status.className = "settings-payment-status";
+    status.textContent = configuration.enabled ? "Activé" : "Désactivé — préparation uniquement";
+    item.append(heading, details, status);
+    target.append(item);
+  });
+}
+async function loadSettings() {
+  if (!accessToken) {
+    document.querySelector("#settings-company-message").textContent = "Connectez-vous pour consulter les paramètres de votre entreprise.";
+    document.querySelector("#settings-payment-message").textContent = "";
+    return;
+  }
+  if (settingsLoadPromise) return settingsLoadPromise;
+  settingsLoadPromise = (async () => {
+    const [tenantResponse, paymentResponse] = await Promise.all([
+      fetch("/api/v1/tenant"),
+      fetch("/api/v1/paiements/parametres")
+    ]);
+    const tenantResult = await tenantResponse.json();
+    const paymentResult = await paymentResponse.json();
+    if (!tenantResponse.ok) throw new Error(tenantResult.message || "Impossible de charger les informations de l'entreprise.");
+    document.querySelector("#settings-company-name").value = tenantResult.data.name || "";
+    document.querySelector("#settings-booking-url").value =
+      new URL(tenantResult.data.publicBookingUrl, window.location.origin).toString();
+    document.querySelector("#settings-company-save").hidden = !settingsCanAdminister();
+    document.querySelector("#settings-company-name").readOnly = !settingsCanAdminister();
+    if (paymentResponse.ok) {
+      settingsPaymentConfigurations = paymentResult.data || [];
+      renderSettingsPayments();
+      document.querySelector("#settings-payment-form").hidden = !settingsCanAdminister();
+      document.querySelector("#settings-payment-message").textContent = "";
+    } else {
+      document.querySelector("#settings-payment-message").textContent =
+        paymentResult.message || "Votre rôle ne permet pas de consulter les réglages de paiement.";
+      document.querySelector("#settings-payment-form").hidden = true;
+    }
+    document.querySelector("#settings-company-message").textContent = "";
+  })().catch((error) => {
+    document.querySelector("#settings-company-message").textContent = error.message || "Erreur de chargement des paramètres.";
+    throw error;
+  }).finally(() => { settingsLoadPromise = null; });
+  return settingsLoadPromise;
+}
+document.querySelector("#settings-refresh").addEventListener("click", () => loadSettings().catch((error) => showToast(error.message)));
+document.querySelector("#settings-company-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!settingsCanAdminister()) { showToast("Seul un administrateur peut modifier ces informations."); return; }
+  const form = event.currentTarget;
+  const submit = document.querySelector("#settings-company-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/tenant", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.elements.name.value.trim() })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer le nom de l'entreprise.");
+    document.querySelector("#settings-company-name").value = result.data.name;
+    document.querySelector("#settings-company-message").textContent = "Nom de l'entreprise mis à jour.";
+    showToast("Informations de l'entreprise enregistrées.");
+  } catch (error) {
+    document.querySelector("#settings-company-message").textContent = error.message || "Erreur d'enregistrement.";
+    showToast(error.message || "Impossible d'enregistrer les paramètres.");
+  } finally { submit.disabled = false; }
+});
+document.querySelector("#settings-copy-booking").addEventListener("click", async () => {
+  const url = document.querySelector("#settings-booking-url").value;
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Lien public de réservation copié.");
+  } catch { showToast("Copie impossible sur cet appareil. Sélectionnez le lien pour le copier."); }
+});
+document.querySelector("#settings-payment-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!settingsCanAdminister()) { showToast("Seul un administrateur peut enregistrer une configuration."); return; }
+  const form = event.currentTarget;
+  const submit = document.querySelector("#settings-payment-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/paiements/parametres", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: form.elements.provider.value,
+        environment: "sandbox",
+        merchantAccountRef: form.elements.merchantAccountRef.value.trim() || null,
+        allowedMethods: [form.elements.provider.value],
+        enabled: false
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer cette configuration.");
+    document.querySelector("#settings-payment-message").textContent =
+      "Configuration enregistrée en mode préparation. Aucun paiement en ligne n'est activé.";
+    await loadSettings();
+    showToast("Configuration enregistrée, paiement en ligne toujours désactivé.");
+  } catch (error) {
+    document.querySelector("#settings-payment-message").textContent = error.message || "Erreur d'enregistrement.";
+    showToast(error.message || "Impossible d'enregistrer la configuration.");
+  } finally { submit.disabled = false; }
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
@@ -2699,7 +2841,8 @@ function showCurrentView() {
   const isCourier = hash === "#courrier";
   const isPersonnel = hash === "#personnel";
   const isStopOperations = hash === "#operations-arrets";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel || isStopOperations;
+  const isSettings = hash === "#settings";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel || isStopOperations || isSettings;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
@@ -2709,8 +2852,9 @@ function showCurrentView() {
   document.querySelector("#courier-page").hidden = !isCourier;
   document.querySelector("#personnel-page").hidden = !isPersonnel;
   document.querySelector("#stop-operations-page").hidden = !isStopOperations;
+  document.querySelector("#settings-page").hidden = !isSettings;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : isStopOperations ? "Suivi des arrêts" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : isStopOperations ? "Suivi des arrêts" : isSettings ? "Paramètres" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -2723,6 +2867,7 @@ function showCurrentView() {
   if (isCourier) loadCourier();
   if (isPersonnel) loadPersonnel();
   if (isStopOperations) loadStopOperations();
+  if (isSettings) loadSettings().catch((error) => showToast(error.message || "Impossible de charger les paramètres."));
 }
 
 document.querySelector("#stop-operations-departure").addEventListener("change", () => { populateStopOperationSelectors(); loadStopOperations(); });
