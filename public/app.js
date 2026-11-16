@@ -2703,7 +2703,10 @@ let settingsPaymentConfigurations = [];
 
 const BRANDING_STORAGE_KEY = "transora_company_branding";
 const SBTA_BRANDING_PRESET = { primary: "#16864b", secondary: "#76529a", accent: "#b64d68" };
-const DEFAULT_BRANDING = { primary: "#2e9c50", secondary: "#103a28", accent: "#52b968", companyName: "", logo: "" };
+const IS_SBTA_DEMO = new URLSearchParams(window.location.search).get("demo") === "sbta";
+const DEFAULT_BRANDING = IS_SBTA_DEMO
+  ? { ...SBTA_BRANDING_PRESET, companyName: "SBTA", logo: "" }
+  : { primary: "#2e9c50", secondary: "#103a28", accent: "#52b968", companyName: "", logo: "" };
 let pendingBrandLogo = null;
 
 function readCompanyBranding() {
