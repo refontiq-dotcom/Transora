@@ -672,6 +672,8 @@
               <label id="guichet-origin-wrap" hidden>Gare de départ<select name="originStopId" id="guichet-origin-stop"></select></label>
               <label id="guichet-destination-wrap" hidden>Gare d’arrivée<select name="destinationStopId" id="guichet-destination-stop"></select></label>
               <label>Nom du passager<input name="passengerName" minlength="2" maxlength="160" required></label>
+              <label>Numéro de place (facultatif)<input name="seatNumber" id="guichet-seat-number" type="number" min="1" step="1" inputmode="numeric" placeholder="Automatique — première place libre"></label>
+              <p class="auth-description">Laissez ce champ vide pour attribuer automatiquement la première place libre. Saisissez un numéro uniquement si le passager demande une place précise.</p>
               <p class="auth-description" id="guichet-fare"></p>
               <button class="primary-button" type="submit" id="guichet-sale-submit">Encaisser et générer le billet</button>
             </form>
