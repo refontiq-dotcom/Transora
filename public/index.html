@@ -20,8 +20,8 @@
         </a>
 
         <button class="workspace-picker" type="button">
-          <span class="workspace-avatar">A</span>
-          <span class="workspace-copy"><small>Espace de travail</small><strong>Mon entreprise</strong></span>
+          <span class="workspace-avatar" id="workspace-brand-avatar">A</span>
+          <span class="workspace-copy"><small>Espace de travail</small><strong id="workspace-brand-name">Mon entreprise</strong></span>
           <span class="chevron" aria-hidden="true">⌄</span>
         </button>
 
@@ -113,6 +113,11 @@
               <p class="eyebrow" id="today-label">JEUDI 12 NOVEMBRE 2026</p>
               <h1>Bonjour <span class="wave">✳</span></h1>
               <p class="subheading">Suivez l'activité de votre réseau et consultez vos indicateurs clés.</p>
+              <div class="dashboard-company-brand" id="dashboard-company-brand" hidden>
+                <span class="dashboard-company-logo" id="dashboard-company-logo">SBTA</span>
+                <strong id="dashboard-company-name">SBTA</strong>
+                <small>ESPACE PERSONNALISÉ</small>
+              </div>
             </div>
             <label class="date-filter" for="dashboard-date">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
@@ -650,6 +655,30 @@
             <p class="settings-message" id="settings-company-message" role="status"></p>
           </section>
 
+          <section class="panel settings-panel settings-branding-panel">
+            <div class="panel-heading"><div><h2>Identité visuelle de la compagnie</h2><p>Personnalisez le tableau de bord avec votre logo et vos couleurs.</p></div></div>
+            <div class="branding-preview" id="settings-branding-preview">
+              <div class="branding-preview-logo" id="settings-branding-logo-preview"><span>SBTA</span></div>
+              <div><strong id="settings-branding-name-preview">Votre compagnie</strong><p>Aperçu de l'identité affichée dans l'espace de gestion</p></div>
+            </div>
+            <div class="branding-preset-row">
+              <div><strong>Palette inspirée de SBTA</strong><p>Vert, violet et une touche framboise, relevés sur les autocars SBTA.</p></div>
+              <button class="secondary-button" id="settings-branding-sbta" type="button">Appliquer la palette SBTA</button>
+            </div>
+            <form id="settings-branding-form" class="branding-form">
+              <label>Couleur principale <span class="branding-color-field"><input id="branding-primary" type="color" value="#16864b"><code>#16864B</code></span></label>
+              <label>Couleur secondaire <span class="branding-color-field"><input id="branding-secondary" type="color" value="#76529a"><code>#76529A</code></span></label>
+              <label>Couleur d'accent <span class="branding-color-field"><input id="branding-accent" type="color" value="#b64d68"><code>#B64D68</code></span></label>
+              <label class="branding-upload-label">Logo de la compagnie<input id="branding-logo-file" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPG ou WebP · 1,2 Mo maximum</small></label>
+              <div class="branding-actions">
+                <button class="primary-button" type="submit">Enregistrer l'identité visuelle</button>
+                <button class="secondary-button" id="settings-branding-reset" type="button">Restaurer Transora</button>
+                <button class="secondary-button" id="settings-branding-remove-logo" type="button">Retirer le logo</button>
+              </div>
+            </form>
+            <p class="settings-message" id="settings-branding-message" role="status">Les couleurs et le logo seront visibles dans la navigation et sur le tableau de bord.</p>
+            <p class="branding-storage-note">Pour cette démonstration, le réglage est conservé dans ce navigateur. Une synchronisation entre les appareils nécessitera ensuite un stockage partagé côté serveur.</p>
+          </section>
           <section class="panel settings-panel">
             <div class="panel-heading"><div><h2>Réservation en ligne</h2><p>Partagez le lien public de réservation propre à votre compagnie.</p></div></div>
             <div class="settings-booking-link">
