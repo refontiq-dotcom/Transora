@@ -8,6 +8,32 @@ const authForm = document.querySelector("#auth-form");
 const authToggle = document.querySelector("#auth-toggle");
 let isRegistration = false;
 let toastTimer;
+
+function initModuleIllustrations() {
+  const visuals = {
+    "tariffs-page": ["Tarifs", '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 7.5 12 12l8-4.5"/>'],
+    "voyages-page": ["Voyages", '<path d="M4 16.5 5.5 9a2 2 0 0 1 2-1.6h9a2 2 0 0 1 2 1.6l1.5 7.5z"/><path d="M4 16.5h16M7 16.5V19m10-2.5V19M8 11h8"/><circle cx="8" cy="13.5" r=".8"/><circle cx="16" cy="13.5" r=".8"/>'],
+    "fleet-page": ["Flotte", '<path d="m3 8 9-5 9 5-9 5z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/>'],
+    "payments-page": ["Paiements", '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/><path d="m15 14 2 2 3-4"/>'],
+    "reports-page": ["Rapports", '<path d="M4 20V5m0 15h17"/><path d="m7 15 4-4 3 2 5-7"/><path d="M17 6h2v2"/>'],
+    "personnel-page": ["Équipe", '<circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M17 8a3 3 0 0 1 0 6m1 2a5 5 0 0 1 3 4"/>'],
+    "courier-page": ["Courrier", '<path d="m3 7 9-4 9 4v10l-9 4-9-4z"/><path d="m3 7 9 4 9-4M12 11v10M7.5 5l9 4"/>'],
+    "stop-operations-page": ["Arrêts", '<path d="M4 19h16M6 16l3-8 3 5 3-9 3 12"/><circle cx="9" cy="8" r="1"/><circle cx="15" cy="4" r="1"/>'],
+    "guichet-page": ["Guichet", '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h4"/><path d="m14 17 2 2 3-3"/>']
+  };
+  Object.entries(visuals).forEach(([pageId, [label, paths]]) => {
+    const page = document.getElementById(pageId);
+    const heading = page?.querySelector(".page-heading");
+    if (!heading || heading.querySelector(".module-illustration")) return;
+    const visual = document.createElement("div");
+    visual.className = "module-illustration";
+    visual.setAttribute("aria-hidden", "true");
+    visual.innerHTML = '<span class="module-illustration-glow"></span><svg viewBox="0 0 24 24">' + paths + '</svg><small>' + label + '</small>';
+    heading.insertBefore(visual, heading.children[1] || null);
+  });
+}
+initModuleIllustrations();
+
 let voyageDepartures = [];
 let companyTariffs = [];
 let selectedDeparture;
@@ -73,10 +99,20 @@ window.fetch = async (input, init = {}) => {
 };
 
 function showToast(message) {
-  toast.textContent = message;
+  const text = String(message || "Opération terminée");
+  const isError = /(erreur|impossible|échec|invalide|introuvable|indisponible|refus|déjà)/i.test(text);
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = isError ? "!" : "✓";
+  const copy = document.createElement("span");
+  copy.className = "toast-copy";
+  copy.textContent = text;
+  toast.replaceChildren(icon, copy);
+  toast.classList.toggle("toast-error", isError);
   toast.classList.add("visible");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3200);
+  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3600);
 }
 
 function setTicketImage(selector, source) {
@@ -1039,7 +1075,6 @@ function setAuthMode(register) {
     : "Créer un espace entreprise";
   document.querySelector("#name-field").hidden = !register;
   document.querySelector("#company-field").hidden = !register;
-  document.querySelector("#siret-field").hidden = !register;
   authForm.elements.name.required = register;
   authForm.elements.companyName.required = register;
   authForm.elements.password.autocomplete = register ? "new-password" : "current-password";
@@ -1465,8 +1500,38 @@ document.querySelector("#dashboard-date").addEventListener("change", loadDashboa
 document.querySelector("#period-select").addEventListener("change", loadDashboard);
 document.querySelector("#dashboard-refresh").addEventListener("click", loadDashboard);
 
+const mobileMenuButton = document.querySelector("#mobile-menu-button");
+const mobileNavBackdrop = document.querySelector("#mobile-nav-backdrop");
+const appSidebar = document.querySelector("#app-sidebar");
+
+function closeMobileNavigation() {
+  appSidebar.classList.remove("mobile-open");
+  mobileNavBackdrop.hidden = true;
+  mobileMenuButton.setAttribute("aria-expanded", "false");
+  mobileMenuButton.setAttribute("aria-label", "Ouvrir le menu");
+  document.body.classList.remove("mobile-nav-open");
+}
+
+function toggleMobileNavigation() {
+  const shouldOpen = !appSidebar.classList.contains("mobile-open");
+  appSidebar.classList.toggle("mobile-open", shouldOpen);
+  mobileNavBackdrop.hidden = !shouldOpen;
+  mobileMenuButton.setAttribute("aria-expanded", String(shouldOpen));
+  mobileMenuButton.setAttribute("aria-label", shouldOpen ? "Fermer le menu" : "Ouvrir le menu");
+  document.body.classList.toggle("mobile-nav-open", shouldOpen);
+}
+
+mobileMenuButton.addEventListener("click", toggleMobileNavigation);
+mobileNavBackdrop.addEventListener("click", closeMobileNavigation);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMobileNavigation();
+});
+
 document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", () => window.setTimeout(showCurrentView, 0));
+  link.addEventListener("click", () => {
+    closeMobileNavigation();
+    window.setTimeout(showCurrentView, 0);
+  });
 });
 
 function resetTariffForm() {
@@ -1601,6 +1666,8 @@ document.querySelector("#tariff-rows").addEventListener("click", async (event) =
 });
 
 function updateGuichetSegmentFields() {
+  const seatInput = document.querySelector("#guichet-seat-number");
+  if (seatInput) seatInput.value = "";
   const departure = document.querySelector("#guichet-departure").selectedOptions[0];
   const originWrap = document.querySelector("#guichet-origin-wrap");
   const destinationWrap = document.querySelector("#guichet-destination-wrap");
@@ -1725,7 +1792,8 @@ document.querySelector("#guichet-sale-form").addEventListener("submit", async (e
         departureId: values.departureId,
         passengerName: values.passengerName,
         ...(values.originStopId ? { originStopId: values.originStopId } : {}),
-        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {})
+        ...(values.destinationStopId ? { destinationStopId: values.destinationStopId } : {}),
+        ...(values.seatNumber ? { seatNumber: Number(values.seatNumber) } : {})
       })
     });
     const result = await response.json();
@@ -1974,12 +2042,16 @@ function renderCourierTariffs() {
   courierTariffs.forEach((tariff) => {
     const row = document.createElement("tr");
     const route = document.createElement("td");
+    route.dataset.label = "Trajet";
     route.textContent = tariff.origin + " → " + tariff.destination;
     const amount = document.createElement("td");
+    amount.dataset.label = "Prix";
     amount.textContent = formatFcfa(tariff.amountFcfa);
     const status = document.createElement("td");
+    status.dataset.label = "État";
     status.textContent = tariff.isActive ? "Actif" : "Désactivé";
     const actions = document.createElement("td");
+    actions.dataset.label = "Actions";
     if (courierHasRole("administrateur", "responsable_courrier")) {
       const toggle = courierButton(tariff.isActive ? "Désactiver" : "Activer", "toggle-tariff", tariff.id);
       actions.append(toggle);
@@ -2010,14 +2082,19 @@ function renderCourier() {
     tracking.textContent = parcel.trackingCode;
     const recipient = document.createElement("small");
     recipient.textContent = parcel.recipientName;
+    identity.dataset.label = "Suivi / destinataire";
     identity.append(tracking, document.createElement("br"), recipient);
     const route = document.createElement("td");
+    route.dataset.label = "Trajet";
     route.textContent = parcel.origin + " → " + parcel.destination;
     const amount = document.createElement("td");
+    amount.dataset.label = "Prix";
     amount.textContent = formatFcfa(parcel.amountFcfa);
     const status = document.createElement("td");
+    status.dataset.label = "État";
     status.textContent = courierStatusLabels[parcel.status] || parcel.status;
     const actions = document.createElement("td");
+    actions.dataset.label = "Actions";
     actions.className = "courier-actions";
     if (parcel.status === "EN_ATTENTE_PAIEMENT" && courierHasRole("administrateur", "caissier")) {
       actions.append(courierButton("Encaisser", "pay", parcel.id));
@@ -2620,6 +2697,143 @@ document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventLi
   if (event.target.value === "FULL") percentage.value = "100";
 });
 
+
+let settingsLoadPromise = null;
+let settingsPaymentConfigurations = [];
+
+function settingsCanAdminister() {
+  try { return JSON.parse(localStorage.getItem("transora_user") || "{}").role === "administrateur"; }
+  catch { return false; }
+}
+function renderSettingsPayments() {
+  const target = document.querySelector("#settings-payment-list");
+  target.replaceChildren();
+  if (!settingsPaymentConfigurations.length) {
+    const empty = document.createElement("p");
+    empty.className = "settings-message";
+    empty.textContent = "Aucune configuration de paiement enregistrée.";
+    target.append(empty);
+    return;
+  }
+  settingsPaymentConfigurations.forEach((configuration) => {
+    const item = document.createElement("article");
+    item.className = "settings-payment-item";
+    const heading = document.createElement("strong");
+    const providerNames = {
+      orange_money: "Orange Money", mtn_momo: "MTN Mobile Money",
+      moov_money: "Moov Money", wave: "Wave", card: "Carte bancaire",
+      bank_transfer: "Virement bancaire"
+    };
+    heading.textContent = providerNames[configuration.provider] || configuration.provider;
+    const details = document.createElement("p");
+    details.textContent =
+      (configuration.merchant_account_ref ? "Référence : " + configuration.merchant_account_ref + " · " : "") +
+      "Environnement : " + (configuration.environment === "live" ? "Production" : "Test") +
+      " · Identifiants : " + (configuration.credentials_configured ? "enregistrés" : "non renseignés");
+    const status = document.createElement("span");
+    status.className = "settings-payment-status";
+    status.textContent = configuration.enabled ? "Activé" : "Désactivé — préparation uniquement";
+    item.append(heading, details, status);
+    target.append(item);
+  });
+}
+async function loadSettings() {
+  if (!accessToken) {
+    document.querySelector("#settings-company-message").textContent = "Connectez-vous pour consulter les paramètres de votre entreprise.";
+    document.querySelector("#settings-payment-message").textContent = "";
+    return;
+  }
+  if (settingsLoadPromise) return settingsLoadPromise;
+  settingsLoadPromise = (async () => {
+    const [tenantResponse, paymentResponse] = await Promise.all([
+      fetch("/api/v1/tenant"),
+      fetch("/api/v1/paiements/parametres")
+    ]);
+    const tenantResult = await tenantResponse.json();
+    const paymentResult = await paymentResponse.json();
+    if (!tenantResponse.ok) throw new Error(tenantResult.message || "Impossible de charger les informations de l'entreprise.");
+    document.querySelector("#settings-company-name").value = tenantResult.data.name || "";
+    document.querySelector("#settings-booking-url").value =
+      new URL(tenantResult.data.publicBookingUrl, window.location.origin).toString();
+    document.querySelector("#settings-company-save").hidden = !settingsCanAdminister();
+    document.querySelector("#settings-company-name").readOnly = !settingsCanAdminister();
+    if (paymentResponse.ok) {
+      settingsPaymentConfigurations = paymentResult.data || [];
+      renderSettingsPayments();
+      document.querySelector("#settings-payment-form").hidden = !settingsCanAdminister();
+      document.querySelector("#settings-payment-message").textContent = "";
+    } else {
+      document.querySelector("#settings-payment-message").textContent =
+        paymentResult.message || "Votre rôle ne permet pas de consulter les réglages de paiement.";
+      document.querySelector("#settings-payment-form").hidden = true;
+    }
+    document.querySelector("#settings-company-message").textContent = "";
+  })().catch((error) => {
+    document.querySelector("#settings-company-message").textContent = error.message || "Erreur de chargement des paramètres.";
+    throw error;
+  }).finally(() => { settingsLoadPromise = null; });
+  return settingsLoadPromise;
+}
+document.querySelector("#settings-refresh").addEventListener("click", () => loadSettings().catch((error) => showToast(error.message)));
+document.querySelector("#settings-company-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!settingsCanAdminister()) { showToast("Seul un administrateur peut modifier ces informations."); return; }
+  const form = event.currentTarget;
+  const submit = document.querySelector("#settings-company-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/tenant", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.elements.name.value.trim() })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer le nom de l'entreprise.");
+    document.querySelector("#settings-company-name").value = result.data.name;
+    document.querySelector("#settings-company-message").textContent = "Nom de l'entreprise mis à jour.";
+    showToast("Informations de l'entreprise enregistrées.");
+  } catch (error) {
+    document.querySelector("#settings-company-message").textContent = error.message || "Erreur d'enregistrement.";
+    showToast(error.message || "Impossible d'enregistrer les paramètres.");
+  } finally { submit.disabled = false; }
+});
+document.querySelector("#settings-copy-booking").addEventListener("click", async () => {
+  const url = document.querySelector("#settings-booking-url").value;
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("Lien public de réservation copié.");
+  } catch { showToast("Copie impossible sur cet appareil. Sélectionnez le lien pour le copier."); }
+});
+document.querySelector("#settings-payment-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!settingsCanAdminister()) { showToast("Seul un administrateur peut enregistrer une configuration."); return; }
+  const form = event.currentTarget;
+  const submit = document.querySelector("#settings-payment-save");
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/v1/paiements/parametres", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: form.elements.provider.value,
+        environment: "sandbox",
+        merchantAccountRef: form.elements.merchantAccountRef.value.trim() || null,
+        allowedMethods: [form.elements.provider.value],
+        enabled: false
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Impossible d'enregistrer cette configuration.");
+    document.querySelector("#settings-payment-message").textContent =
+      "Configuration enregistrée en mode préparation. Aucun paiement en ligne n'est activé.";
+    await loadSettings();
+    showToast("Configuration enregistrée, paiement en ligne toujours désactivé.");
+  } catch (error) {
+    document.querySelector("#settings-payment-message").textContent = error.message || "Erreur d'enregistrement.";
+    showToast(error.message || "Impossible d'enregistrer la configuration.");
+  } finally { submit.disabled = false; }
+});
+
 function showCurrentView() {
   const hash = window.location.hash || "#overview";
   const isVoyages = hash === "#voyages";
@@ -2631,7 +2845,8 @@ function showCurrentView() {
   const isCourier = hash === "#courrier";
   const isPersonnel = hash === "#personnel";
   const isStopOperations = hash === "#operations-arrets";
-  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel || isStopOperations;
+  const isSettings = hash === "#settings";
+  document.querySelector("#overview-page").hidden = isVoyages || isTariffs || isFleet || isPayments || isReports || isGuichet || isCourier || isPersonnel || isStopOperations || isSettings;
   document.querySelector("#voyages-page").hidden = !isVoyages;
   document.querySelector("#tariffs-page").hidden = !isTariffs;
   document.querySelector("#fleet-page").hidden = !isFleet;
@@ -2641,8 +2856,9 @@ function showCurrentView() {
   document.querySelector("#courier-page").hidden = !isCourier;
   document.querySelector("#personnel-page").hidden = !isPersonnel;
   document.querySelector("#stop-operations-page").hidden = !isStopOperations;
+  document.querySelector("#settings-page").hidden = !isSettings;
   document.querySelector(".breadcrumbs strong").textContent =
-    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : isStopOperations ? "Suivi des arrêts" : "Vue d'ensemble";
+    isVoyages ? "Voyages" : isTariffs ? "Gestion des tarifs" : isFleet ? "Flotte" : isPayments ? "Paiements" : isReports ? "Rapports" : isGuichet ? "Guichet" : isCourier ? "Service courrier" : isPersonnel ? "Personnel" : isStopOperations ? "Suivi des arrêts" : isSettings ? "Paramètres" : "Vue d'ensemble";
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.hash === hash);
   });
@@ -2655,6 +2871,7 @@ function showCurrentView() {
   if (isCourier) loadCourier();
   if (isPersonnel) loadPersonnel();
   if (isStopOperations) loadStopOperations();
+  if (isSettings) loadSettings().catch((error) => showToast(error.message || "Impossible de charger les paramètres."));
 }
 
 document.querySelector("#stop-operations-departure").addEventListener("change", () => { populateStopOperationSelectors(); loadStopOperations(); });
@@ -2895,53 +3112,55 @@ document.querySelector("#fleet-form").addEventListener("submit", async (event) =
   }
 });
 
-document.querySelector("#export-button").addEventListener("click", () => {
-  if (window.location.hash === "#reports") {
-    exportFinancialReport();
-    return;
-  }
-  const isVoyages = window.location.hash === "#voyages";
-  const isFleet = window.location.hash === "#flotte";
-  const data = isFleet
-    ? [
-      ["Immatriculation", "Modèle", "Capacité", "Année", "État"],
-      ...fleetVehicles.map((vehicle) => [
-        vehicle.immatriculation,
-        vehicle.modele,
-        `${vehicle.capacite} places`,
-        vehicle.annee || "",
-        vehicle.statut
-      ])
-    ]
-    : isVoyages
-    ? [
-      ["Trajet", "Date et heure", "Véhicule", "Places disponibles", "Remplissage", "Statut"],
-      ...voyageDepartures.map((departure) => [
-        `${departure.origin} → ${departure.destination}`,
-        new Date(departure.departureAt).toLocaleString("fr-FR"),
-        departure.vehicleCode,
-        `${departure.availableSeats} / ${departure.capacity}`,
-        `${departure.occupancyRate}%`,
-        departure.status
-      ])
-    ]
-    : [
-      ["Trajet", "Heure", "Véhicule", "Remplissage", "Statut"],
-      ...rows.map((row) => Array.from(row.querySelectorAll("td"))
-        .map((cell) => cell.innerText.replace(/\s+/g, " ").trim()))
-    ];
+function downloadCsv(data, filename, successMessage) {
   const csv = data.map((record) => record
-    .map((value) => `"${value.replaceAll('"', '""')}"`).join(";")).join("\n");
+    .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(";")).join("\n");
   const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = isFleet
-    ? "transora-flotte.csv"
-    : isVoyages ? "transora-voyages.csv" : "transora-departs.csv";
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-  showToast(isFleet ? "Liste de la flotte exportée." : "Rapport des départs exporté.");
+  showToast(successMessage);
+}
+
+document.querySelector("#overview-export").addEventListener("click", () => {
+  const data = [
+    ["Trajet", "Heure", "Véhicule", "Remplissage", "Statut"],
+    ...rows.map((row) => Array.from(row.querySelectorAll("td"))
+      .map((cell) => cell.innerText.replace(/\\s+/g, " ").trim()))
+  ];
+  downloadCsv(data, "transora-departs.csv", "Départs de la journée exportés.");
+});
+
+document.querySelector("#voyages-export").addEventListener("click", () => {
+  const data = [
+    ["Trajet", "Date et heure", "Véhicule", "Places disponibles", "Remplissage", "Statut"],
+    ...voyageDepartures.map((departure) => [
+      `${departure.origin} → ${departure.destination}`,
+      new Date(departure.departureAt).toLocaleString("fr-FR"),
+      departure.vehicleCode,
+      `${departure.availableSeats} / ${departure.capacity}`,
+      `${departure.occupancyRate}%`,
+      departure.status
+    ])
+  ];
+  downloadCsv(data, "transora-voyages.csv", "Liste des voyages exportée.");
+});
+
+document.querySelector("#fleet-export").addEventListener("click", () => {
+  const data = [
+    ["Immatriculation", "Modèle", "Capacité", "Année", "État"],
+    ...fleetVehicles.map((vehicle) => [
+      vehicle.immatriculation,
+      vehicle.modele,
+      `${vehicle.capacite} places`,
+      vehicle.annee || "",
+      vehicle.statut
+    ])
+  ];
+  downloadCsv(data, "transora-flotte.csv", "Liste de la flotte exportée.");
 });
 
 document.querySelector(".notification-button").addEventListener("click", () => {

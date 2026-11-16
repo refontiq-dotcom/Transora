@@ -13,6 +13,7 @@ let secondSegmentBookingId: string;
 let publicCode: string;
 let departureId: string;
 let holdDepartureId: string;
+let guichetDepartureId: string;
 let originStopId: string;
 let middleStopId: string;
 let destinationStopId: string;
@@ -49,7 +50,7 @@ beforeAll(async () => {
     [tenantId]
   );
   const stations = await pool.query(
-    "INSERT INTO stations (tenant_id,city_id,name,city) VALUES ($1,$2,'Gare A','Segment Ville A'),($1,$3,'Gare B','Segment Ville B'),($1,$4,'Gare C','Segment Ville C') RETURNING id,name",
+    "INSERT INTO stations (tenant_id,city_id,name) VALUES ($1,$2,'Gare A'),($1,$3,'Gare B'),($1,$4,'Gare C') RETURNING id,name",
     [tenantId, cities.rows[0].id, cities.rows[1].id, cities.rows[2].id]
   );
   const route = await pool.query(
@@ -85,10 +86,17 @@ beforeAll(async () => {
     [tenantId, route.rows[0].id]
   );
   holdDepartureId = holdDeparture.rows[0].id;
+  const guichetDeparture = await pool.query(
+    `INSERT INTO departures (tenant_id,origin,destination,departure_at,vehicle_code,capacity,fare_amount,company_booking_fee,route_id)
+     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '4 days','GUICHET-TEST',3,10000,300,$2) RETURNING id`,
+    [tenantId, route.rows[0].id]
+  );
+  guichetDepartureId = guichetDeparture.rows[0].id;
 });
 
 afterAll(async () => {
   if (tenantId) {
+    await pool.query("DELETE FROM guichet_operations WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM bookings WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM departures WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM route_stops WHERE tenant_id=$1", [tenantId]);
@@ -218,7 +226,7 @@ test("un segment dont les arrêts sont inversés est refusé", async () => {
 
 
 test("une réservation publique bloque temporairement un siège puis le libère à expiration", async () => {
-  const createHold = async () => fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
+  const createHold = async (seatNumber?: number) => fetch(`${baseUrl}/api/public/${publicCode}/reservations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -228,17 +236,41 @@ test("une réservation publique bloque temporairement un siège puis le libère 
       policyAccepted: true,
       originStopId,
       destinationStopId,
-      amountTransport: 1
+      amountTransport: 1,
+      ...(seatNumber === undefined ? {} : { seatNumber })
     })
   });
 
-  const firstResponse = await createHold();
+  const firstResponse = await createHold(2);
   expect(firstResponse.status).toBe(201);
   const first = await firstResponse.json() as { data: { bookingId: string; seatNumber: number; transportAmount: number; bookingStatus: string; holdExpiresAt: string | null } };
   expect(first.data.bookingStatus).toBe("HELD");
-  expect(first.data.seatNumber).toBe(1);
+  expect(first.data.seatNumber).toBe(2);
   expect(first.data.transportAmount).toBe(10000);
   expect(first.data.holdExpiresAt).toBeTruthy();
+
+  const departureDate = await pool.query(
+    "SELECT departure_at::date::text AS selected_date FROM departures WHERE id=$1 AND tenant_id=$2",
+    [holdDepartureId, tenantId]
+  );
+  const headers = { Authorization: `Bearer ${token}` };
+  const dashboardResponse = await fetch(
+    `${baseUrl}/api/v1/dashboard?date=${departureDate.rows[0].selected_date}`,
+    { headers }
+  );
+  expect(dashboardResponse.status).toBe(200);
+  const dashboard = await dashboardResponse.json() as { data: { metrics: { reservedSeatsToday: number } } };
+  expect(dashboard.data.metrics.reservedSeatsToday).toBeGreaterThanOrEqual(1);
+
+  const paymentListResponse = await fetch(`${baseUrl}/api/v1/paiements`, { headers });
+  expect(paymentListResponse.status).toBe(200);
+  const paymentList = await paymentListResponse.json() as { data: { paiements: Array<{ billetId: string; statut: string; statutRéservation: string }> } };
+  expect(paymentList.data.paiements).toEqual(expect.arrayContaining([
+    expect.objectContaining({ billetId: first.data.bookingId, statut: "NOT_INITIATED", statutRéservation: "HELD" })
+  ]));
+
+  const duplicateSeatResponse = await createHold(2);
+  expect(duplicateSeatResponse.status).toBe(409);
 
   await pool.query(
     "UPDATE bookings SET hold_expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1 AND tenant_id=$2",
@@ -253,6 +285,36 @@ test("une réservation publique bloque temporairement un siège puis le libère 
 
   const expired = await pool.query("SELECT status FROM bookings WHERE id=$1", [first.data.bookingId]);
   expect(expired.rows[0].status).toBe("EXPIRED");
+});
+
+test("le guichet attribue automatiquement la première place libre et respecte une place demandée", async () => {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const openResponse = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+    method: "POST", headers, body: JSON.stringify({ openingAmount: 0 })
+  });
+  expect(openResponse.status).toBe(201);
+
+  const sell = (passengerName: string, seatNumber?: number) => fetch(`${baseUrl}/api/v1/guichet/vente`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      departureId: guichetDepartureId,
+      passengerName,
+      originStopId,
+      destinationStopId,
+      ...(seatNumber === undefined ? {} : { seatNumber })
+    })
+  });
+
+  const automaticResponse = await sell("Client guichet automatique");
+  expect(automaticResponse.status).toBe(201);
+  const automatic = await automaticResponse.json() as { data: { seatNumber: number } };
+  expect(automatic.data.seatNumber).toBe(1);
+
+  const requestedResponse = await sell("Client guichet place choisie", 3);
+  expect(requestedResponse.status).toBe(201);
+  const requested = await requestedResponse.json() as { data: { seatNumber: number } };
+  expect(requested.data.seatNumber).toBe(3);
 });
 
 test("un paiement ne peut pas confirmer un hold expiré", async () => {

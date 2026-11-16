@@ -8,6 +8,8 @@ const ticketPanel = document.querySelector("#public-ticket");
 let companyName = "";
 let publicDepartures = [];
 let boardingPolicy = null;
+let selectedSeatNumber = null;
+let currentPublicSeats = [];
 const policyAccepted = document.querySelector("#public-policy-accepted");
 
 function money(value) {
@@ -66,37 +68,102 @@ function updateDestinationStops() {
   const destinationStops = originIndex >= 0 ? stops.slice(originIndex + 1) : [];
   fillStopSelect(document.querySelector("#public-destination-stop"), destinationStops, "Choisissez votre arrivée");
   document.querySelector("#public-destination-wrap").hidden = !stops.length;
+  selectedSeatNumber = null;
+  currentPublicSeats = [];
+  renderPublicSeats([]);
   document.querySelector("#public-seat-availability").textContent = "";
+  updatePublicSubmitState();
+}
+function selectedSeatMode() {
+  return document.querySelector('input[name="seatMode"]:checked')?.value || "auto";
+}
+function renderPublicSeats(seats) {
+  const wrap = document.querySelector("#public-seats-wrap");
+  const grid = document.querySelector("#public-seats");
+  grid.replaceChildren();
+  if (!Array.isArray(seats) || seats.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  seats.forEach((seat, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "public-seat";
+    button.textContent = String(seat.number);
+    button.disabled = !seat.available;
+    button.style.gridColumn = String([1, 2, 4, 5][index % 4]);
+    button.style.gridRow = String(Math.floor(index / 4) + 1);
+    button.classList.toggle("is-selected", seat.number === selectedSeatNumber);
+    button.setAttribute("aria-pressed", String(seat.number === selectedSeatNumber));
+    button.setAttribute("aria-label", "Place " + seat.number + ", " + (seat.available ? "libre" : "déjà prise"));
+    button.title = seat.available ? "Place " + seat.number + " disponible" : "Place " + seat.number + " déjà prise";
+    button.addEventListener("click", () => {
+      document.querySelector('input[name="seatMode"][value="manual"]').checked = true;
+      selectedSeatNumber = seat.number;
+      renderPublicSeats(currentPublicSeats);
+      updatePublicSubmitState();
+    });
+    grid.append(button);
+  });
+}
+function updatePublicSubmitState() {
+  const departure = selectedDeparture();
+  const hasSegment = !departure?.routeStops?.length
+    || (document.querySelector("#public-origin-stop").value && document.querySelector("#public-destination-stop").value);
+  const hasAvailableSeat = currentPublicSeats.some(seat => seat.available);
+  const manualSeatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
+  const seatIsValid = selectedSeatMode() === "auto" ? hasAvailableSeat : manualSeatIsAvailable;
+  document.querySelector("#public-submit").disabled =
+    !departure || !hasSegment || !seatIsValid || !policyAccepted.checked;
 }
 async function refreshPublicSeatAvailability() {
   const departure = selectedDeparture();
   const originId = document.querySelector("#public-origin-stop").value;
   const destinationId = document.querySelector("#public-destination-stop").value;
   const target = document.querySelector("#public-seat-availability");
-  const submit = document.querySelector("#public-submit");
-  if (!departure) { target.textContent = ""; submit.disabled = true; return; }
-  if (!departure.routeStops?.length) {
-    target.textContent = "Places disponibles : " + departure.availableSeats + " sur " + departure.capacity + ".";
-    submit.disabled = departure.availableSeats <= 0 || !policyAccepted.checked;
+  if (!departure) {
+    selectedSeatNumber = null;
+    currentPublicSeats = [];
+    renderPublicSeats([]);
+    target.textContent = "";
+    updatePublicSubmitState();
     return;
   }
-  if (!originId || !destinationId) {
-    target.textContent = "Sélectionnez votre ville de départ et votre destination pour voir les places disponibles.";
+  if (departure.routeStops?.length && (!originId || !destinationId)) {
+    selectedSeatNumber = null;
+    currentPublicSeats = [];
+    renderPublicSeats([]);
+    target.textContent = "Sélectionnez votre ville de départ et votre destination pour voir les sièges disponibles.";
+    updatePublicSubmitState();
     return;
   }
   target.textContent = "Vérification des places disponibles…";
-  submit.disabled = true;
+  document.querySelector("#public-submit").disabled = true;
   try {
-    const query = new URLSearchParams({ originStopId: originId, destinationStopId: destinationId });
-    const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/departs/${encodeURIComponent(departure.id)}/places?${query}`);
+    const query = new URLSearchParams();
+    if (departure.routeStops?.length) {
+      query.set("originStopId", originId);
+      query.set("destinationStopId", destinationId);
+    }
+    const suffix = query.toString() ? "?" + query.toString() : "";
+    const response = await fetch("/api/public/" + encodeURIComponent(companyCode) + "/departs/" + encodeURIComponent(departure.id) + "/places" + suffix);
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
-    target.textContent = result.data.availableCount + " place(s) disponible(s) sur ce segment · " +
-      money(result.data.fareAmount) + " de transport + " + money(result.data.companyBookingFee) + " de frais compagnie + 100 FCFA TRANSORA.";
-    submit.disabled = result.data.availableCount === 0 || !policyAccepted.checked;
+    currentPublicSeats = result.data.seats || [];
+    selectedSeatNumber = null;
+    document.querySelector('input[name="seatMode"][value="auto"]').checked = true;
+    renderPublicSeats(currentPublicSeats);
+    target.textContent = result.data.availableCount + " place(s) libre(s) sur " + result.data.capacity +
+      ". Vert : libre · Gris : déjà prise. Par défaut, Transora attribue la première place libre. " +
+      money(result.data.fareAmount) + " + frais compagnie " + money(result.data.companyBookingFee) + " + 100 FCFA TRANSORA.";
+    updatePublicSubmitState();
   } catch (error) {
+    selectedSeatNumber = null;
+    currentPublicSeats = [];
+    renderPublicSeats([]);
     target.textContent = error.message || "Vérification des places impossible.";
-    submit.disabled = true;
+    updatePublicSubmitState();
   }
 }
 function configurePublicStops() {
@@ -106,7 +173,10 @@ function configurePublicStops() {
   const originSelect = document.querySelector("#public-origin-stop");
   const destinationSelect = document.querySelector("#public-destination-stop");
   const stops = departure?.routeStops || [];
-  document.querySelector("#public-submit").disabled = Boolean(stops.length);
+  selectedSeatNumber = null;
+  currentPublicSeats = [];
+  renderPublicSeats([]);
+  document.querySelector("#public-submit").disabled = true;
   originWrap.hidden = !stops.length;
   destinationWrap.hidden = !stops.length;
   originSelect.disabled = !stops.length;
@@ -160,7 +230,12 @@ async function loadDepartures() {
 select.addEventListener("change", configurePublicStops);
 document.querySelector("#public-origin-stop").addEventListener("change", () => { updateDestinationStops(); });
 document.querySelector("#public-destination-stop").addEventListener("change", refreshPublicSeatAvailability);
-policyAccepted.addEventListener("change", refreshPublicSeatAvailability);
+policyAccepted.addEventListener("change", updatePublicSubmitState);
+document.querySelectorAll('input[name="seatMode"]').forEach(input => input.addEventListener("change", () => {
+  if (selectedSeatMode() === "auto") selectedSeatNumber = null;
+  renderPublicSeats(currentPublicSeats);
+  updatePublicSubmitState();
+}));
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const submit = document.querySelector("#public-submit");
@@ -169,6 +244,8 @@ form.addEventListener("submit", async (event) => {
   try {
     const values = Object.fromEntries(new FormData(form).entries());
     values.policyAccepted = policyAccepted.checked;
+    if (selectedSeatMode() === "manual") values.seatNumber = selectedSeatNumber;
+    else delete values.seatNumber;
     const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values)
     });

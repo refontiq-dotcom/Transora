@@ -21,6 +21,29 @@
     .public-ticket img{width:220px;max-width:100%;height:auto;justify-self:center}
     .public-ticket p{margin:0;line-height:1.5}
     .public-message{margin-top:14px;color:#607168}
+    .public-seat-section{display:grid;gap:13px;padding:16px;border:1px solid #dce9df;border-radius:18px;background:linear-gradient(160deg,#fbfefc,#f1f8f3)}
+    .public-seat-section h3{margin:0;font-size:15px}
+    .public-seat-mode{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:0;border:0}
+    .public-seat-mode legend{margin-bottom:8px;color:#52645a;font-size:12px;font-weight:700}
+    .public-seat-mode label{display:grid;grid-template-columns:18px 1fr;align-items:start;gap:4px 7px;padding:10px;border:1px solid #dce6df;border-radius:12px;background:#fff;cursor:pointer}
+    .public-seat-mode input{grid-row:span 2;accent-color:#16834b;margin:2px 0 0}
+    .public-seat-mode strong{font-size:12px;color:#193c29}
+    .public-seat-mode small{grid-column:2;color:#758279;font-size:10px;line-height:1.35}
+    .public-bus-front{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;color:#476453;font-size:10px;font-weight:800;letter-spacing:.12em}
+    .public-bus-front svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+    .public-seat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) 22px repeat(2,minmax(0,1fr));gap:9px 7px;padding:13px;border:1px solid #d9e7dd;border-radius:16px;background:#fff}
+    .public-seat{position:relative;display:grid;place-items:center;min-height:53px;border:1px solid #79c995;border-radius:11px;background:#e0f6e7;color:#176b39;font:inherit;font-size:13px;font-weight:800;cursor:pointer;transition:transform .16s,border-color .16s,background .16s}
+    .public-seat::before{content:"";position:absolute;top:5px;width:18px;height:8px;border:1.5px solid currentColor;border-radius:4px 4px 2px 2px;opacity:.55}
+    .public-seat:disabled{background:#e9edeb;color:#9aa59e;border-color:#d6ddd8;cursor:not-allowed}
+    .public-seat:disabled::before{opacity:.3}
+    .public-seat.is-selected{background:#176b49;color:#fff;border-color:#176b49;box-shadow:0 0 0 2px #176b4930}
+    .public-seat:not(:disabled):active{transform:scale(.96)}
+    .public-seat-legend{display:flex;gap:12px;flex-wrap:wrap;color:#607168;font-size:11px}
+    .public-seat-legend span{display:inline-flex;align-items:center;gap:6px}
+    .public-seat-legend i{width:11px;height:11px;border-radius:4px;border:1px solid #79c995;background:#e0f6e7}
+    .public-seat-legend .occupied-key{background:#e9edeb;border-color:#d6ddd8}
+    .public-seat-legend .selected-key{background:#176b49;border-color:#176b49}
+    @media(max-width:420px){.public-seat-grid{gap:7px 5px;padding:9px}.public-seat{min-height:47px}.public-seat-mode{grid-template-columns:1fr}}
     .public-error{color:#a52c2c}
     @media print{body{background:#fff}.public-booking{margin:0;width:100%}.public-card{box-shadow:none;border:0}.public-form,.public-message,.public-print,.public-subtitle{display:none!important}.public-ticket{border:1px solid #aaa}}
   </style>
@@ -30,16 +53,32 @@
     <section class="public-card">
       <div class="public-brand">TRANSORA</div>
       <h1 id="public-title">Réserver votre voyage</h1>
-      <p class="public-subtitle">Choisissez votre départ, renseignez vos coordonnées et recevez immédiatement votre billet. Le règlement s'effectue auprès de la compagnie.</p>
+      <p class="public-subtitle">Choisissez votre trajet. Transora peut attribuer automatiquement une place libre ou vous laisser choisir votre siège. Renseignez vos coordonnées pour bloquer la place pendant 15 minutes.</p>
       <form id="public-booking-form" class="public-form">
         <label>Départ disponible<select name="departureId" id="public-departure" required><option value="">Chargement…</option></select></label>
         <label id="public-origin-wrap" hidden>Ville / gare de départ<select name="originStopId" id="public-origin-stop"></select></label>
         <label id="public-destination-wrap" hidden>Ville / gare d’arrivée<select name="destinationStopId" id="public-destination-stop"></select></label>
         <p id="public-seat-availability" class="public-message" aria-live="polite"></p>
+        <section id="public-seats-wrap" class="public-seat-section" hidden aria-labelledby="public-seats-title">
+          <h3 id="public-seats-title">Choisissez comment attribuer votre siège</h3>
+          <fieldset class="public-seat-mode">
+            <legend>Vous pouvez laisser Transora choisir pour vous</legend>
+            <label><input type="radio" name="seatMode" value="auto" checked><strong>Automatique</strong><small>La première place libre vous est attribuée.</small></label>
+            <label><input type="radio" name="seatMode" value="manual"><strong>Je choisis</strong><small>Touchez un siège vert sur le plan.</small></label>
+          </fieldset>
+          <div class="public-bus-front" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 19V8a7 7 0 0 1 14 0v11M5 12h14M8 19v2m8-2v2M8 8h8"/><circle cx="12" cy="8" r="2"/></svg>
+            AVANT DU CAR
+          </div>
+          <div id="public-seats" class="public-seat-grid" role="group" aria-label="Plan des sièges du car"></div>
+          <div class="public-seat-legend" aria-label="Légende des sièges">
+            <span><i></i> Libre</span><span><i class="selected-key"></i> Votre choix</span><span><i class="occupied-key"></i> Déjà pris</span>
+          </div>
+        </section>
         <label>Nom complet du passager<input name="passengerName" required minlength="2" maxlength="160" autocomplete="name"></label>
         <label>Téléphone<input name="passengerPhone" required minlength="8" maxlength="24" autocomplete="tel" placeholder="+225 07 00 00 00 00"></label>
         <section class="public-policy" aria-labelledby="public-policy-title"><h3 id="public-policy-title">Conditions d’embarquement de la compagnie</h3><p id="public-policy-summary">Chargement des conditions…</p><label class="public-policy-accept"><input type="checkbox" id="public-policy-accepted" name="policyAccepted" required> J’ai lu et j’accepte ces conditions pour cette réservation.</label></section>
-        <button class="primary-button" type="submit" id="public-submit" disabled>Réserver et générer mon billet</button>
+        <button class="primary-button" type="submit" id="public-submit" disabled>Bloquer ma place pendant 15 min</button>
       </form>
       <p id="public-message" class="public-message" role="status" aria-live="polite"></p>
       <section id="public-ticket" class="public-ticket" hidden>
