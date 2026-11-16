@@ -1,13 +1,27 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "devCommand": "npm run dev",
   "rewrites": [
+    { "source": "/(.*)", "destination": "/index" }
+  ],
+  "headers": [
     {
-      "source": "/",
-      "destination": "/api/root"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,HEAD,PUT,PATCH,POST,DELETE" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+      ]
     }
-  ]
+  ],
+  "functions": {
+    "api/*.ts": {
+      "runtime": "nodejs18.x"
+    },
+    "api/**/*.ts": {
+      "runtime": "nodejs18.x"
+    }
+  }
 }

@@ -1,0 +1,15 @@
+📋 获取 Supabase SSL 证书的步骤：
+
+1. 打开 https://supabase.com/dashboard
+2. 进入你的项目 → Settings (左侧菜单)
+3. 点击 Database
+4. 向下滚动找到 "SSL mode" section
+5. 点击 "Download root certificate" 按钮
+6. 用记事本打开下载的 .crt 文件
+7. 复制全部内容（包含 -----BEGIN CERTIFICATE----- 和 -----END CERTIFICATE-----）
+8. 运行以下命令设置到 Vercel：
+
+   vercel env add SUPABASE_DB_CA_CERT --environment production
+   # 然后粘贴你复制的证书内容
+
+9. 同时修改 src/db/connection.ts，添加环境变量读取证书逻辑

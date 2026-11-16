@@ -7,3 +7,5 @@ dist-test/
 certs/*.crt
 certs/*.pem
 npm-debug.log*
+.vercel
+.env*
