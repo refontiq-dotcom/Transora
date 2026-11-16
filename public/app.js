@@ -3112,53 +3112,55 @@ document.querySelector("#fleet-form").addEventListener("submit", async (event) =
   }
 });
 
-document.querySelector("#export-button").addEventListener("click", () => {
-  if (window.location.hash === "#reports") {
-    exportFinancialReport();
-    return;
-  }
-  const isVoyages = window.location.hash === "#voyages";
-  const isFleet = window.location.hash === "#flotte";
-  const data = isFleet
-    ? [
-      ["Immatriculation", "Modèle", "Capacité", "Année", "État"],
-      ...fleetVehicles.map((vehicle) => [
-        vehicle.immatriculation,
-        vehicle.modele,
-        `${vehicle.capacite} places`,
-        vehicle.annee || "",
-        vehicle.statut
-      ])
-    ]
-    : isVoyages
-    ? [
-      ["Trajet", "Date et heure", "Véhicule", "Places disponibles", "Remplissage", "Statut"],
-      ...voyageDepartures.map((departure) => [
-        `${departure.origin} → ${departure.destination}`,
-        new Date(departure.departureAt).toLocaleString("fr-FR"),
-        departure.vehicleCode,
-        `${departure.availableSeats} / ${departure.capacity}`,
-        `${departure.occupancyRate}%`,
-        departure.status
-      ])
-    ]
-    : [
-      ["Trajet", "Heure", "Véhicule", "Remplissage", "Statut"],
-      ...rows.map((row) => Array.from(row.querySelectorAll("td"))
-        .map((cell) => cell.innerText.replace(/\s+/g, " ").trim()))
-    ];
+function downloadCsv(data, filename, successMessage) {
   const csv = data.map((record) => record
-    .map((value) => `"${value.replaceAll('"', '""')}"`).join(";")).join("\n");
+    .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(";")).join("\n");
   const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = isFleet
-    ? "transora-flotte.csv"
-    : isVoyages ? "transora-voyages.csv" : "transora-departs.csv";
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-  showToast(isFleet ? "Liste de la flotte exportée." : "Rapport des départs exporté.");
+  showToast(successMessage);
+}
+
+document.querySelector("#overview-export").addEventListener("click", () => {
+  const data = [
+    ["Trajet", "Heure", "Véhicule", "Remplissage", "Statut"],
+    ...rows.map((row) => Array.from(row.querySelectorAll("td"))
+      .map((cell) => cell.innerText.replace(/\\s+/g, " ").trim()))
+  ];
+  downloadCsv(data, "transora-departs.csv", "Départs de la journée exportés.");
+});
+
+document.querySelector("#voyages-export").addEventListener("click", () => {
+  const data = [
+    ["Trajet", "Date et heure", "Véhicule", "Places disponibles", "Remplissage", "Statut"],
+    ...voyageDepartures.map((departure) => [
+      `${departure.origin} → ${departure.destination}`,
+      new Date(departure.departureAt).toLocaleString("fr-FR"),
+      departure.vehicleCode,
+      `${departure.availableSeats} / ${departure.capacity}`,
+      `${departure.occupancyRate}%`,
+      departure.status
+    ])
+  ];
+  downloadCsv(data, "transora-voyages.csv", "Liste des voyages exportée.");
+});
+
+document.querySelector("#fleet-export").addEventListener("click", () => {
+  const data = [
+    ["Immatriculation", "Modèle", "Capacité", "Année", "État"],
+    ...fleetVehicles.map((vehicle) => [
+      vehicle.immatriculation,
+      vehicle.modele,
+      `${vehicle.capacite} places`,
+      vehicle.annee || "",
+      vehicle.statut
+    ])
+  ];
+  downloadCsv(data, "transora-flotte.csv", "Liste de la flotte exportée.");
 });
 
 document.querySelector(".notification-button").addEventListener("click", () => {
