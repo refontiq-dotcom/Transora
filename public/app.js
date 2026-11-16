@@ -1075,7 +1075,6 @@ function setAuthMode(register) {
     : "Créer un espace entreprise";
   document.querySelector("#name-field").hidden = !register;
   document.querySelector("#company-field").hidden = !register;
-  document.querySelector("#siret-field").hidden = !register;
   authForm.elements.name.required = register;
   authForm.elements.companyName.required = register;
   authForm.elements.password.autocomplete = register ? "new-password" : "current-password";
