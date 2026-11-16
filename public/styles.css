@@ -1,11 +1,15 @@
 :root {
   color-scheme: light;
-  --forest: #09271b;
-  --forest-soft: #103a28;
-  --green: #2e9c50;
-  --green-bright: #52b968;
-  --brand-accent: #52b968;
+  --brand-primary: #2e9c50;
   --brand-secondary: #103a28;
+  --brand-accent: #52b968;
+  --brand-primary-soft: color-mix(in srgb, var(--brand-primary) 10%, white);
+  --brand-secondary-soft: color-mix(in srgb, var(--brand-secondary) 10%, white);
+  --brand-primary-border: color-mix(in srgb, var(--brand-primary) 24%, white);
+  --forest: var(--brand-secondary);
+  --forest-soft: var(--brand-primary);
+  --green: var(--brand-primary);
+  --green-bright: var(--brand-accent);
   --ink: #17241d;
   --muted: #88938d;
   --line: #e9eee9;
@@ -941,3 +945,46 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
     flex: 1 1 140px;
   }
 }
+
+
+/* Thème de marque global : toutes les pages de gestion suivent les couleurs choisies. */
+.brand-mark i { background: var(--brand-accent); }
+.workspace-avatar { background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 18%, white), var(--brand-primary)); color: #fff; }
+.nav-link.active { box-shadow: inset 2px 0 var(--brand-accent); }
+.primary-button { background: var(--brand-secondary); }
+.primary-button:hover { background: color-mix(in srgb, var(--brand-secondary) 82%, #111); }
+.featured-card { background: linear-gradient(130deg, color-mix(in srgb, var(--brand-secondary) 78%, #101018), color-mix(in srgb, var(--brand-secondary) 58%, #080910) 82%); border-color: var(--brand-secondary); }
+.soft-icon { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.metric-icon.soft-icon { color: var(--brand-primary); }
+.mini-bars i, .green-spark path { background: var(--brand-primary); stroke: var(--brand-primary); }
+.legend-bar, .bar-group i { background: color-mix(in srgb, var(--brand-primary) 24%, white); }
+.legend-line, .bar-group i:nth-child(2), .bar-group:nth-child(4) i:nth-child(2) { background: var(--brand-primary); }
+.line-stroke, .chart-line circle { stroke: var(--brand-primary); }
+#line-fill stop { stop-color: var(--brand-primary); }
+.donut-value, .occupancy-legend i:not(.legend-light):not(.legend-yellow) { stroke: var(--brand-primary); background: var(--brand-primary); }
+.insight-dot { background: var(--brand-primary); }
+.text-link, .secondary-button, .voyage-action, .fleet-action, .payment-action, .auth-toggle { color: var(--brand-primary); }
+.secondary-button, .voyage-action, .fleet-action, .payment-action { border-color: var(--brand-primary-border); background: var(--brand-primary-soft); }
+.secondary-button:hover { background: color-mix(in srgb, var(--brand-primary) 16%, white); }
+.route-marker:not(.marker-gold):not(.marker-blue):not(.marker-purple) { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.capacity-track i { background: var(--brand-primary); }
+.report-net-card { background: var(--brand-primary-soft); border-color: var(--brand-primary-border); }
+.report-type { color: var(--brand-primary); background: var(--brand-primary-soft); }
+.auth-form input:focus, .auth-form select:focus, .scanner-input-row input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 14%, transparent); }
+.network-card { color: var(--brand-secondary); background: color-mix(in srgb, var(--brand-primary) 5%, white); border-color: var(--brand-primary-border); }
+.network-card::before, .network-card::after { border-color: color-mix(in srgb, var(--brand-secondary) 18%, transparent); }
+.network-heading p, .network-heading h2, .network-map text { color: var(--brand-secondary); fill: var(--brand-secondary); }
+.map-shape { fill: color-mix(in srgb, var(--brand-primary) 12%, transparent); stroke: color-mix(in srgb, var(--brand-primary) 38%, transparent); }
+.map-road { stroke: color-mix(in srgb, var(--brand-secondary) 32%, transparent); }
+.route-glow { stroke: color-mix(in srgb, var(--brand-accent) 28%, transparent); }
+.route-line { stroke: var(--brand-primary); }
+.map-point { fill: var(--brand-accent); }
+.small-point { fill: var(--brand-secondary); }
+.mobile-brand { color: var(--brand-secondary); }
+.module-illustration { border-color: var(--brand-primary-border); background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 7%, white), color-mix(in srgb, var(--brand-secondary) 12%, white)); color: var(--brand-secondary); }
+.module-illustration small { color: var(--brand-secondary); }
+.module-illustration-glow { background: color-mix(in srgb, var(--brand-accent) 42%, white); }
+.branding-preview { background: linear-gradient(120deg, color-mix(in srgb, var(--brand-primary) 9%, white), color-mix(in srgb, var(--brand-secondary) 5%, white) 70%); }
+.branding-preview-logo, .dashboard-company-logo { background: var(--brand-primary); }
+.branding-storage-note { border-left-color: var(--brand-accent); }
+.workspace-avatar.has-company-logo { background: white; }
