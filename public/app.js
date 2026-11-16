@@ -2042,12 +2042,16 @@ function renderCourierTariffs() {
   courierTariffs.forEach((tariff) => {
     const row = document.createElement("tr");
     const route = document.createElement("td");
+    route.dataset.label = "Trajet";
     route.textContent = tariff.origin + " → " + tariff.destination;
     const amount = document.createElement("td");
+    amount.dataset.label = "Prix";
     amount.textContent = formatFcfa(tariff.amountFcfa);
     const status = document.createElement("td");
+    status.dataset.label = "État";
     status.textContent = tariff.isActive ? "Actif" : "Désactivé";
     const actions = document.createElement("td");
+    actions.dataset.label = "Actions";
     if (courierHasRole("administrateur", "responsable_courrier")) {
       const toggle = courierButton(tariff.isActive ? "Désactiver" : "Activer", "toggle-tariff", tariff.id);
       actions.append(toggle);
