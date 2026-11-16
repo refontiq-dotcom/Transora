@@ -13,6 +13,7 @@ let secondSegmentBookingId: string;
 let publicCode: string;
 let departureId: string;
 let holdDepartureId: string;
+let guichetDepartureId: string;
 let originStopId: string;
 let middleStopId: string;
 let destinationStopId: string;
@@ -85,6 +86,12 @@ beforeAll(async () => {
     [tenantId, route.rows[0].id]
   );
   holdDepartureId = holdDeparture.rows[0].id;
+  const guichetDeparture = await pool.query(
+    `INSERT INTO departures (tenant_id,origin,destination,departure_at,vehicle_code,capacity,fare_amount,company_booking_fee,route_id)
+     VALUES ($1,'Segment Ville A','Segment Ville C',NOW()+INTERVAL '4 days','GUICHET-TEST',3,10000,300,$2) RETURNING id`,
+    [tenantId, route.rows[0].id]
+  );
+  guichetDepartureId = guichetDeparture.rows[0].id;
 });
 
 afterAll(async () => {
@@ -277,6 +284,36 @@ test("une réservation publique bloque temporairement un siège puis le libère 
 
   const expired = await pool.query("SELECT status FROM bookings WHERE id=$1", [first.data.bookingId]);
   expect(expired.rows[0].status).toBe("EXPIRED");
+});
+
+test("le guichet attribue automatiquement la première place libre et respecte une place demandée", async () => {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const openResponse = await fetch(`${baseUrl}/api/v1/guichet/session`, {
+    method: "POST", headers, body: JSON.stringify({ openingAmount: 0 })
+  });
+  expect(openResponse.status).toBe(201);
+
+  const sell = (passengerName: string, seatNumber?: number) => fetch(`${baseUrl}/api/v1/guichet/vente`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      departureId: guichetDepartureId,
+      passengerName,
+      originStopId,
+      destinationStopId,
+      ...(seatNumber === undefined ? {} : { seatNumber })
+    })
+  });
+
+  const automaticResponse = await sell("Client guichet automatique");
+  expect(automaticResponse.status).toBe(201);
+  const automatic = await automaticResponse.json() as { data: { seatNumber: number } };
+  expect(automatic.data.seatNumber).toBe(1);
+
+  const requestedResponse = await sell("Client guichet place choisie", 3);
+  expect(requestedResponse.status).toBe(201);
+  const requested = await requestedResponse.json() as { data: { seatNumber: number } };
+  expect(requested.data.seatNumber).toBe(3);
 });
 
 test("un paiement ne peut pas confirmer un hold expiré", async () => {
