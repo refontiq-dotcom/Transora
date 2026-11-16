@@ -457,7 +457,7 @@ td small { display: block; margin-top: 3px; color: #98a29a; font-size: 8px; }
   .payment-filters { justify-content: flex-start; }
   .report-period-panel { align-items: flex-start; flex-direction: column; }
 }
-@media (max-width: 820px) {
+@media (max-width: 1080px) {
   .app-shell { height: auto; min-height: 100vh; display: block; padding: 0; overflow: visible; }
   .sidebar {
     position: fixed;
