@@ -96,6 +96,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (tenantId) {
+    await pool.query("DELETE FROM guichet_operations WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM bookings WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM departures WHERE tenant_id=$1", [tenantId]);
     await pool.query("DELETE FROM route_stops WHERE tenant_id=$1", [tenantId]);
