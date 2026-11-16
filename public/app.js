@@ -2701,12 +2701,13 @@ document.querySelector("#boarding-policy-form").elements.refundPolicy.addEventLi
 let settingsLoadPromise = null;
 let settingsPaymentConfigurations = [];
 
-const BRANDING_STORAGE_KEY = "transora_company_branding";
-const SBTA_BRANDING_PRESET = { primary: "#16864b", secondary: "#76529a", accent: "#b64d68" };
 const IS_SBTA_DEMO = new URLSearchParams(window.location.search).get("demo") === "sbta";
+const BRANDING_STORAGE_KEY = IS_SBTA_DEMO ? "transora_company_branding_sbta_demo" : "transora_company_branding";
+const SBTA_BRANDING_PRESET = { primary: "#16864b", secondary: "#76529a", accent: "#b64d68" };
+const TRANSORA_BRANDING_DEFAULT = { primary: "#2e9c50", secondary: "#103a28", accent: "#52b968", companyName: "", logo: "" };
 const DEFAULT_BRANDING = IS_SBTA_DEMO
   ? { ...SBTA_BRANDING_PRESET, companyName: "SBTA", logo: "" }
-  : { primary: "#2e9c50", secondary: "#103a28", accent: "#52b968", companyName: "", logo: "" };
+  : { ...TRANSORA_BRANDING_DEFAULT };
 let pendingBrandLogo = null;
 
 function readCompanyBranding() {
@@ -2732,11 +2733,15 @@ function setBrandingColorInput(id, value) {
 function applyCompanyBranding() {
   const branding = readCompanyBranding();
   const root = document.documentElement;
+  root.style.setProperty("--brand-primary", branding.primary);
+  root.style.setProperty("--brand-secondary", branding.secondary);
+  root.style.setProperty("--brand-accent", branding.accent);
   root.style.setProperty("--green", branding.primary);
   root.style.setProperty("--green-bright", branding.accent);
   root.style.setProperty("--forest", branding.secondary);
   root.style.setProperty("--forest-soft", branding.primary);
-  root.style.setProperty("--brand-accent", branding.accent);
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute("content", branding.secondary);
   const companyName = branding.companyName || document.querySelector("#settings-company-name")?.value || "Mon entreprise";
   const avatar = document.querySelector("#workspace-brand-avatar");
   const workspaceName = document.querySelector("#workspace-brand-name");
@@ -2850,7 +2855,7 @@ document.querySelector("#settings-branding-form").addEventListener("submit", (ev
   }
 });
 document.querySelector("#settings-branding-reset").addEventListener("click", () => {
-  localStorage.removeItem(BRANDING_STORAGE_KEY);
+  localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(TRANSORA_BRANDING_DEFAULT));
   pendingBrandLogo = null;
   document.querySelector("#branding-logo-file").value = "";
   renderBrandingSettings();
