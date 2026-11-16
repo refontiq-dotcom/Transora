@@ -154,9 +154,9 @@ async function refreshPublicSeatAvailability() {
     selectedSeatNumber = null;
     document.querySelector('input[name="seatMode"][value="auto"]').checked = true;
     renderPublicSeats(currentPublicSeats);
-    target.textContent = result.data.availableCount + " place(s) disponible(s) sur ce trajet · " +
-      money(result.data.fareAmount) + " de transport + " + money(result.data.companyBookingFee) +
-      " de frais compagnie + 100 FCFA TRANSORA. Choisissez un siège ci-dessus.";
+    target.textContent = result.data.availableCount + " place(s) libre(s) sur " + result.data.capacity +
+      ". Vert : libre · Gris : déjà prise. Par défaut, Transora attribue la première place libre. " +
+      money(result.data.fareAmount) + " + frais compagnie " + money(result.data.companyBookingFee) + " + 100 FCFA TRANSORA.";
     updatePublicSubmitState();
   } catch (error) {
     selectedSeatNumber = null;
