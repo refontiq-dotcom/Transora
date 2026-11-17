@@ -345,8 +345,8 @@ async function loadDepartures() {
         showMessage("Le point de départ choisi n'est plus disponible. Choisissez votre gare de départ.", true);
       }
     } else {
+      // configurePublicStops() déclenche déjà la vérification pour un départ simple.
       updateTripSummary();
-      await refreshPublicSeatAvailability();
     }
   } else {
     configurePublicStops();
