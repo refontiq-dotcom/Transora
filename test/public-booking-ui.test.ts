@@ -35,6 +35,13 @@ describe("public traveller booking journey", () => {
     expect(html).toContain('id="public-submit"');
   });
 
+  test("the booking form remains visible when no company is registered yet", () => {
+    expect(script).toContain("function showUnavailableBooking(message, error = false)");
+    expect(script).toContain("Aucune compagnie n'est encore enregistrée");
+    expect(script).toContain("showUnavailableBooking(");
+    expect(script).not.toContain('form.hidden = true;\\n    showMessage("Le lien de réservation de cette compagnie est invalide."');
+  });
+
   test("the first step asks for both cities before showing departures", () => {
     const firstStage = html.split('data-stage="1"')[1].split('data-stage="2"')[0];
     expect(firstStage).toContain('id="public-city-origin"');
