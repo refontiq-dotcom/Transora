@@ -14,7 +14,9 @@ let publicDepartures = [];
 let boardingPolicy = null;
 let selectedSeatNumber = null;
 let currentPublicSeats = [];
-let currentStage = 1;
+let currentFareAmount = null;
+let currentCompanyFee = 0;
+let currentPlatformFee = 100;
 const policyAccepted = document.querySelector("#public-policy-accepted");
 
 function money(value) {
@@ -60,12 +62,13 @@ function updateTripSummary() {
   const origin = originStop?.city || departure.origin;
   const destination = destinationStop?.city || departure.destination;
   const date = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(departure.departureAt));
-  const fare = Number(departure.fareAmount) || 0;
-  const companyFee = Number(departure.companyBookingFee) || 0;
-  const total = fare + companyFee + 100;
+  const hasCompleteSegment = !departure.routeStops?.length || (originStop && destinationStop);
+  const total = currentFareAmount !== null
+    ? currentFareAmount + currentCompanyFee + currentPlatformFee
+    : (Number(departure.fareAmount) || 0) + (Number(departure.companyBookingFee) || 0) + 100;
   document.querySelector("#public-summary-route").textContent = origin + " → " + destination;
   document.querySelector("#public-summary-time").textContent = date;
-  document.querySelector("#public-summary-price").textContent = money(total);
+  document.querySelector("#public-summary-price").textContent = hasCompleteSegment ? money(total) : "Choisissez votre arrivée";
   panel.hidden = false;
   const hasSegment = !departure.routeStops?.length || (originStop && destinationStop);
   document.querySelector("#public-next-1").disabled = !hasSegment;
@@ -79,7 +82,9 @@ function updateConfirmationSummary() {
     (originStop?.city || departure.origin) + " → " + (destinationStop?.city || departure.destination);
   const manual = selectedSeatMode() === "manual" && selectedSeatNumber;
   document.querySelector("#public-confirm-seat").textContent = manual ? "Place " + selectedSeatNumber : "Attribuée automatiquement";
-  const total = (Number(departure.fareAmount) || 0) + (Number(departure.companyBookingFee) || 0) + 100;
+  const total = currentFareAmount !== null
+    ? currentFareAmount + currentCompanyFee + currentPlatformFee
+    : (Number(departure.fareAmount) || 0) + (Number(departure.companyBookingFee) || 0) + 100;
   document.querySelector("#public-confirm-price").textContent = money(total);
 }
 function displayTicket(ticket) {
@@ -135,6 +140,8 @@ function updateDestinationStops() {
   document.querySelector("#public-destination-wrap").hidden = !stops.length;
   selectedSeatNumber = null;
   currentPublicSeats = [];
+  currentFareAmount = null;
+  currentCompanyFee = 0;
   renderPublicSeats([]);
   document.querySelector("#public-seat-availability").textContent = "";
   updateTripSummary();
@@ -223,15 +230,21 @@ async function refreshPublicSeatAvailability() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
     currentPublicSeats = result.data.seats || [];
+    currentFareAmount = Number(result.data.fareAmount) || 0;
+    currentCompanyFee = Number(result.data.companyBookingFee) || 0;
+    currentPlatformFee = Number(result.data.platformFee ?? 100);
     selectedSeatNumber = null;
     document.querySelector('input[name="seatMode"][value="auto"]').checked = true;
     renderPublicSeats(currentPublicSeats);
     target.textContent = result.data.availableCount + " place(s) libre(s). Le choix automatique est sélectionné par défaut. " +
-      money(result.data.fareAmount + result.data.companyBookingFee + 100) + " au total.";
+      money(currentFareAmount + currentCompanyFee + currentPlatformFee) + " au total.";
+    updateTripSummary();
     updatePublicSubmitState();
   } catch (error) {
     selectedSeatNumber = null;
     currentPublicSeats = [];
+    currentFareAmount = null;
+    currentCompanyFee = 0;
     renderPublicSeats([]);
     target.textContent = error.message || "Vérification des places impossible.";
     updatePublicSubmitState();
@@ -246,6 +259,8 @@ function configurePublicStops() {
   const stops = departure?.routeStops || [];
   selectedSeatNumber = null;
   currentPublicSeats = [];
+  currentFareAmount = null;
+  currentCompanyFee = 0;
   renderPublicSeats([]);
   document.querySelector("#public-next-2").disabled = true;
   originWrap.hidden = !stops.length;
