@@ -20,6 +20,10 @@ Vente physique, sessions de caisse, rapprochement, scan et suivi par arrêt. La 
 ## Phase 5 — API / TrouveTout
 API versionnée, recherche, disponibilité, réservation, paiement, billet, validation, intégration.
 
+**Première tranche livrée :** portail voyageurs distinct du tableau de bord; alias versionné `/api/v1/public` en conservant `/api/public`; redirection partenaire vers le portail avec `departureId` et, pour les lignes segmentées, `originStopId` / `destinationStopId` préremplis; contrat documenté dans `docs/API-PUBLIQUE.md`.
+
+**À réaliser ensuite :** intégration embarquée dans TrouveTout, clé/idempotence partenaire, attribution du canal d'origine, webhooks, paiement en ligne réellement connecté et suivi de bout en bout.
+
 ## Phase 6 — Correspondances C-08
 Direct, multi-segments, temps minimum, changements de gare, garanti/suggéré, monitoring, alertes, règles de réacheminement.
 
