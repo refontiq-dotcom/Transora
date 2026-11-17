@@ -55,13 +55,16 @@ describe("public traveller booking journey", () => {
     expect(html).toContain("publicStageEnter");
   });
 
-  test("the traveller portal and its assets bypass the dashboard catch-all rewrite", () => {
-    expect(vercel).toContain('"source": "/reservation.html"');
-    expect(vercel).toContain('"destination": "/api/reservation.html"');
-    expect(vercel).toContain('"source": "/reservation.js"');
-    expect(vercel).toContain('"destination": "/api/reservation.js"');
-    expect(vercel).toContain('"source": "/styles.css"');
-    expect(vercel).toContain('"destination": "/api/styles.css"');
+  test("the production build copies public files into the Vercel output directory", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+    const copyScript = readFileSync("scripts/copy-public.cjs", "utf8");
+    expect(packageJson.scripts.build).toContain("scripts/copy-public.cjs");
+    expect(copyScript).toContain('path.resolve(process.cwd(), "public")');
+    expect(copyScript).toContain('path.resolve(process.cwd(), "dist")');
+    expect(copyScript).toContain("fs.cpSync(source, destination");
+    expect(vercel).not.toContain('"/api/reservation.html"');
+    expect(vercel).not.toContain('"/api/reservation.js"');
+    expect(vercel).toContain('"destination": "/index"');
   });
 
   test("the portal keeps using the versioned public API", () => {
