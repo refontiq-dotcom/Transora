@@ -40,12 +40,14 @@ describe("public traveller booking journey", () => {
     expect(firstStage).not.toContain('id="public-departure"');
     expect(script).toContain("function handleCityPairChange");
     expect(script).toContain("function departureSegmentForCities");
+    expect(script).toContain("seatLookupSequence");
   });
 
   test("the selected trip stays available as a compact editable summary", () => {
     expect(html).toContain('id="public-trip-compact"');
     expect(script).toContain('compact.hidden = stage === 1');
     expect(html).toContain('id="public-edit-trip"');
+    expect(html).toContain("publicStageEnter");
   });
 
   test("the portal keeps using the versioned public API", () => {
