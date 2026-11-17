@@ -13,6 +13,7 @@ let companyName = "";
 let publicDepartures = [];
 let matchingDepartures = [];
 let currentStage = 1;
+let seatLookupSequence = 0;
 let boardingPolicy = null;
 let selectedSeatNumber = null;
 let currentPublicSeats = [];
@@ -311,12 +312,13 @@ function updatePublicSubmitState() {
   const hasAvailableSeat = currentPublicSeats.some(seat => seat.available);
   const manualSeatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
   const seatIsValid = selectedSeatMode() === "auto" ? hasAvailableSeat : manualSeatIsAvailable;
-  document.querySelector("#public-next-1").disabled = !departure || !hasSegment;
+  document.querySelector("#public-next-1").disabled = !departure || !hasSegment || currentFareAmount === null;
   document.querySelector("#public-next-2").disabled = !seatIsValid;
   document.querySelector("#public-submit").disabled = !seatIsValid || !policyAccepted.checked;
   updateTripSummary();
 }
 async function refreshPublicSeatAvailability() {
+  const lookupSequence = ++seatLookupSequence;
   const departure = selectedDeparture();
   const originId = document.querySelector("#public-origin-stop").value;
   const destinationId = document.querySelector("#public-destination-stop").value;
@@ -349,6 +351,7 @@ async function refreshPublicSeatAvailability() {
     const suffix = query.toString() ? "?" + query.toString() : "";
     const response = await fetch(publicApiBase + "/" + encodeURIComponent(companyCode) + "/departs/" + encodeURIComponent(departure.id) + "/places" + suffix);
     const result = await response.json();
+    if (lookupSequence !== seatLookupSequence || selectedDeparture()?.id !== departure.id) return;
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
     currentPublicSeats = result.data.seats || [];
     currentFareAmount = Number(result.data.fareAmount) || 0;
@@ -362,6 +365,7 @@ async function refreshPublicSeatAvailability() {
     updateTripSummary();
     updatePublicSubmitState();
   } catch (error) {
+    if (lookupSequence !== seatLookupSequence) return;
     selectedSeatNumber = null;
     currentPublicSeats = [];
     currentFareAmount = null;
