@@ -1,6 +1,10 @@
 const params = new URLSearchParams(window.location.search);
 const companyCode = params.get("entreprise") || "";
 const ticketToken = params.get("billet");
+const requestedDepartureId = params.get("departureId") || "";
+const requestedOriginStopId = params.get("originStopId") || "";
+const requestedDestinationStopId = params.get("destinationStopId") || "";
+const publicApiBase = "/api/v1/public";
 const form = document.querySelector("#public-booking-form");
 const select = document.querySelector("#public-departure");
 const message = document.querySelector("#public-message");
@@ -147,7 +151,7 @@ async function refreshPublicSeatAvailability() {
       query.set("destinationStopId", destinationId);
     }
     const suffix = query.toString() ? "?" + query.toString() : "";
-    const response = await fetch("/api/public/" + encodeURIComponent(companyCode) + "/departs/" + encodeURIComponent(departure.id) + "/places" + suffix);
+    const response = await fetch(publicApiBase + "/" + encodeURIComponent(companyCode) + "/departs/" + encodeURIComponent(departure.id) + "/places" + suffix);
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Impossible de vérifier les places.");
     currentPublicSeats = result.data.seats || [];
@@ -192,13 +196,13 @@ function configurePublicStops() {
   document.querySelector("#public-seat-availability").textContent = "Choisissez votre segment pour voir les places et le tarif.";
 }
 async function loadTicket() {
-  const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/ticket/${encodeURIComponent(ticketToken)}`);
+  const response = await fetch(`${publicApiBase}/${encodeURIComponent(companyCode)}/ticket/${encodeURIComponent(ticketToken)}`);
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || "Billet introuvable.");
   displayTicket(result.data);
 }
 async function loadDepartures() {
-  const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/departs`);
+  const response = await fetch(`${publicApiBase}/${encodeURIComponent(companyCode)}/departs`);
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || "Impossible de charger les départs.");
   companyName = result.data.companyName || "Votre compagnie";
@@ -224,8 +228,50 @@ async function loadDepartures() {
       (departure.routeStops?.length ? " · " + departure.routeStops.length + " arrêts" : " · Transport " + money(departure.fareAmount) + " + frais compagnie " + money(departure.companyBookingFee)) + " + TRANSORA 100 FCFA";
     select.append(option);
   }
-  if (!result.data.departures.length) showMessage("Aucun départ ouvert à la réservation pour le moment.");
-  configurePublicStops();
+  if (!publicDepartures.length) {
+    showMessage("Aucun départ ouvert à la réservation pour le moment.");
+    configurePublicStops();
+    return;
+  }
+
+  // Un partenaire comme TrouveTout peut transmettre le départ et le segment
+  // déjà choisis. Les identifiants sont toujours revérifiés dans les données
+  // renvoyées par l'API avant de préremplir le formulaire.
+  if (requestedDepartureId) {
+    const requestedDeparture = publicDepartures.find(departure => departure.id === requestedDepartureId);
+    if (!requestedDeparture) {
+      configurePublicStops();
+      showMessage("Le départ choisi depuis la plateforme partenaire n'est plus disponible. Sélectionnez un autre départ.", true);
+      return;
+    }
+
+    select.value = requestedDeparture.id;
+    configurePublicStops();
+
+    if (requestedDeparture.routeStops?.length) {
+      const originSelect = document.querySelector("#public-origin-stop");
+      const validOrigin = requestedDeparture.routeStops
+        .slice(0, -1)
+        .some(stop => stop.id === requestedOriginStopId);
+      if (requestedOriginStopId && validOrigin) {
+        originSelect.value = requestedOriginStopId;
+        updateDestinationStops();
+        const destinationSelect = document.querySelector("#public-destination-stop");
+        const validDestination = Array.from(destinationSelect.options)
+          .some(option => option.value === requestedDestinationStopId && option.value);
+        if (requestedDestinationStopId && validDestination) {
+          destinationSelect.value = requestedDestinationStopId;
+          await refreshPublicSeatAvailability();
+        } else if (requestedDestinationStopId) {
+          showMessage("La destination sélectionnée n'est plus disponible sur ce départ. Vérifiez votre trajet.", true);
+        }
+      } else if (requestedOriginStopId) {
+        showMessage("Le point de départ sélectionné n'est plus disponible. Choisissez votre gare de départ.", true);
+      }
+    }
+  } else {
+    configurePublicStops();
+  }
 }
 select.addEventListener("change", configurePublicStops);
 document.querySelector("#public-origin-stop").addEventListener("change", () => { updateDestinationStops(); });
@@ -246,7 +292,7 @@ form.addEventListener("submit", async (event) => {
     values.policyAccepted = policyAccepted.checked;
     if (selectedSeatMode() === "manual") values.seatNumber = selectedSeatNumber;
     else delete values.seatNumber;
-    const response = await fetch(`/api/public/${encodeURIComponent(companyCode)}/reservations`, {
+    const response = await fetch(`${publicApiBase}/${encodeURIComponent(companyCode)}/reservations`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values)
     });
     const result = await response.json();
