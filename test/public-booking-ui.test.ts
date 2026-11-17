@@ -1,0 +1,83 @@
+import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
+import { describe, expect, test } from "vitest";
+
+const html = readFileSync("public/reservation.html", "utf8");
+const script = readFileSync("public/reservation.js", "utf8");
+const vercel = readFileSync("vercel.json", "utf8");
+
+describe("public traveller booking journey", () => {
+  test("the browser script is valid JavaScript syntax", () => {
+    expect(() => new Script(script, { filename: "public/reservation.js" })).not.toThrow();
+  });
+
+  test("every fixed DOM id referenced by the script exists in the portal", () => {
+    const referencedIds = [...script.matchAll(/document\.querySelector(?:All)?\(["']#([^"']+)["']/g)]
+      .map(match => match[1]);
+    const declaredIds = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]));
+    const missingIds = [...new Set(referencedIds)].filter(id => !declaredIds.has(id));
+
+    expect(missingIds).toEqual([]);
+  });
+
+  test("the public flow exposes three progressive steps and accessible status feedback", () => {
+    expect(html.match(/data-stage="/g)).toHaveLength(3);
+    expect(html).toContain('aria-label="Étapes de réservation"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('id="public-audio"');
+    expect(html).toContain('id="public-next-1"');
+    expect(html).toContain('id="public-city-origin"');
+    expect(html).toContain('id="public-city-destination"');
+    expect(html).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important\s*\}/);
+    expect(html).toContain('id="public-trip-compact"');
+    expect(html).toContain('id="public-departure"');
+    expect(html).toContain('id="public-next-2"');
+    expect(html).toContain('id="public-submit"');
+  });
+
+  test("the booking form remains visible when no company is registered yet", () => {
+    expect(script).toContain("function showUnavailableBooking(message, error = false)");
+    expect(script).toContain("Aucune compagnie n'est encore enregistrée");
+    expect(script).toContain("showUnavailableBooking(");
+    expect(script).toContain(`if (!/^[a-f0-9]{32}$/i.test(companyCode)) {\n    showUnavailableBooking(`);
+  });
+
+  test("the first step asks for both cities before showing departures", () => {
+    const firstStage = html.split('data-stage="1"')[1].split('data-stage="2"')[0];
+    expect(firstStage).toContain('id="public-city-origin"');
+    expect(firstStage).toContain('id="public-city-destination"');
+    expect(firstStage).not.toContain('id="public-departure"');
+    expect(script).toContain("function handleCityPairChange");
+    expect(script).toContain("function departureSegmentForCities");
+    expect(script).toContain("select.value = preferredDepartureId && matchingDepartures.some");
+    expect(script).toContain("select.value = preferredDepartureId && matchingDepartures.some(departure => departure.id === preferredDepartureId)");
+    expect(script).toContain('setStage(2);');
+    expect(script).toContain("seatLookupSequence");
+    expect(html).not.toContain('id="public-city-destination" aria-label="Ville ou commune d'arrivée" required disabled');
+  });
+
+  test("the selected trip stays available as a compact editable summary", () => {
+    expect(html).toContain('id="public-trip-compact"');
+    expect(script).toContain('compact.hidden = stage === 1');
+    expect(html).toContain('id="public-edit-trip"');
+    expect(html).toContain("publicStageEnter");
+  });
+
+  test("the production build copies public files into the Vercel output directory", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+    const copyScript = readFileSync("scripts/copy-public.cjs", "utf8");
+    expect(packageJson.scripts.build).toContain("scripts/copy-public.cjs");
+    expect(copyScript).toContain('path.resolve(process.cwd(), "public")');
+    expect(copyScript).toContain('path.resolve(process.cwd(), "dist")');
+    expect(copyScript).toContain("fs.cpSync(source, destination");
+    expect(vercel).not.toContain('"/api/reservation.html"');
+    expect(vercel).not.toContain('"/api/reservation.js"');
+    expect(vercel).toContain('"destination": "/index"');
+  });
+
+  test("the portal keeps using the versioned public API", () => {
+    expect(script).toContain('const publicApiBase = "/api/v1/public"');
+    expect(script).toContain('policyAccepted.checked');
+    expect(script).toContain('selectedSeatMode()');
+  });
+});

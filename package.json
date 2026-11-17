@@ -4,7 +4,7 @@
   "description": "TRANSORA - Infrastructure SaaS de gestion et d'exploitation pour entreprises de transport interurbain",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-public.cjs",
     "start": "node dist/index.js",
     "dev": "ts-node --files src/index.ts",
     "test": "vitest run",
