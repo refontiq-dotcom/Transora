@@ -14,6 +14,7 @@ let publicDepartures = [];
 let boardingPolicy = null;
 let selectedSeatNumber = null;
 let currentPublicSeats = [];
+let currentStage = 1;
 const policyAccepted = document.querySelector("#public-policy-accepted");
 
 function money(value) {
@@ -23,14 +24,73 @@ function showMessage(value, error = false) {
   message.textContent = value;
   message.classList.toggle("public-error", error);
 }
+function setStage(stage) {
+  currentStage = stage;
+  document.querySelectorAll("[data-stage]").forEach(section => {
+    section.hidden = Number(section.dataset.stage) !== stage;
+  });
+  document.querySelectorAll("[data-progress]").forEach(item => {
+    const number = Number(item.dataset.progress);
+    item.toggleAttribute("aria-current", number === stage);
+    if (number === stage) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+    item.classList.toggle("is-done", number < stage);
+  });
+  if (stage === 3) updateConfirmationSummary();
+  showMessage("");
+  const heading = document.querySelector('[data-stage="' + stage + '"] h2');
+  heading?.setAttribute("tabindex", "-1");
+  heading?.focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function updateTripSummary() {
+  const departure = selectedDeparture();
+  const panel = document.querySelector("#public-trip-summary");
+  if (!departure) {
+    panel.hidden = true;
+    document.querySelector("#public-next-1").disabled = true;
+    return;
+  }
+  const originStop = departure.routeStops?.length
+    ? departure.routeStops.find(stop => stop.id === document.querySelector("#public-origin-stop").value)
+    : null;
+  const destinationStop = departure.routeStops?.length
+    ? departure.routeStops.find(stop => stop.id === document.querySelector("#public-destination-stop").value)
+    : null;
+  const origin = originStop?.city || departure.origin;
+  const destination = destinationStop?.city || departure.destination;
+  const date = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(departure.departureAt));
+  const fare = Number(departure.fareAmount) || 0;
+  const companyFee = Number(departure.companyBookingFee) || 0;
+  const total = fare + companyFee + 100;
+  document.querySelector("#public-summary-route").textContent = origin + " → " + destination;
+  document.querySelector("#public-summary-time").textContent = date;
+  document.querySelector("#public-summary-price").textContent = money(total);
+  panel.hidden = false;
+  const hasSegment = !departure.routeStops?.length || (originStop && destinationStop);
+  document.querySelector("#public-next-1").disabled = !hasSegment;
+}
+function updateConfirmationSummary() {
+  const departure = selectedDeparture();
+  if (!departure) return;
+  const originStop = departure.routeStops?.find(stop => stop.id === document.querySelector("#public-origin-stop").value);
+  const destinationStop = departure.routeStops?.find(stop => stop.id === document.querySelector("#public-destination-stop").value);
+  document.querySelector("#public-confirm-route").textContent =
+    (originStop?.city || departure.origin) + " → " + (destinationStop?.city || departure.destination);
+  const manual = selectedSeatMode() === "manual" && selectedSeatNumber;
+  document.querySelector("#public-confirm-seat").textContent = manual ? "Place " + selectedSeatNumber : "Attribuée automatiquement";
+  const total = (Number(departure.fareAmount) || 0) + (Number(departure.companyBookingFee) || 0) + 100;
+  document.querySelector("#public-confirm-price").textContent = money(total);
+}
 function displayTicket(ticket) {
   const isHold = ticket.bookingStatus === "HELD";
   document.querySelector("#public-title").textContent = isHold ? "Votre place est bloquée temporairement" : "Réservation enregistrée";
-  document.querySelector("#public-ticket h2").textContent = isHold ? "Votre réservation temporaire" : "Votre billet";
-  document.querySelector(".public-subtitle").textContent = isHold
+  document.querySelector("#public-subtitle").textContent = isHold
     ? "Vous avez 15 minutes pour finaliser le paiement auprès de la compagnie. Après ce délai, la place sera automatiquement remise à disposition."
-    : "Conservez ce billet. L'embarquement est autorisé uniquement après confirmation du paiement.";
+    : "Conservez cette confirmation. L'embarquement est autorisé uniquement après confirmation du paiement.";
   form.hidden = true;
+  document.querySelector("#public-progress").hidden = true;
+  document.querySelector("#public-audio").hidden = true;
   document.querySelector("#public-ticket-company").textContent = ticket.companyName;
   document.querySelector("#public-ticket-route").textContent = ticket.origin + " → " + ticket.destination + " · " +
     new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short" }).format(new Date(ticket.departureAt));
@@ -39,9 +99,10 @@ function displayTicket(ticket) {
   document.querySelector("#public-ticket-amount").textContent = "Transport : " + money(ticket.transportAmount) + " · Frais compagnie : " + money(ticket.companyBookingFee) + " · Frais TRANSORA : " + money(ticket.platformFee) + " · Total : " + money(ticket.totalAmount);
   const expiresAt = ticket.holdExpiresAt ? new Date(ticket.holdExpiresAt) : null;
   document.querySelector("#public-ticket-payment").textContent = isHold && expiresAt
-    ? "Place réservée jusqu'au " + new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(expiresAt)
+    ? "Place réservée jusqu'au " + new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(expiresAt) + ". Ce n'est pas encore un billet payé."
     : ticket.paymentStatus === "CONFIRMED"
-      ? "Paiement confirmé" : "Paiement en attente — embarquement non autorisé";
+      ? "Paiement confirmé."
+      : "Paiement en attente — embarquement non autorisé.";
   const qr = document.querySelector("#public-ticket-qr");
   qr.hidden = !ticket.qrCode;
   if (ticket.qrCode) qr.src = ticket.qrCode;
@@ -76,6 +137,7 @@ function updateDestinationStops() {
   currentPublicSeats = [];
   renderPublicSeats([]);
   document.querySelector("#public-seat-availability").textContent = "";
+  updateTripSummary();
   updatePublicSubmitState();
 }
 function selectedSeatMode() {
@@ -84,12 +146,15 @@ function selectedSeatMode() {
 function renderPublicSeats(seats) {
   const wrap = document.querySelector("#public-seats-wrap");
   const grid = document.querySelector("#public-seats");
+  const legend = document.querySelector(".public-seat-legend");
   grid.replaceChildren();
   if (!Array.isArray(seats) || seats.length === 0) {
     wrap.hidden = true;
     return;
   }
   wrap.hidden = false;
+  grid.hidden = selectedSeatMode() !== "manual";
+  legend.hidden = selectedSeatMode() !== "manual";
   seats.forEach((seat, index) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -103,10 +168,10 @@ function renderPublicSeats(seats) {
     button.setAttribute("aria-label", "Place " + seat.number + ", " + (seat.available ? "libre" : "déjà prise"));
     button.title = seat.available ? "Place " + seat.number + " disponible" : "Place " + seat.number + " déjà prise";
     button.addEventListener("click", () => {
-      document.querySelector('input[name="seatMode"][value="manual"]').checked = true;
       selectedSeatNumber = seat.number;
       renderPublicSeats(currentPublicSeats);
       updatePublicSubmitState();
+      updateConfirmationSummary();
     });
     grid.append(button);
   });
@@ -118,8 +183,10 @@ function updatePublicSubmitState() {
   const hasAvailableSeat = currentPublicSeats.some(seat => seat.available);
   const manualSeatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
   const seatIsValid = selectedSeatMode() === "auto" ? hasAvailableSeat : manualSeatIsAvailable;
-  document.querySelector("#public-submit").disabled =
-    !departure || !hasSegment || !seatIsValid || !policyAccepted.checked;
+  document.querySelector("#public-next-1").disabled = !departure || !hasSegment;
+  document.querySelector("#public-next-2").disabled = !seatIsValid;
+  document.querySelector("#public-submit").disabled = !seatIsValid || !policyAccepted.checked;
+  updateTripSummary();
 }
 async function refreshPublicSeatAvailability() {
   const departure = selectedDeparture();
@@ -138,11 +205,12 @@ async function refreshPublicSeatAvailability() {
     selectedSeatNumber = null;
     currentPublicSeats = [];
     renderPublicSeats([]);
-    target.textContent = "Sélectionnez votre ville de départ et votre destination pour voir les sièges disponibles.";
+    target.textContent = "Choisissez votre ville de départ et d'arrivée pour voir les places.";
     updatePublicSubmitState();
     return;
   }
-  target.textContent = "Vérification des places disponibles…";
+  target.textContent = "Nous vérifions les places disponibles…";
+  document.querySelector("#public-next-2").disabled = true;
   document.querySelector("#public-submit").disabled = true;
   try {
     const query = new URLSearchParams();
@@ -158,9 +226,8 @@ async function refreshPublicSeatAvailability() {
     selectedSeatNumber = null;
     document.querySelector('input[name="seatMode"][value="auto"]').checked = true;
     renderPublicSeats(currentPublicSeats);
-    target.textContent = result.data.availableCount + " place(s) libre(s) sur " + result.data.capacity +
-      ". Vert : libre · Gris : déjà prise. Par défaut, Transora attribue la première place libre. " +
-      money(result.data.fareAmount) + " + frais compagnie " + money(result.data.companyBookingFee) + " + 100 FCFA TRANSORA.";
+    target.textContent = result.data.availableCount + " place(s) libre(s). Le choix automatique est sélectionné par défaut. " +
+      money(result.data.fareAmount + result.data.companyBookingFee + 100) + " au total.";
     updatePublicSubmitState();
   } catch (error) {
     selectedSeatNumber = null;
@@ -180,7 +247,7 @@ function configurePublicStops() {
   selectedSeatNumber = null;
   currentPublicSeats = [];
   renderPublicSeats([]);
-  document.querySelector("#public-submit").disabled = true;
+  document.querySelector("#public-next-2").disabled = true;
   originWrap.hidden = !stops.length;
   destinationWrap.hidden = !stops.length;
   originSelect.disabled = !stops.length;
@@ -188,12 +255,14 @@ function configurePublicStops() {
   if (!stops.length) {
     originSelect.value = "";
     destinationSelect.value = "";
+    updateTripSummary();
     refreshPublicSeatAvailability();
     return;
   }
-  fillStopSelect(originSelect, stops.slice(0, -1), "Choisissez votre départ");
+  fillStopSelect(originSelect, stops.slice(0, -1), "Choisissez votre ville de départ");
   fillStopSelect(destinationSelect, [], "Choisissez d'abord votre départ");
-  document.querySelector("#public-seat-availability").textContent = "Choisissez votre segment pour voir les places et le tarif.";
+  document.querySelector("#public-seat-availability").textContent = "Choisissez votre ville de départ et d'arrivée.";
+  updateTripSummary();
 }
 async function loadTicket() {
   const response = await fetch(`${publicApiBase}/${encodeURIComponent(companyCode)}/ticket/${encodeURIComponent(ticketToken)}`);
@@ -206,11 +275,11 @@ async function loadDepartures() {
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || "Impossible de charger les départs.");
   companyName = result.data.companyName || "Votre compagnie";
-  document.querySelector("#public-title").textContent = "Réserver avec " + companyName;
+  document.querySelector("#public-title").textContent = "Voyagez avec " + companyName;
   select.replaceChildren();
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = "Choisissez un départ";
+  placeholder.textContent = "Choisissez votre départ";
   select.append(placeholder);
   publicDepartures = result.data.departures;
   boardingPolicy = result.data.boardingPolicy || null;
@@ -218,75 +287,108 @@ async function loadDepartures() {
   if (boardingPolicy) {
     const refund = boardingPolicy.refundPolicy === "FULL" ? "Remboursement intégral prévu après absence." : boardingPolicy.refundPolicy === "PARTIAL" ? "Remboursement de " + boardingPolicy.refundPercentage + "% prévu après absence." : "Aucun remboursement n’est prévu après absence selon cette politique.";
     const rebooking = boardingPolicy.allowRebookingAfterNoShow ? "Report possible jusqu’à " + boardingPolicy.maxRebookings + " fois" + (Number(boardingPolicy.rebookingFeeAmount) ? " avec des frais de " + money(boardingPolicy.rebookingFeeAmount) + "." : " sans frais.") : "Aucun report n’est prévu après absence.";
-    policySummary.textContent = "L’embarquement ouvre " + boardingPolicy.boardingOpenMinutesBefore + " minutes avant le départ. Présentez-vous au plus tard " + boardingPolicy.boardingDeadlineMinutesBefore + " minutes avant l’heure prévue. Délai de grâce après l’heure prévue ou l’arrivée réelle du car : " + boardingPolicy.gracePeriodMinutes + " minutes. " + rebooking + " " + refund;
+    policySummary.textContent = "L’embarquement ouvre " + boardingPolicy.boardingOpenMinutesBefore + " minutes avant le départ. Présentez-vous au plus tard " + boardingPolicy.boardingDeadlineMinutesBefore + " minutes avant l’heure prévue. Délai de grâce : " + boardingPolicy.gracePeriodMinutes + " minutes. " + rebooking + " " + refund;
   } else policySummary.textContent = "Les conditions d’embarquement seront communiquées par la compagnie.";
   for (const departure of publicDepartures) {
     const option = document.createElement("option");
     option.value = departure.id;
-    option.textContent = departure.origin + " → " + departure.destination + " · " +
-      new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(departure.departureAt)) +
-      (departure.routeStops?.length ? " · " + departure.routeStops.length + " arrêts" : " · Transport " + money(departure.fareAmount) + " + frais compagnie " + money(departure.companyBookingFee)) + " + TRANSORA 100 FCFA";
+    const departureDate = new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(departure.departureAt));
+    const price = money((Number(departure.fareAmount) || 0) + (Number(departure.companyBookingFee) || 0) + 100);
+    option.textContent = departure.origin + " → " + departure.destination + " · " + departureDate + " · " + price;
     select.append(option);
   }
   if (!publicDepartures.length) {
-    showMessage("Aucun départ ouvert à la réservation pour le moment.");
+    showMessage("Aucun départ n'est ouvert à la réservation pour le moment. Contactez directement la compagnie.");
     configurePublicStops();
     return;
   }
-
-  // Un partenaire comme TrouveTout peut transmettre le départ et le segment
-  // déjà choisis. Les identifiants sont toujours revérifiés dans les données
-  // renvoyées par l'API avant de préremplir le formulaire.
   if (requestedDepartureId) {
     const requestedDeparture = publicDepartures.find(departure => departure.id === requestedDepartureId);
     if (!requestedDeparture) {
       configurePublicStops();
-      showMessage("Le départ choisi depuis la plateforme partenaire n'est plus disponible. Sélectionnez un autre départ.", true);
+      showMessage("Le départ choisi depuis la plateforme partenaire n'est plus disponible. Choisissez un autre voyage.", true);
       return;
     }
-
     select.value = requestedDeparture.id;
     configurePublicStops();
-
     if (requestedDeparture.routeStops?.length) {
       const originSelect = document.querySelector("#public-origin-stop");
-      const validOrigin = requestedDeparture.routeStops
-        .slice(0, -1)
-        .some(stop => stop.id === requestedOriginStopId);
+      const validOrigin = requestedDeparture.routeStops.slice(0, -1).some(stop => stop.id === requestedOriginStopId);
       if (requestedOriginStopId && validOrigin) {
         originSelect.value = requestedOriginStopId;
         updateDestinationStops();
         const destinationSelect = document.querySelector("#public-destination-stop");
-        const validDestination = Array.from(destinationSelect.options)
-          .some(option => option.value === requestedDestinationStopId && option.value);
+        const validDestination = Array.from(destinationSelect.options).some(option => option.value === requestedDestinationStopId && option.value);
         if (requestedDestinationStopId && validDestination) {
           destinationSelect.value = requestedDestinationStopId;
+          updateTripSummary();
           await refreshPublicSeatAvailability();
         } else if (requestedDestinationStopId) {
-          showMessage("La destination sélectionnée n'est plus disponible sur ce départ. Vérifiez votre trajet.", true);
+          showMessage("La destination choisie n'est plus disponible sur ce départ. Vérifiez votre trajet.", true);
         }
       } else if (requestedOriginStopId) {
-        showMessage("Le point de départ sélectionné n'est plus disponible. Choisissez votre gare de départ.", true);
+        showMessage("Le point de départ choisi n'est plus disponible. Choisissez votre gare de départ.", true);
       }
+    } else {
+      updateTripSummary();
+      await refreshPublicSeatAvailability();
     }
   } else {
     configurePublicStops();
   }
 }
 select.addEventListener("change", configurePublicStops);
-document.querySelector("#public-origin-stop").addEventListener("change", () => { updateDestinationStops(); });
-document.querySelector("#public-destination-stop").addEventListener("change", refreshPublicSeatAvailability);
+document.querySelector("#public-origin-stop").addEventListener("change", () => {
+  updateDestinationStops();
+  updateTripSummary();
+});
+document.querySelector("#public-destination-stop").addEventListener("change", async () => {
+  updateTripSummary();
+  await refreshPublicSeatAvailability();
+});
+document.querySelector("#public-next-1").addEventListener("click", () => {
+  const departure = selectedDeparture();
+  const hasSegment = !departure?.routeStops?.length
+    || (document.querySelector("#public-origin-stop").value && document.querySelector("#public-destination-stop").value);
+  if (!departure || !hasSegment) {
+    showMessage("Choisissez votre voyage, votre ville de départ et votre destination.", true);
+    return;
+  }
+  if (!currentPublicSeats.length) refreshPublicSeatAvailability();
+  setStage(2);
+});
+document.querySelector("#public-next-2").addEventListener("click", () => {
+  updateConfirmationSummary();
+  setStage(3);
+});
+document.querySelector("#public-back-2").addEventListener("click", () => setStage(1));
+document.querySelector("#public-back-3").addEventListener("click", () => setStage(2));
 policyAccepted.addEventListener("change", updatePublicSubmitState);
 document.querySelectorAll('input[name="seatMode"]').forEach(input => input.addEventListener("change", () => {
   if (selectedSeatMode() === "auto") selectedSeatNumber = null;
   renderPublicSeats(currentPublicSeats);
   updatePublicSubmitState();
+  updateConfirmationSummary();
 }));
+document.querySelector("#public-audio").addEventListener("click", () => {
+  if (!("speechSynthesis" in window)) {
+    showMessage("La lecture audio n'est pas disponible sur ce téléphone.", true);
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(
+    "Pour réserver, choisissez votre voyage. Ensuite, choisissez votre place ou laissez-nous choisir pour vous. Enfin, indiquez votre nom et votre numéro de téléphone, puis confirmez."
+  );
+  utterance.lang = "fr-FR";
+  utterance.rate = 0.9;
+  window.speechSynthesis.speak(utterance);
+});
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!form.reportValidity()) return;
   const submit = document.querySelector("#public-submit");
   submit.disabled = true;
-  showMessage("Enregistrement de votre réservation…");
+  showMessage("Nous enregistrons votre réservation. Ne fermez pas cette page…");
   try {
     const values = Object.fromEntries(new FormData(form).entries());
     values.policyAccepted = policyAccepted.checked;
@@ -301,8 +403,11 @@ form.addEventListener("submit", async (event) => {
     history.replaceState(null, "", `?entreprise=${encodeURIComponent(companyCode)}&billet=${encodeURIComponent(ticket.ticketToken)}`);
     displayTicket(ticket);
     showMessage(result.message);
-  } catch (error) { showMessage(error.message || "Une erreur est survenue.", true); }
-  finally { submit.disabled = false; }
+  } catch (error) {
+    showMessage(error.message || "La réservation n'a pas pu être confirmée. Vérifiez son statut avant de recommencer.", true);
+  } finally {
+    submit.disabled = false;
+  }
 });
 document.querySelector("#public-print").addEventListener("click", () => window.print());
 (async () => {
@@ -313,7 +418,10 @@ document.querySelector("#public-print").addEventListener("click", () => window.p
   }
   try {
     if (ticketToken) await loadTicket();
-    else await loadDepartures();
+    else {
+      await loadDepartures();
+      updatePublicSubmitState();
+    }
   } catch (error) {
     form.hidden = true;
     showMessage(error.message || "Impossible de charger cette page.", true);
