@@ -4,15 +4,39 @@
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index" }
+    {
+      "source": "/reservation.html",
+      "destination": "/api/reservation.html"
+    },
+    {
+      "source": "/reservation.js",
+      "destination": "/api/reservation.js"
+    },
+    {
+      "source": "/styles.css",
+      "destination": "/api/styles.css"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index"
+    }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,HEAD,PUT,PATCH,POST,DELETE" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET,HEAD,PUT,PATCH,POST,DELETE"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type,Authorization"
+        }
       ]
     }
   ]
