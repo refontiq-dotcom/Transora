@@ -32,6 +32,7 @@ TRANSORA n'est pas seulement une billetterie. Il doit devenir le système opéra
 - [Décisions](docs/DECISIONS.md)
 - [Continuité](docs/CONTINUITE.md)
 - [Definition of Done](docs/DEFINITION-DONE.md)
+- [API publique et intégration partenaires](docs/API-PUBLIQUE.md)
 
 ## Règle de démarrage
 La première mission de l'agent de codage est un **AUDIT UNIQUEMENT**. Aucun développement fonctionnel ne doit commencer avant validation humaine de l'audit et de la stratégie d'implémentation.
