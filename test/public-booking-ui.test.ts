@@ -39,7 +39,7 @@ describe("public traveller booking journey", () => {
     expect(script).toContain("function showUnavailableBooking(message, error = false)");
     expect(script).toContain("Aucune compagnie n'est encore enregistrée");
     expect(script).toContain("showUnavailableBooking(");
-    expect(script).not.toContain('form.hidden = true;\\n    showMessage("Le lien de réservation de cette compagnie est invalide."');
+    expect(script).toContain(`if (!/^[a-f0-9]{32}$/i.test(companyCode)) {\n    showUnavailableBooking(`);
   });
 
   test("the first step asks for both cities before showing departures", () => {
