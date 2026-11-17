@@ -41,7 +41,11 @@ describe("public traveller booking journey", () => {
     expect(firstStage).not.toContain('id="public-departure"');
     expect(script).toContain("function handleCityPairChange");
     expect(script).toContain("function departureSegmentForCities");
+    expect(script).toContain("select.value = preferredDepartureId && matchingDepartures.some");
+    expect(script).toContain("select.value = preferredDepartureId && matchingDepartures.some(departure => departure.id === preferredDepartureId)");
+    expect(script).toContain('setStage(2);');
     expect(script).toContain("seatLookupSequence");
+    expect(html).not.toContain('id="public-city-destination" aria-label="Ville ou commune d'arrivée" required disabled');
   });
 
   test("the selected trip stays available as a compact editable summary", () => {
