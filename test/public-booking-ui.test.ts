@@ -28,6 +28,7 @@ describe("public traveller booking journey", () => {
     expect(html).toContain('id="public-next-1"');
     expect(html).toContain('id="public-city-origin"');
     expect(html).toContain('id="public-city-destination"');
+    expect(html).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important\s*\}/);
     expect(html).toContain('id="public-trip-compact"');
     expect(html).toContain('id="public-departure"');
     expect(html).toContain('id="public-next-2"');
