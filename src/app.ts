@@ -109,14 +109,20 @@ app.use("/api/v1/auth/login", createRateLimiter({
   store: rateLimitStore
 }));
 app.use("/api/v1/auth", authRoutes);
-app.use("/api/public", createRateLimiter({
+const publicBookingRateLimiter = createRateLimiter({
   namespace: "public-booking",
   windowMs: 15 * 60 * 1000,
   maxRequests: 40,
   message: "Trop de tentatives de réservation. Réessayez plus tard.",
   store: rateLimitStore
-}));
+});
+
+// Les deux chemins restent disponibles pour préserver les anciens clients.
+// La version v1 est le contrat recommandé pour TrouveTout et les futurs partenaires.
+app.use("/api/public", publicBookingRateLimiter);
 app.use("/api/public", publicReservationRoutes);
+app.use("/api/v1/public", publicBookingRateLimiter);
+app.use("/api/v1/public", publicReservationRoutes);
 app.use("/api/public/courrier", publicCourierRoutes);
 app.use("/api/v1", authenticate);
 app.use("/api/v1/tenant", tenantRoutes);
