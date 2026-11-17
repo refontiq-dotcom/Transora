@@ -562,10 +562,22 @@ form.addEventListener("submit", async (event) => {
   }
 });
 document.querySelector("#public-print").addEventListener("click", () => window.print());
+
+function showUnavailableBooking(message, error = false) {
+  document.querySelector("#public-city-origin").disabled = true;
+  document.querySelector("#public-city-destination").disabled = true;
+  select.disabled = true;
+  document.querySelector("#public-next-1").disabled = true;
+  document.querySelector("#public-next-2").disabled = true;
+  document.querySelector("#public-submit").disabled = true;
+  showMessage(message, error);
+}
+
 (async () => {
   if (!/^[a-f0-9]{32}$/i.test(companyCode)) {
-    form.hidden = true;
-    showMessage("Le lien de réservation de cette compagnie est invalide.", true);
+    showUnavailableBooking(
+      "Le parcours de réservation est prêt. Aucune compagnie n'est encore enregistrée : les villes et les horaires apparaîtront dès qu'une compagnie publiera ses départs."
+    );
     return;
   }
   try {
@@ -575,7 +587,9 @@ document.querySelector("#public-print").addEventListener("click", () => window.p
       updatePublicSubmitState();
     }
   } catch (error) {
-    form.hidden = true;
-    showMessage(error.message || "Impossible de charger cette page.", true);
+    showUnavailableBooking(
+      error.message || "Impossible de charger les départs. Réessayez plus tard.",
+      true
+    );
   }
 })();
