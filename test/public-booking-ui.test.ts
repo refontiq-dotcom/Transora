@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 const html = readFileSync("public/reservation.html", "utf8");
 const script = readFileSync("public/reservation.js", "utf8");
+const vercel = readFileSync("vercel.json", "utf8");
 
 describe("public traveller booking journey", () => {
   test("the browser script is valid JavaScript syntax", () => {
@@ -48,6 +49,15 @@ describe("public traveller booking journey", () => {
     expect(script).toContain('compact.hidden = stage === 1');
     expect(html).toContain('id="public-edit-trip"');
     expect(html).toContain("publicStageEnter");
+  });
+
+  test("the traveller portal and its assets bypass the dashboard catch-all rewrite", () => {
+    expect(vercel).toContain('"source": "/reservation.html"');
+    expect(vercel).toContain('"destination": "/api/reservation.html"');
+    expect(vercel).toContain('"source": "/reservation.js"');
+    expect(vercel).toContain('"destination": "/api/reservation.js"');
+    expect(vercel).toContain('"source": "/styles.css"');
+    expect(vercel).toContain('"destination": "/api/styles.css"');
   });
 
   test("the portal keeps using the versioned public API", () => {
