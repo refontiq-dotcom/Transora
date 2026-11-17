@@ -100,7 +100,7 @@ function fillCityOptions() {
   };
   fill(origin, options.origins, "Choisissez votre ville de départ");
   fill(destination, options.destinations, "Choisissez votre ville d'arrivée");
-  destination.disabled = true;
+  destination.disabled = false;
 }
 function departureSegmentForCities(departure, originCity, destinationCity) {
   const originKey = normalizeCity(originCity);
@@ -158,23 +158,37 @@ function handleCityPairChange(preferredDepartureId = "") {
     select.append(option);
   });
   select.disabled = !matchingDepartures.length;
-  const chosen = matchingDepartures.find(departure => departure.id === preferredDepartureId) || matchingDepartures[0];
-  select.value = chosen?.id || "";
-  if (chosen) configurePublicStops();
+  select.value = preferredDepartureId && matchingDepartures.some(departure => departure.id === preferredDepartureId)
+    ? preferredDepartureId : "";
+  selectedSeatNumber = null;
+  currentPublicSeats = [];
+  currentFareAmount = null;
+  currentCompanyFee = 0;
+  renderPublicSeats([]);
+  document.querySelector("#public-seat-availability").textContent = "";
+  if (select.value) configurePublicStops();
   else {
-    currentFareAmount = null;
-    currentPublicSeats = [];
+    document.querySelector("#public-origin-stop").replaceChildren();
+    document.querySelector("#public-destination-stop").replaceChildren();
     updateTripSummary();
-    showMessage("Aucun départ disponible pour cette combinaison de villes. Essayez un autre trajet.", true);
     updatePublicSubmitState();
+    if (!matchingDepartures.length) showMessage("Aucun départ disponible pour ce trajet. Essayez une autre destination.", true);
+    else showMessage("Votre trajet est sélectionné. Choisissez maintenant un horaire parmi les départs disponibles.");
   }
 }
 function updateTripSummary() {
   const departure = selectedDeparture();
   const panel = document.querySelector("#public-trip-summary");
+  const originCity = document.querySelector("#public-city-origin").value;
+  const destinationCity = document.querySelector("#public-city-destination").value;
   if (!departure) {
-    panel.hidden = true;
-    document.querySelector("#public-next-1").disabled = true;
+    if (originCity && destinationCity && matchingDepartures.length) {
+      document.querySelector("#public-summary-route").textContent = originCity + " → " + destinationCity;
+      document.querySelector("#public-summary-time").textContent = "À choisir à l'étape suivante";
+      document.querySelector("#public-summary-price").textContent = "Selon l'horaire choisi";
+      panel.hidden = false;
+    } else panel.hidden = true;
+    document.querySelector("#public-next-1").disabled = !(originCity && destinationCity && matchingDepartures.length);
     return;
   }
   const originStop = departure.routeStops?.length
@@ -312,8 +326,10 @@ function updatePublicSubmitState() {
   const hasAvailableSeat = currentPublicSeats.some(seat => seat.available);
   const manualSeatIsAvailable = currentPublicSeats.some(seat => seat.number === selectedSeatNumber && seat.available);
   const seatIsValid = selectedSeatMode() === "auto" ? hasAvailableSeat : manualSeatIsAvailable;
-  document.querySelector("#public-next-1").disabled = !departure || !hasSegment || currentFareAmount === null;
-  document.querySelector("#public-next-2").disabled = !seatIsValid;
+  const originCity = document.querySelector("#public-city-origin").value;
+  const destinationCity = document.querySelector("#public-city-destination").value;
+  document.querySelector("#public-next-1").disabled = !(originCity && destinationCity && matchingDepartures.length);
+  document.querySelector("#public-next-2").disabled = !departure || !hasSegment || !seatIsValid;
   document.querySelector("#public-submit").disabled = !seatIsValid || !policyAccepted.checked;
   updateTripSummary();
 }
@@ -485,11 +501,10 @@ document.querySelector("#public-destination-stop").addEventListener("change", as
   await refreshPublicSeatAvailability();
 });
 document.querySelector("#public-next-1").addEventListener("click", () => {
-  const departure = selectedDeparture();
-  const hasSegment = !departure?.routeStops?.length
-    || (document.querySelector("#public-origin-stop").value && document.querySelector("#public-destination-stop").value);
-  if (!departure || !hasSegment || currentFareAmount === null) {
-    showMessage("Choisissez votre ville de départ et votre destination. Nous calculons le prix avant de continuer.", true);
+  const originCity = document.querySelector("#public-city-origin").value;
+  const destinationCity = document.querySelector("#public-city-destination").value;
+  if (!originCity || !destinationCity || !matchingDepartures.length) {
+    showMessage("Choisissez votre ville de départ et votre destination pour afficher les horaires disponibles.", true);
     return;
   }
   setStage(2);
