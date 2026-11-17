@@ -12,7 +12,7 @@ Le tableau de bord professionnel reste une interface distincte. Il n'est jamais 
 - Ancien chemin conservé pour compatibilité : `/api/public`
 - Le nouveau développement partenaire doit utiliser la version `v1`.
 
-Toutes les routes publiques sont limitées en débit. Le code public de compagnie est un identifiant aléatoire de 32 caractères. Il permet d'accéder uniquement aux informations publiques et aux opérations de réservation exposées ci-dessous ; il ne remplace jamais une authentification professionnelle.
+Toutes les routes publiques sont limitées en débit. Le code public de compagnie est un identifiant de 32 caractères. Il permet d'accéder uniquement aux informations publiques et aux opérations de réservation exposées ci-dessous ; il ne remplace jamais une authentification professionnelle.
 
 ## Parcours recommandé pour TrouveTout — première version
 
